@@ -1,0 +1,11 @@
+{
+  "name": "Po'lat restorani",
+  "short_name": "Po'lat",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#14120e",
+  "theme_color": "#c9a227",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

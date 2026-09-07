@@ -1,0 +1,19 @@
+{
+  "name": "polat",
+  "version": "1.0.0",
+  "description": "Po'lat restorani uchun afitsiant buyurtma va hisob-kitob veb-ilovasi",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "migrate": "node server/migrate.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}

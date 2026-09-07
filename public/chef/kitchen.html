@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Oshxona — Po'lat</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="topbar">
+    <h1>Oshxona</h1>
+    <button class="logout-btn" id="logoutBtn">Chiqish</button>
+  </div>
+  <main>
+    <div class="card-title mt-8">🪑 Band stollar</div>
+    <div id="tableOrders" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
+
+    <div class="card-title mt-16">🛒 Onlayn buyurtmalar</div>
+    <div id="onlineOrders" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
+  </main>
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="kitchen.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Buyurtma — Po'lat</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="topbar">
+    <h1><a href="tables.html" style="text-decoration:none;">←</a> <span id="tableTitle">Stol</span></h1>
+    <button class="logout-btn" id="logoutBtn">Chiqish</button>
+  </div>
+  <main>
+    <div class="card">
+      <div class="card-row" style="justify-content:space-between; align-items:center;">
+        <div class="card-title mt-8">Joriy buyurtma</div>
+        <button class="btn small primary" id="sendBtn" style="display:none;"></button>
+      </div>
+      <div id="orderLines"><p class="dim">Yuklanmoqda...</p></div>
+    </div>
+
+    <div class="card-title">Menyu</div>
+    <div class="tabs" id="catTabs"></div>
+    <div id="menuItems"></div>
+  </main>
+
+  <div class="order-total-bar">
+    <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
+    <button class="btn" id="closeBtn" style="background:#fff;color:var(--primary);">Hisob-kitob</button>
+  </div>
+
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="order.js"></script>
+</body>
+</html>
