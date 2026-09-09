@@ -2,6 +2,7 @@ const express = require('express');
 const { db, nowIso } = require('../db');
 const { hashPassword } = require('../passwords');
 const { asyncRoute } = require('../routeUtils');
+const { ROLE_NAMES } = require('../roles');
 
 const router = express.Router();
 
@@ -32,7 +33,7 @@ router.post('/', asyncRoute((req, res) => {
   const { username, password, role, full_name } = req.body || {};
   if (!username || !String(username).trim()) return res.status(400).json({ error: 'Login kiritilishi shart' });
   if (!password || String(password).length < 6) return res.status(400).json({ error: 'Parol kamida 6 belgi bo\'lishi kerak' });
-  if (!['admin', 'waiter', 'chef'].includes(role)) return res.status(400).json({ error: "Rol noto'g'ri" });
+  if (!ROLE_NAMES.includes(role)) return res.status(400).json({ error: "Rol noto'g'ri" });
   const uname = String(username).trim();
   const dup = db.prepare('SELECT id FROM users WHERE username = ?').get(uname);
   if (dup) return res.status(400).json({ error: 'Bu login band' });
@@ -52,7 +53,7 @@ router.put('/:id', asyncRoute((req, res) => {
   const fullName = req.body?.full_name !== undefined ? String(req.body.full_name).trim() : existing.full_name;
   const role = req.body?.role !== undefined ? req.body.role : existing.role;
   const isActive = req.body?.is_active !== undefined ? (req.body.is_active ? 1 : 0) : existing.is_active;
-  if (!['admin', 'waiter', 'chef'].includes(role)) return res.status(400).json({ error: "Rol noto'g'ri" });
+  if (!ROLE_NAMES.includes(role)) return res.status(400).json({ error: "Rol noto'g'ri" });
   db.prepare('UPDATE users SET full_name = ?, role = ?, is_active = ? WHERE id = ?').run(
     fullName, role, isActive, req.params.id
   );

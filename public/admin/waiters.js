@@ -2,12 +2,16 @@ let users = [];
 let editingId = null;
 let resettingId = null;
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-const ROLE_LABEL = { admin: 'admin', waiter: 'afitsiant', chef: 'oshpaz' };
-const ROLE_BADGE = { admin: 'debt', waiter: 'ok', chef: 'low' };
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
+//
+// ROLE_LABEL/ROLE_BADGE quyida — bu ro'yxat server/roles.js'dagi kabi
+// mustaqil (build tizimi yo'q, oddiy <script> fayllar bu yerdan
+// server-side modulni ulab bo'lmaydi): kelajakda yangi rol qo'shilsa,
+// server/roles.js bilan BIRGA shu ro'yxatga ham (va public/login.html'dagi
+// redirect switch'iga) qo'lda qo'shish kerak.
+const ROLE_LABEL = { admin: 'admin', waiter: 'afitsiant', chef: 'oshpaz', courier: 'dastavka', kassir: 'kassir' };
+const ROLE_BADGE = { admin: 'debt', waiter: 'ok', chef: 'low', courier: 'ok', kassir: 'low' };
 
 async function loadUsers() {
   const box = document.getElementById('userList');

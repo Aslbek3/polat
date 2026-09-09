@@ -5,6 +5,7 @@
 // buyurtmaga yangi qator qo'shiladi. Har bir amal (qo'shish/yopish) bitta atomik
 // tranzaksiyada bajariladi.
 const { db, nowIso } = require('../db');
+const inventory = require('./inventory');
 
 class OrderError extends Error {
   constructor(message, status = 400) {
@@ -90,10 +91,17 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
     }
 
     const subtotal = item.price * qty;
-    db.prepare(
+    const info = db.prepare(
       `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, quantity, subtotal, added_by, status, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`
     ).run(order.id, item.id, item.name, item.price, qty, subtotal, waiterId, ts);
+
+    // Taom omborga (masalan suv/salfetka) bog'langan bo'lsa — shu miqdorni
+    // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato otadi,
+    // shu tranzaksiya (order_item qo'shilishi bilan birga) butunlay bekor bo'ladi.
+    if (item.inventory_item_id) {
+      inventory.consume(item.inventory_item_id, qty, { orderItemId: info.lastInsertRowid, userId: waiterId, productName: item.name });
+    }
 
     return order.id;
   });
@@ -102,7 +110,7 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
   return buildOrderView(orderId);
 }
 
-function updateOrderItemQuantity(orderItemId, quantity) {
+function updateOrderItemQuantity(orderItemId, quantity, userId) {
   const qty = Number(quantity);
   if (!Number.isFinite(qty) || qty <= 0 || !Number.isInteger(qty)) {
     throw new OrderError("Miqdor noto'g'ri");
@@ -115,6 +123,22 @@ function updateOrderItemQuantity(orderItemId, quantity) {
     if (!order || order.status !== 'open') {
       throw new OrderError('Bu buyurtma allaqachon yopilgan, o\'zgartirib bo\'lmaydi');
     }
+
+    // Miqdor o'zgarsa (masalan afitsiant + / − tugmasi bilan) va taom omborga
+    // bog'langan bo'lsa — faqat FARQNI (delta) ombordan ayiramiz/qaytaramiz,
+    // butun miqdorni emas (aks holda qoldiq noto'g'ri hisoblanardi).
+    const delta = qty - orderItem.quantity;
+    if (delta !== 0) {
+      const menuItem = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(orderItem.menu_item_id);
+      if (menuItem && menuItem.inventory_item_id) {
+        if (delta > 0) {
+          inventory.consume(menuItem.inventory_item_id, delta, { orderItemId, userId, productName: menuItem.name });
+        } else {
+          inventory.release(menuItem.inventory_item_id, -delta, { orderItemId, userId });
+        }
+      }
+    }
+
     const subtotal = orderItem.unit_price * qty;
     db.prepare('UPDATE order_items SET quantity = ?, subtotal = ? WHERE id = ?').run(qty, subtotal, orderItemId);
     return order.id;
@@ -153,13 +177,22 @@ function sendPendingItems(tableId) {
   return buildOrderView(orderId);
 }
 
-function cancelOrderItem(orderItemId) {
+function cancelOrderItem(orderItemId, userId) {
   const run = db.transaction(() => {
     const orderItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(orderItemId);
     if (!orderItem) throw new OrderError('Buyurtma qatori topilmadi', 404);
     const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderItem.order_id);
     if (!order || order.status !== 'open') {
       throw new OrderError('Bu buyurtma allaqachon yopilgan, o\'zgartirib bo\'lmaydi');
+    }
+    // Allaqachon bekor qilingan qatorni qayta bekor qilish ombordan ikki marta
+    // qaytarib yubormasin uchun himoya (hozircha frontend buni chaqirmaydi, lekin
+    // xavfsizlik uchun).
+    if (orderItem.status === 'active' && orderItem.quantity > 0) {
+      const menuItem = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(orderItem.menu_item_id);
+      if (menuItem && menuItem.inventory_item_id) {
+        inventory.release(menuItem.inventory_item_id, orderItem.quantity, { orderItemId, userId });
+      }
     }
     db.prepare("UPDATE order_items SET status = 'cancelled' WHERE id = ?").run(orderItemId);
     return order.id;
@@ -191,6 +224,43 @@ function closeTable(tableId, waiterId) {
     // ulangan, shu sabab "chop etish kutilmoqda" navbatiga qo'shiladi
     // (adminPrintRequests.js orqali admin panelida ko'rinadi).
     db.prepare('INSERT INTO print_requests (order_id, created_at) VALUES (?, ?)').run(orderRow.id, ts);
+
+    return orderRow.id;
+  });
+
+  const orderId = run();
+  return buildOrderView(orderId, { includeCancelled: true });
+}
+
+// Barcha taomi bekor qilingan (faol taom qolmagan) ochiq buyurtmani hisob-kitobsiz
+// yopib, stolni bo'shatadi. closeTable() dan ATAYLAB alohida: u kamida bitta faol
+// taom talab qiladi (bo'sh chek chiqmasin degan qoida bilan), lekin shu tufayli
+// afitsiant xato bilan qo'shgan taomlarni bekor qilib qo'ysa (yoki mijoz umuman
+// buyurtma bermay ketsa), stolni yopishning hech qanday yo'li qolmasdi — u
+// abadiy "band" bo'lib qolaverardi (idx_orders_one_open_per_table bitta stolda
+// faqat bitta ochiq buyurtmaga ruxsat bergani uchun yangi buyurtma ham ochilmasdi).
+// Shu funksiya aynan shu tuzoqdan chiqish yo'li: chek/print_requests yozuvi
+// yaratilmaydi (hisoblanadigan hech narsa yo'q), total_amount = 0 bilan yopiladi.
+function cancelEmptyOrder(tableId, waiterId) {
+  const run = db.transaction(() => {
+    const table = getTable(tableId);
+    const orderRow = findOpenOrderRow(table.id);
+    if (!orderRow) throw new OrderError('Bu stolda ochiq buyurtma yo\'q', 404);
+
+    const activeItems = db
+      .prepare("SELECT id FROM order_items WHERE order_id = ? AND status = 'active'")
+      .all(orderRow.id);
+    if (activeItems.length > 0) {
+      throw new OrderError(
+        "Buyurtmada faol taomlar bor — avval hammasini bekor qiling yoki \"Hisob-kitob\" orqali yoping"
+      );
+    }
+
+    const ts = nowIso();
+    db.prepare(
+      `UPDATE orders SET status = 'closed', closed_by = ?, closed_at = ?, total_amount = 0,
+       note = 'Bekor qilindi (barcha taomlar bekor qilingan edi)' WHERE id = ?`
+    ).run(waiterId, ts, orderRow.id);
 
     return orderRow.id;
   });
@@ -238,6 +308,7 @@ module.exports = {
   sendPendingItems,
   cancelOrderItem,
   closeTable,
+  cancelEmptyOrder,
   getReceipt,
   listTablesOverview,
   buildOrderView,

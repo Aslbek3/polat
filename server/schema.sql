@@ -2,18 +2,20 @@
 -- server/db.js har safar ko'tarilishida shu faylni qayta qo'llaydi, mavjud
 -- ma'lumotga tegmaydi.
 
--- Foydalanuvchilar: admin + afitsiantlar + oshpazlar. Hech qachon hard-delete
--- qilinmaydi (orders/order_items/expenses ularga FK bilan bog'langan) — faqat
--- is_active=0. ESKATMA: 'chef' roli 2026-08-26'da qo'shildi — mavjud (eski)
+-- Foydalanuvchilar: admin + afitsiantlar + oshpazlar + dastavkachilar. Hech
+-- qachon hard-delete qilinmaydi (orders/order_items/expenses ularga FK bilan
+-- bog'langan) — faqat is_active=0. ESKATMA: 'chef' roli 2026-08-26'da,
+-- 'courier' (Dastavka) roli 2026-09-08'da qo'shildi — mavjud (eski)
 -- bazalarda bu CHECK'ni o'zgartirish uchun server/db.js'dagi
--- migrateAddChefRole() ishlatiladi (SQLite'da ustunning CHECK'ini to'g'ridan
--- to'g'ri ALTER qilib bo'lmaydi, shu sabab jadval qayta qurib ko'chiriladi).
+-- migrateAddChefRole()/migrateAddCourierRole() ishlatiladi (SQLite'da
+-- ustunning CHECK'ini to'g'ridan to'g'ri ALTER qilib bo'lmaydi, shu sabab
+-- jadval qayta qurib ko'chiriladi).
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'waiter', 'chef')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'waiter', 'chef', 'courier')),
   full_name TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
@@ -28,11 +30,20 @@ CREATE TABLE IF NOT EXISTS tables (
   created_at TEXT NOT NULL
 );
 
+-- require_inventory_link (2026-09-07) — 1 bo'lsa, shu kategoriyadagi taomlar
+-- mijoz (landing)/afitsiant menyusida FAQAT ombor mahsulotiga bog'langan
+-- (menu_items.inventory_item_id NOT NULL) bo'lsagina ko'rinadi — bog'lanmagan
+-- taomlar (masalan hali ombor bilan sozlanmagan qoralama yozuv) yashirin
+-- turadi (server/routes/publicMenu.js, waiterMenu.js). Admin panelida
+-- (public/admin/menu.js) BARCHASI hamon ko'rinadi — filtr faqat mijoz/afitsiant
+-- tomonida. Masalan "Ichimliklar" kategoriyasi uchun yoqiladi (faqat haqiqiy
+-- ombor zaxirasi bor ichimlik ko'rinsin, xayoliy/eskirgan yozuv emas).
 CREATE TABLE IF NOT EXISTS menu_categories (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
+  require_inventory_link INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
@@ -40,7 +51,9 @@ CREATE TABLE IF NOT EXISTS menu_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   category_id INTEGER NOT NULL REFERENCES menu_categories(id),
   name TEXT NOT NULL,
-  price INTEGER NOT NULL, -- so'm
+  price INTEGER NOT NULL, -- so'm — sotuv narxi
+  cost_price INTEGER, -- so'm — tan narxi (ixtiyoriy, admin-only, 2026-09-08; ombor bilan
+                       -- bog'langan taomda inventory_items.cost_price'dan avtomatik olinadi)
   is_available INTEGER NOT NULL DEFAULT 1, -- tezkor "tugadi" belgisi
   is_active INTEGER NOT NULL DEFAULT 1, -- soft-delete
   sort_order INTEGER NOT NULL DEFAULT 0,
@@ -135,9 +148,17 @@ CREATE TABLE IF NOT EXISTS customer_orders (
   phone TEXT NOT NULL,
   fulfillment TEXT NOT NULL DEFAULT 'pickup' CHECK (fulfillment IN ('pickup', 'delivery')),
   address TEXT,
+  location_lat REAL,
+  location_lng REAL,
   note TEXT,
   total_amount INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'confirmed', 'completed', 'cancelled')),
+  -- Dastavkachi (courier roli, 2026-09-08) "🚚 Yetkazildi" bosgan vaqt.
+  -- `status`dan ATAYLAB alohida — 'status' allaqachon oshpaz tomonidan
+  -- "tayyor" ma'nosida ('completed') ishlatiladi (server/routes/chefKitchen.js),
+  -- shu sabab yetkazib berish faktini alohida nullable ustunda kuzatamiz.
+  -- NULL = hali yetkazilmagan.
+  delivered_at TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status);
@@ -170,6 +191,12 @@ CREATE TABLE IF NOT EXISTS notifications (
                                                       -- bildirishnomasi uchun) — tasdiqlangach shu
                                                       -- taom order_items.picked_up_at bilan belgilanadi
                                                       -- va oshpaz ekranidan yo'qoladi (chefKitchen.js)
+  -- Yangi yetkazib berish (delivery) mijoz buyurtmasi kelganda (2026-09-08,
+  -- server/routes/publicCustomerOrders.js) admin+oshpaz+dastavkachiga baravar
+  -- ko'rsatiladigan bildirishnoma shu ustun bilan belgilanadi (order_item_id
+  -- dine-in'ga xos bo'lgani uchun ATAYLAB alohida). server/routes/deliveryAlerts.js
+  -- shu ustun to'ldirilgan qatorlarni o'qiydi/tasdiqlaydi.
+  customer_order_id INTEGER REFERENCES customer_orders(id),
   created_at TEXT NOT NULL
 );
 
@@ -195,3 +222,72 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(is_read);
 -- CREATE TABLE IF NOT EXISTS mavjud jadvalga tegmaydi, shu sabab bu yerda turgan
 -- CREATE INDEX ustun hali ALTER bilan qo'shilmasdan turib ishga tushib, "no such
 -- column" xatosi bilan butun serverni yiqitadi (2026-08-26'da amalda topilgan bug).
+
+-- Ombor (2026-09-07): suv/salfetka va shunga o'xshash sotiladigan/sarflanadigan
+-- mahsulotlar qoldig'i. `menu_items.inventory_item_id` (server/db.js'dagi
+-- migrateAddMenuItemInventoryLink()) orqali ixtiyoriy ravishda bitta menyu
+-- taomiga bog'lanadi — bog'langan taomning `is_available`si endi QO'LDA emas,
+-- shu ombor mahsulotining qoldig'idan AVTOMATIK hisoblanadi (server/services/inventory.js
+-- syncMenuAvailability(): qoldiq > 0 bo'lsa mavjud, 0 bo'lsa "tugadi"). Bir nechta
+-- menyu taomi (masalan "Suv 0.5L" va "Suv 1L") bitta ombor mahsulotiga bog'lanishi
+-- CHEKLANMAGAN — agar ular haqiqatan bitta jismoniy zaxiradan sarflansa.
+-- cost_price (tan narxi — admin necha pulga xarid qilgani) va sale_price (sotuv
+-- narxi) 2026-09-07'da qo'shildi. sale_price shu mahsulotga bog'langan HAR BIR
+-- menyu taomining `menu_items.price`ini AVTOMATIK belgilaydi (server/services/inventory.js
+-- syncMenuPricing()) — admin narxni ikki joyda alohida kiritmaydi, yagona manba
+-- shu yerda. cost_price esa faqat Ombor sahifasida (admin/inventory.js, foyda
+-- ko'rsatkichi uchun) ko'rinadi — MENYUDA HECH QACHON chiqmaydi (faqat sale_price
+-- orqali menu_items.price'ga o'tadi, o'zi emas).
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  unit TEXT NOT NULL DEFAULT 'dona', -- o'lchov birligi: dona/litr/kg/quti va h.k. (erkin matn)
+  quantity INTEGER NOT NULL DEFAULT 0, -- joriy qoldiq (butun son — kasr birliklar kerak bo'lsa kelajakda o'zgartiriladi)
+  low_stock_threshold INTEGER NOT NULL DEFAULT 0, -- shu songa yetsa/kam bo'lsa admin panelida "kam qoldi" belgisi (0 = o'chirilgan)
+  cost_price INTEGER NOT NULL DEFAULT 0, -- tan narxi (so'm/birlik) — ixtiyoriy, 0 = kiritilmagan
+  sale_price INTEGER NOT NULL DEFAULT 0, -- sotuv narxi (so'm/birlik) — bog'langan menyu taomiga shu narx o'tadi
+  volume TEXT, -- hajmi (2026-09-07, masalan suv uchun "0.5L"/"1L"/"5L") — ixtiyoriy, erkin matn, faqat Ombor sahifasida ko'rinadi
+  is_active INTEGER NOT NULL DEFAULT 1, -- soft-delete (harakatlar tarixi — inventory_movements — bo'lsa hard-delete qilinmaydi)
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Har bir ombor harakati (kirim/chiqim) — tarix va hisobot uchun append-only.
+-- delta musbat = kirim (admin qo'lda qo'shdi), manfiy = chiqim (buyurtma orqali
+-- sarflandi, admin qo'lda ayirdi/chiqindi, yoki bekor qilingan buyurtma qaytardi
+-- — bu holda delta musbat bo'ladi, reason='return').
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  delta INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('restock', 'adjustment', 'order', 'return')),
+  note TEXT,
+  order_item_id INTEGER REFERENCES order_items(id), -- 'order'/'return' bo'lsa qaysi afitsiant buyurtma qatoriga tegishli (kuzatuv uchun, ixtiyoriy)
+  customer_order_item_id INTEGER REFERENCES customer_order_items(id), -- yoki mijoz (landing) buyurtma qatoriga (ikkalasi bir vaqtda to'lmaydi)
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_movements_item ON inventory_movements(inventory_item_id);
+
+-- Kassir "Hisoblash" bo'limi (2026-09-09) — stol/menyuga bog'liq bo'lmagan,
+-- kassir qo'lda taom nomi/narxi/miqdorini kiritib bir martalik chek chiqaradigan
+-- tezkor hisob-kitob (server/services/manualBills.js). `orders`/`order_items`dan
+-- ATAYLAB alohida: ular table_id/menu_item_id'ni FK NOT NULL qiladi, bu yerda
+-- ikkalasi ham yo'q — kassir hatto menyuda yo'q narsani ham yozib chiqa oladi.
+CREATE TABLE IF NOT EXISTS manual_bills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  total_amount INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_manual_bills_created ON manual_bills(created_at);
+
+CREATE TABLE IF NOT EXISTS manual_bill_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  manual_bill_id INTEGER NOT NULL REFERENCES manual_bills(id),
+  name TEXT NOT NULL,
+  unit_price INTEGER NOT NULL,
+  quantity INTEGER NOT NULL,
+  subtotal INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_manual_bill_items_bill ON manual_bill_items(manual_bill_id);

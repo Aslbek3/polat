@@ -8,10 +8,14 @@
 const crypto = require('crypto');
 const { db } = require('./db');
 const { verifyPassword } = require('./passwords');
+const { ROLE_NAMES, homeForRole } = require('./roles');
 
-// Cookie nomi ataylab "session"/"savdo_session" EMAS — bu ilova ham xuddi shu
-// domenda /polat/ ostki yo'lida proksi qilinadi, nom to'qnashsa foydalanuvchini
-// boshqa ilovadan chiqarib yuborishi mumkin edi.
+// Cookie nomi ataylab "session"/"savdo_session" EMAS — umumiy nom ishlatilsa
+// boshqa ilova bilan to'qnashish ehtimoli bor edi. ESKATMA (2026-09-09'da
+// tuzatildi): bu ilova ILGARI asosiy saytning /polat/ ostki yo'lida proksi
+// qilingan edi, lekin bu proksi allaqachon olib tashlangan — endi mustaqil
+// polatuz.duckdns.org subdomenida ishlaydi (root CLAUDE.md'ga qarang). Nomi
+// shunday (o'ziga xos) qoldirilgan — o'zgartirishga hojat yo'q.
 const COOKIE_NAME = 'polat_session';
 
 const OPEN_PATHS = new Set([
@@ -75,18 +79,19 @@ function createAuth({ sessionSecret }) {
     );
   }
 
-  // Har bir rol o'zining "uy" sahifasiga ega — boshqa rol hududiga kirmoqchi
-  // bo'lganda shu yerga qaytariladi (pastdagi requireAuth va login.html'dagi
-  // client js'da ham xuddi shu naqsh takrorlanadi).
-  function homeForRole(role) {
-    if (role === 'admin') return '/admin/index.html';
-    if (role === 'chef') return '/chef/kitchen.html';
-    return '/waiter/tables.html';
-  }
-
   function requireAuth(req, res, next) {
     // /landing/* — mijozlar uchun ochiq marketing-sahifa (login shart emas).
-    if (OPEN_PATHS.has(req.path) || req.path === '/landing' || req.path.startsWith('/landing/')) {
+    // /uploads/* — admin panelda taomga (ixtiyoriy) biriktirilgan rasmlar
+    // (server/routes/adminMenu.js POST /upload-image) — bular ochiq landing
+    // menyusida ham ko'rsatiladi, shu sabab login qilmagan mijoz brauzeri ham
+    // (cookie'siz) shu rasmlarni yuklay olishi kerak (2026-09-07, rasm
+    // qo'shilganda ochiq bo'lmagani sababli login sahifasiga 302 qilib
+    // yuborilishi kuzatilgan bug'i tuzatildi).
+    if (
+      OPEN_PATHS.has(req.path) ||
+      req.path === '/landing' || req.path.startsWith('/landing/') ||
+      req.path.startsWith('/uploads/')
+    ) {
       return next();
     }
     const user = currentUser(req);
@@ -96,15 +101,15 @@ function createAuth({ sessionSecret }) {
     }
     req.user = user;
 
-    // Rol bo'yicha ajratish: /admin/*, /chef/*, /waiter/* — har biri faqat
-    // o'z roliga (admin esa hammasiga) ochiq.
-    const areaRole = req.path.startsWith('/admin/') || req.path.startsWith('/api/admin/')
-      ? 'admin'
-      : req.path.startsWith('/chef/') || req.path.startsWith('/api/chef/')
-      ? 'chef'
-      : req.path.startsWith('/waiter/') || req.path.startsWith('/api/waiter/')
-      ? 'waiter'
-      : null;
+    // Rol bo'yicha ajratish: /admin/*, /chef/*, /waiter/*, /courier/* — har biri
+    // faqat o'z roliga (admin esa hammasiga) ochiq. Har bir rol o'z nomi bilan
+    // bir xil URL segmentiga ega bo'lgani uchun (masalan 'chef' -> /chef/),
+    // qo'lda yozilgan ternary zanjiri o'rniga server/roles.js'dagi yagona
+    // ro'yxat bo'ylab qidiramiz — yangi rol qo'shilganda bu joy o'zgarishsiz
+    // qoladi (faqat roles.js'ga qo'shish kifoya).
+    const areaRole = ROLE_NAMES.find(
+      (r) => req.path.startsWith(`/${r}/`) || req.path.startsWith(`/api/${r}/`)
+    ) || null;
 
     if (areaRole && user.role !== areaRole && user.role !== 'admin') {
       if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'forbidden' });

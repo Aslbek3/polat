@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Po'lat — kirish</title>
+<title>Ziyo Famliy — kirish</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
@@ -13,7 +13,7 @@
     <form class="login-card" id="loginForm">
       <div class="login-boot">
         <div class="login-mark">P</div>
-        <p><strong>Po'lat</strong> restorani</p>
+        <p><strong>Ziyo Famliy</strong> restorani</p>
         <p class="dim">Tizimga kirish uchun login va parolingizni kiriting</p>
       </div>
       <div class="login-label">Login</div>
@@ -38,6 +38,10 @@
           window.location.href = 'admin/index.html';
         } else if (data.role === 'chef') {
           window.location.href = 'chef/kitchen.html';
+        } else if (data.role === 'courier') {
+          window.location.href = 'courier/orders.html';
+        } else if (data.role === 'kassir') {
+          window.location.href = 'kassir/tables.html';
         } else {
           window.location.href = 'waiter/tables.html';
         }

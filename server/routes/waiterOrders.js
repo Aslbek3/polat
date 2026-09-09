@@ -7,6 +7,7 @@ const {
   sendPendingItems,
   cancelOrderItem,
   closeTable,
+  cancelEmptyOrder,
   getReceipt,
 } = require('../services/orders');
 const { asyncRoute } = require('../routeUtils');
@@ -32,18 +33,26 @@ router.post('/tables/:id/send', asyncRoute((req, res) => {
 }));
 
 router.patch('/items/:id', asyncRoute((req, res) => {
-  const view = updateOrderItemQuantity(req.params.id, req.body?.quantity);
+  const view = updateOrderItemQuantity(req.params.id, req.body?.quantity, req.user.id);
   res.json(view);
 }));
 
 router.delete('/items/:id', asyncRoute((req, res) => {
-  const view = cancelOrderItem(req.params.id);
+  const view = cancelOrderItem(req.params.id, req.user.id);
   res.json(view);
 }));
 
 router.post('/tables/:id/close', asyncRoute((req, res) => {
   const receipt = closeTable(req.params.id, req.user.id);
   res.json(receipt);
+}));
+
+// Faol taomi qolmagan (hammasi bekor qilingan) ochiq buyurtmani hisob-kitobsiz
+// yopib, stolni bo'shatadi — closeTable() dan farqli, chek/print_requests yozuvi
+// yaratmaydi (services/orders.js'dagi cancelEmptyOrder() izohiga qarang).
+router.post('/tables/:id/cancel-order', asyncRoute((req, res) => {
+  const view = cancelEmptyOrder(req.params.id, req.user.id);
+  res.json(view);
 }));
 
 router.get('/tables/:id/receipt/latest', asyncRoute((req, res) => {

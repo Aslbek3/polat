@@ -1,7 +1,5 @@
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
 async function loadTables() {
   const box = document.getElementById('tableOrders');
   try {
@@ -42,6 +40,11 @@ async function toggleItemReady(id, ready) {
 }
 
 const STATUS_LABEL = { new: 'Yangi', confirmed: 'Tasdiqlangan' };
+// Oshpaz taomni tayyorlab bo'lgach kimga berilishini bilishi kerak — mijoz
+// o'zi olib ketadimi (pickup) yoki dastavkachi keladimi (delivery). Ilgari bu
+// yerda umuman ko'rsatilmagan edi (2026-09-08'da topilgan/tuzatilgan bug —
+// oshpaz yetkazib berish buyurtmasini olib ketishdan farqlay olmasdi).
+const FULFILLMENT_LABEL = { pickup: "Olib ketish", delivery: 'Yetkazib berish' };
 
 async function loadOnlineOrders() {
   const box = document.getElementById('onlineOrders');
@@ -54,7 +57,7 @@ async function loadOnlineOrders() {
     box.innerHTML = rows.map((o) => `
       <div class="card">
         <div class="card-row">
-          <div class="card-title">${escapeHtml(o.full_name)} <span class="badge ${o.status === 'confirmed' ? 'ok' : 'debt'}">${STATUS_LABEL[o.status] || o.status}</span></div>
+          <div class="card-title">${escapeHtml(o.full_name)} <span class="badge ${o.fulfillment === 'delivery' ? 'debt' : 'ok'}">${FULFILLMENT_LABEL[o.fulfillment] || o.fulfillment}</span> <span class="badge ${o.status === 'confirmed' ? 'ok' : 'debt'}">${STATUS_LABEL[o.status] || o.status}</span></div>
         </div>
         <div class="card-sub">${fmtDateTime(o.created_at)}</div>
         <div class="mt-8">

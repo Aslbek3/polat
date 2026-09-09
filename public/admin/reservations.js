@@ -1,7 +1,5 @@
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
 const STATUS_LABEL = { new: 'Yangi', confirmed: 'Tasdiqlangan', cancelled: 'Bekor qilingan' };
 const STATUS_BADGE = { new: 'debt', confirmed: 'ok', cancelled: 'low' };
 

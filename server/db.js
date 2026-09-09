@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { ROLE_NAMES } = require('./roles');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -17,30 +18,53 @@ function ensureSchema() {
   db.exec(schema);
 }
 
+// Oddiy "ustun bormi? bo'lmasa ALTER TABLE bilan qo'sh" naqshi — ilgari har bir
+// migrateAdd*() funksiyasi shu 5 qatorni (tekshir/log/ALTER/log) mustaqil qo'lda
+// takrorlagan edi (2026-09-09'da birlashtirildi, pastdagi migratsiyalarning
+// ko'pchiligi endi shu yordamchidan foydalanadi — bir nechta ustun qo'shadigan
+// yoki indeks yaratadigan murakkabroqlari hamon o'zining to'liq funksiyasida
+// qoladi).
+function addColumnIfMissing(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some((c) => c.name === column)) return;
+  console.log(`Migratsiya: '${table}' jadvaliga '${column}' ustuni qo'shilmoqda...`);
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  console.log(`Migratsiya tugadi: '${column}' qo'shildi.`);
+}
+
 // SQLite'da mavjud ustunning CHECK constraint'ini to'g'ridan-to'g'ri ALTER
-// qilib bo'lmaydi — shu sabab 'chef' roli qo'shilganda (2026-08-26) eski
-// bazalar uchun jadvalni SQLite'ning rasmiy tavsiya qilingan usulida qayta
-// qurib ko'chirish kerak: yangi jadval yarat -> ma'lumotni ko'chir -> eskisini
+// qilib bo'lmaydi — shu sabab 'users.role' CHECK'iga yangi rol qo'shilishi
+// kerak bo'lganda ('chef' 2026-08-26'da, 'courier' 2026-09-08'da qo'shilgan
+// edi — ikkalasi ilgari alohida, deyarli bir xil funksiya edi, 2026-09-09'da
+// birlashtirildi) jadval SQLite'ning rasmiy tavsiya qilingan usulida qayta
+// qurib ko'chiriladi: yangi jadval yarat -> ma'lumotni ko'chir -> eskisini
 // o'chir -> nomini almashtir. `users`ga FK bilan bog'langan boshqa jadvallar
 // (orders/order_items/expenses) buzilmaydi, chunki oxirida jadval yana xuddi
-// shu "users" nomi bilan qayta paydo bo'ladi. Idempotent: agar CHECK'da
-// allaqachon 'chef' bo'lsa (yangi o'rnatilgan yoki avval migratsiya qilingan
-// bo'lsa), hech narsa qilmaydi.
-function migrateAddChefRole() {
+// shu "users" nomi bilan qayta paydo bo'ladi.
+//
+// CHECK ro'yxati endi server/roles.js'dagi YAGONA ROLES manbasidan olinadi —
+// kelajakda yangi rol qo'shilganda faqat roles.js'ga qo'shish kifoya, bu
+// funksiya avtomatik ravishda yetishmayotgan rol(lar)ni aniqlab jadvalni
+// qayta quradi. Idempotent: CHECK'da barcha rollar allaqachon bo'lsa hech
+// narsa qilmaydi.
+function migrateSyncUserRoles() {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get();
-  if (!row || row.sql.includes("'chef'")) return;
+  if (!row) return;
+  const missing = ROLE_NAMES.filter((r) => !row.sql.includes(`'${r}'`));
+  if (missing.length === 0) return;
 
-  console.log("Migratsiya: 'users' jadvaliga 'chef' roli qo'shilmoqda...");
+  console.log(`Migratsiya: 'users' jadvaliga rol(lar) qo'shilmoqda: ${missing.join(', ')}...`);
   db.pragma('foreign_keys = OFF');
   try {
     const run = db.transaction(() => {
+      const roleList = ROLE_NAMES.map((r) => `'${r}'`).join(', ');
       db.exec(`
         CREATE TABLE users_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           username TEXT NOT NULL UNIQUE,
           password_hash TEXT NOT NULL,
           password_salt TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('admin', 'waiter', 'chef')),
+          role TEXT NOT NULL CHECK (role IN (${roleList})),
           full_name TEXT,
           is_active INTEGER NOT NULL DEFAULT 1,
           created_at TEXT NOT NULL
@@ -58,37 +82,27 @@ function migrateAddChefRole() {
     if (check.length > 0) {
       throw new Error('foreign_key_check muvaffaqiyatsiz: ' + JSON.stringify(check));
     }
-    console.log("Migratsiya tugadi: 'chef' roli qo'shildi.");
+    console.log(`Migratsiya tugadi: rol(lar) qo'shildi (${missing.join(', ')}).`);
   } finally {
     db.pragma('foreign_keys = ON');
   }
 }
 
 // 'order_items'ga 'ready_at' ustuni (oshpaz "tayyor" belgisi) qo'shish — CHECK
-// constraint emas, oddiy nullable ustun, shuning uchun 'chef' roli kabi
+// constraint emas, oddiy nullable ustun, shuning uchun rol qo'shishdagi kabi
 // jadvalni butunlay qayta qurish shart emas, oddiy ALTER ADD COLUMN yetarli.
-// Idempotent: ustun allaqachon bor bo'lsa hech narsa qilmaydi.
 function migrateAddOrderItemReadyAt() {
-  const cols = db.prepare("PRAGMA table_info(order_items)").all();
-  if (cols.some((c) => c.name === 'ready_at')) return;
-  console.log("Migratsiya: 'order_items' jadvaliga 'ready_at' ustuni qo'shilmoqda...");
-  db.exec('ALTER TABLE order_items ADD COLUMN ready_at TEXT');
-  console.log("Migratsiya tugadi: 'ready_at' qo'shildi.");
+  addColumnIfMissing('order_items', 'ready_at', 'ready_at TEXT');
 }
 
 // 'sent_at' — afitsiant "Oshxonaga yuborish" tugmasini bosgach to'ldiriladi (2026-08-26).
-// Shu ustun bo'lmagan (eski) qatorlar/bazalar uchun ham oddiy ALTER ADD COLUMN yetarli.
-// Idempotent: ustun allaqachon bor bo'lsa hech narsa qilmaydi. Mavjud (eski) faol
-// order_items qatorlari uchun ustun NULL bo'lib qoladi — bu "hali yuborilmagan" deb
-// talqin qilinadi, lekin chef ekrani faqat YANGI qo'shiladigan qatorlarga ta'sir qiladi
-// (eski, allaqachon boshlangan buyurtmalar uchun amaliyotda muammo emas, chunki bu
-// funksiya joriy ochiq buyurtmalar bo'lmagan paytda joylashtirilgan).
+// Mavjud (eski) faol order_items qatorlari uchun ustun NULL bo'lib qoladi — bu
+// "hali yuborilmagan" deb talqin qilinadi, lekin chef ekrani faqat YANGI
+// qo'shiladigan qatorlarga ta'sir qiladi (eski, allaqachon boshlangan
+// buyurtmalar uchun amaliyotda muammo emas, chunki bu funksiya joriy ochiq
+// buyurtmalar bo'lmagan paytda joylashtirilgan).
 function migrateAddOrderItemSentAt() {
-  const cols = db.prepare("PRAGMA table_info(order_items)").all();
-  if (cols.some((c) => c.name === 'sent_at')) return;
-  console.log("Migratsiya: 'order_items' jadvaliga 'sent_at' ustuni qo'shilmoqda...");
-  db.exec('ALTER TABLE order_items ADD COLUMN sent_at TEXT');
-  console.log("Migratsiya tugadi: 'sent_at' qo'shildi.");
+  addColumnIfMissing('order_items', 'sent_at', 'sent_at TEXT');
 }
 
 // 'acknowledged_at'/'acknowledged_by_name' — afitsiant "Qabul qildim" tugmasini
@@ -98,13 +112,8 @@ function migrateAddOrderItemSentAt() {
 // "no such column" bilan yiqilib qolar edi (ensureSchema() bu migratsiyadan
 // OLDIN ishlaydi). Bu yerda ALTER'dan keyin, har doim (idempotent) chaqiriladi.
 function migrateAddNotificationAck() {
-  const cols = db.prepare("PRAGMA table_info(notifications)").all();
-  if (!cols.some((c) => c.name === 'acknowledged_at')) {
-    console.log("Migratsiya: 'notifications' jadvaliga 'acknowledged_at'/'acknowledged_by_name' ustunlari qo'shilmoqda...");
-    db.exec('ALTER TABLE notifications ADD COLUMN acknowledged_at TEXT');
-    db.exec('ALTER TABLE notifications ADD COLUMN acknowledged_by_name TEXT');
-    console.log("Migratsiya tugadi: 'acknowledged_at'/'acknowledged_by_name' qo'shildi.");
-  }
+  addColumnIfMissing('notifications', 'acknowledged_at', 'acknowledged_at TEXT');
+  addColumnIfMissing('notifications', 'acknowledged_by_name', 'acknowledged_by_name TEXT');
   db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_ack ON notifications(acknowledged_at)');
 }
 
@@ -112,11 +121,7 @@ function migrateAddNotificationAck() {
 // shundan keyin taom oshpaz ekranidan yo'qoladi (chefKitchen.js GET /tables filtrlaydi).
 // Idempotent, oddiy ALTER ADD COLUMN (nullable).
 function migrateAddOrderItemPickedUpAt() {
-  const cols = db.prepare("PRAGMA table_info(order_items)").all();
-  if (cols.some((c) => c.name === 'picked_up_at')) return;
-  console.log("Migratsiya: 'order_items' jadvaliga 'picked_up_at' ustuni qo'shilmoqda...");
-  db.exec('ALTER TABLE order_items ADD COLUMN picked_up_at TEXT');
-  console.log("Migratsiya tugadi: 'picked_up_at' qo'shildi.");
+  addColumnIfMissing('order_items', 'picked_up_at', 'picked_up_at TEXT');
 }
 
 // 'order_item_id' — bildirishnoma qaysi taomga tegishli ekanini bog'laydi (2026-08-26),
@@ -124,22 +129,99 @@ function migrateAddOrderItemPickedUpAt() {
 // Idempotent, oddiy ALTER ADD COLUMN (nullable, FK emas — SQLite'da ALTER bilan FK
 // qo'shib bo'lmaydi, lekin better-sqlite3/ilova darajasida bog'lanish yetarli).
 function migrateAddNotificationOrderItemId() {
-  const cols = db.prepare("PRAGMA table_info(notifications)").all();
-  if (cols.some((c) => c.name === 'order_item_id')) return;
-  console.log("Migratsiya: 'notifications' jadvaliga 'order_item_id' ustuni qo'shilmoqda...");
-  db.exec('ALTER TABLE notifications ADD COLUMN order_item_id INTEGER');
-  console.log("Migratsiya tugadi: 'order_item_id' qo'shildi.");
+  addColumnIfMissing('notifications', 'order_item_id', 'order_item_id INTEGER');
 }
 
+// 'customer_order_id' — yangi yetkazib berish (delivery) mijoz buyurtmasi
+// kelganda admin+oshpaz+dastavkachiga baravar ko'rsatiladigan bildirishnomani
+// bog'lash uchun (2026-09-08, schema.sql'dagi izohga qarang, server/routes/
+// deliveryAlerts.js o'qiydi). Idempotent, oddiy ALTER ADD COLUMN (nullable,
+// FK emas — boshqa migratsiyalar bilan bir xil naqsh).
+function migrateAddNotificationCustomerOrderId() {
+  addColumnIfMissing('notifications', 'customer_order_id', 'customer_order_id INTEGER');
+}
+
+// 'description' — admin taom haqida qo'shimcha ma'lumot (tarkibi, hajmi va h.k.)
+// kiritishi uchun (2026-09-07). Afitsiant menyusida taom ustiga (+ tugmasi emas)
+// bosilganda shu matn ko'rsatiladi. Idempotent, oddiy ALTER ADD COLUMN (nullable).
+function migrateAddMenuItemDescription() {
+  addColumnIfMissing('menu_items', 'description', 'description TEXT');
+}
+
+// 'image_url' — admin taomga ixtiyoriy rasm biriktirishi uchun (2026-09-07,
+// server/routes/adminMenu.js'dagi POST /upload-image orqali yuklanadi).
+// MAJBURIY EMAS — NULL bo'lsa frontend rasmsiz (faqat nom/narx) ko'rsatadi.
+// Idempotent, oddiy ALTER ADD COLUMN (nullable).
+function migrateAddMenuItemImage() {
+  addColumnIfMissing('menu_items', 'image_url', 'image_url TEXT');
+}
+
+// 'volume' — nomdan keyin ko'rsatiladigan qisqa o'lcham/hajm belgisi (2026-09-07),
+// masalan ichimliklar uchun "0.5L"/"1L". Erkin matn (raqam+birlik cheklanmagan —
+// taomlar uchun "300g" kabi ham ishlatilishi mumkin). MAJBURIY EMAS. Idempotent,
+// oddiy ALTER ADD COLUMN (nullable).
+function migrateAddMenuItemVolume() {
+  addColumnIfMissing('menu_items', 'volume', 'volume TEXT');
+}
+
+// 'inventory_item_id' — menyu taomini ombor mahsulotiga (2026-09-07, schema.sql'dagi
+// yangi 'inventory_items' jadvali) ixtiyoriy bog'lash uchun. NULL = oddiy taom,
+// mavjudligi hamon qo'lda (PATCH /availability) boshqariladi. Qiymat bo'lsa,
+// server/services/inventory.js shu taomning is_available'ini ombor qoldig'idan
+// avtomatik hisoblaydi. Idempotent, oddiy ALTER ADD COLUMN (nullable, FK emas —
+// SQLite'da ALTER bilan FK qo'shib bo'lmaydi, ilova darajasida bog'lanish yetarli,
+// boshqa migratsiyalar bilan bir xil naqsh).
+function migrateAddMenuItemInventoryLink() {
+  addColumnIfMissing('menu_items', 'inventory_item_id', 'inventory_item_id INTEGER');
+}
+
+// 'delivered_at' — dastavkachi (courier) "🚚 Yetkazildi" bosgan vaqt
+// (2026-09-08, schema.sql'dagi izohga qarang). NULL = hali yetkazilmagan.
+function migrateAddCustomerOrderDeliveredAt() {
+  addColumnIfMissing('customer_orders', 'delivered_at', 'delivered_at TEXT');
+}
+
+// 'location_lat'/'location_lng' — mijoz landing sahifasida (yetkazib berish
+// buyurtmasida) brauzer Geolocation API orqali ixtiyoriy ravishda ulashgan GPS
+// koordinatasi (2026-09-08, public/landing/script.js'dagi "📍 Joylashuvni
+// yuborish" tugmasi). Faqat "manzil" matn maydoniga qo'shimcha, aniqroq
+// yetkazish uchun — MAJBURIY EMAS, mijoz ruxsat bermasa/qurilma qo'llamasa
+// NULL qoladi. Admin panelda mavjud bo'lsa xaritaga havola sifatida ko'rsatiladi
+// (public/admin/customer-orders.js).
+function migrateAddCustomerOrderLocation() {
+  addColumnIfMissing('customer_orders', 'location_lat', 'location_lat REAL');
+  addColumnIfMissing('customer_orders', 'location_lng', 'location_lng REAL');
+}
+
+// ESKATMA (2026-09-09): bu yerda ilgari 4 ta qo'shimcha migratsiya funksiyasi
+// bor edi — migrateAddInventoryPricing/migrateAddInventoryVolume/
+// migrateAddCategoryInventoryRequirement/migrateAddMenuItemCostPrice.
+// Ularning barchasi endi HAQIQIY O'LIK KOD edi: schema.sql'dagi tegishli
+// CREATE TABLE'lar (inventory_items.cost_price/sale_price/volume,
+// menu_categories.require_inventory_link, menu_items.cost_price) allaqachon
+// shu ustunlarni to'g'ridan-to'g'ri o'z ichiga oladi (production bazasida ham
+// bu ustunlar ALLAQACHON mavjud — funksiyalar birinchi marta joriy qilingan
+// paytda bir martalik ALTER TABLE sifatida ishlab, natija saqlanib qolgan),
+// shuning uchun ular haqiqatda hech qachon "ustun yo'q" holatiga tushmasdi —
+// server har safar ko'tarilganda foydasiz PRAGMA/ALTER tekshiruvidan boshqa
+// hech narsa qilmasdi. Xavfsiz o'chirildi.
+//
 // Har doim serverni ko'tarishda sxema mavjudligini tekshiramiz (CREATE TABLE IF NOT EXISTS
 // bo'lgani uchun xavfsiz, ma'lumotni o'chirmaydi) — alohida `npm run migrate` ham mavjud.
 ensureSchema();
-migrateAddChefRole();
+migrateSyncUserRoles();
 migrateAddOrderItemReadyAt();
 migrateAddOrderItemSentAt();
 migrateAddNotificationAck();
 migrateAddOrderItemPickedUpAt();
 migrateAddNotificationOrderItemId();
+migrateAddMenuItemDescription();
+migrateAddMenuItemImage();
+migrateAddMenuItemVolume();
+migrateAddMenuItemInventoryLink();
+migrateAddCustomerOrderLocation();
+migrateAddCustomerOrderDeliveredAt();
+migrateAddNotificationCustomerOrderId();
 
 function nowIso() {
   return new Date().toISOString();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Menyu — Po'lat admin</title>
+<title>Menyu — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="../icon.svg">
@@ -18,6 +18,7 @@
       <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
       <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
       <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
       <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
     </nav>
     <div style="flex:1;">
@@ -38,6 +39,12 @@
       <div class="form-grid">
         <div class="field"><label>Nomi</label><input id="catName"></div>
         <div class="field"><label>Tartib raqami</label><input id="catSort" type="number" value="0"></div>
+        <div class="field">
+          <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-size:14px;">
+            <input type="checkbox" id="catRequireInventory"> Faqat ombor bilan bog'langan taomlar ko'rinsin
+          </label>
+          <p class="dim" style="font-size:12px; margin-top:4px;">Yoqilsa, bu bo'limdagi ombor mahsulotiga bog'lanmagan taomlar mijoz/afitsiant menyusida yashirin turadi (masalan "Ichimliklar" uchun — faqat haqiqiy ombor zaxirasi bor ichimlik ko'rinsin).</p>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn" id="catCancelBtn">Bekor</button>
@@ -51,8 +58,33 @@
       <h2 id="itemModalTitle">Yangi taom</h2>
       <div class="form-grid">
         <div class="field"><label>Nomi</label><input id="itemName"></div>
-        <div class="field"><label>Narxi (so'm)</label><input id="itemPrice" type="number"></div>
+        <div class="field"><label>Hajmi (ixtiyoriy — masalan: 0.5L, 1L, 330ml)</label><input id="itemVolume" placeholder="masalan: 0.5L"></div>
+        <div class="field">
+          <label>Tan narxi (so'm, ixtiyoriy — faqat admin ko'radi)</label>
+          <input id="itemCostPrice" type="number" placeholder="masalan: 15000">
+          <p id="itemCostPriceHint" class="dim" style="font-size:12px; margin-top:4px;"></p>
+        </div>
+        <div class="field">
+          <label>Sotuv narxi (so'm)</label>
+          <input id="itemPrice" type="number">
+          <p id="itemPriceHint" class="dim" style="font-size:12px; margin-top:4px;"></p>
+        </div>
         <div class="field"><label>Tartib raqami</label><input id="itemSort" type="number" value="0"></div>
+        <div class="field"><label>Tavsif (afitsiant taom ustiga bosganda ko'radi)</label><textarea id="itemDescription" rows="3" placeholder="Masalan: tarkibi, hajmi, achchiqligi..."></textarea></div>
+        <div class="field">
+          <label>Ombor mahsuloti bilan bog'lash (ixtiyoriy)</label>
+          <select id="itemInventory">
+            <option value="">— Bog'lanmagan (mavjudlik qo'lda boshqariladi) —</option>
+          </select>
+          <p class="dim" style="font-size:12px; margin-top:4px;">Bog'lansa, bu taomning "mavjud/tugadi" holati VA narxi endi Ombor bo'limidagi qoldiq/sotuv narxidan avtomatik hisoblanadi.</p>
+        </div>
+        <div class="field">
+          <label>Rasm (ixtiyoriy — majburiy emas)</label>
+          <img id="itemImagePreview" class="hidden" style="max-width:120px; border-radius:var(--radius-sm); display:block; margin-bottom:8px;">
+          <input id="itemImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <button class="btn small" id="itemImageRemoveBtn" style="margin-top:6px;" type="button">Rasmni olib tashlash</button>
+          <p id="itemImageStatus" class="dim" style="font-size:12px; margin-top:4px;"></p>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn" id="itemCancelBtn">Bekor</button>

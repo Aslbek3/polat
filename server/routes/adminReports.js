@@ -14,10 +14,24 @@ function dateRange(query) {
 router.get('/summary', asyncRoute((req, res) => {
   const { from, to } = dateRange(req.query);
 
-  let revenueSql = "SELECT COALESCE(SUM(total_amount),0) AS revenue, COUNT(*) AS orders_count FROM orders WHERE status = 'closed'";
+  // Daromad — ikkala buyurtma manbasi BIRGALIKDA hisoblanadi (2026-09-09'da
+  // tuzatildi, ilgari faqat dine-in `orders` hisobga olinardi, landing orqali
+  // kelgan olib ketish/yetkazib berish buyurtmalari — `customer_orders` —
+  // butunlay tashqarida qolib, hisobot real daromadni kamroq ko'rsatardi):
+  //  - dine-in `orders`: status='closed' (hisob-kitob yopilgan), sana closed_at.
+  //  - landing `customer_orders`: status='completed' (buyurtma bajarilgan),
+  //    sana sifatida created_at ishlatiladi — bu jadvalda alohida "bajarilgan
+  //    vaqt" ustuni yo'q (faqat created_at bor), shu sabab taxminiy sana.
+  let revenueSql = `
+    SELECT COALESCE(SUM(total_amount), 0) AS revenue, COUNT(*) AS orders_count FROM (
+      SELECT total_amount, closed_at AS revenue_date FROM orders WHERE status = 'closed'
+      UNION ALL
+      SELECT total_amount, created_at AS revenue_date FROM customer_orders WHERE status = 'completed'
+    ) combined WHERE 1=1
+  `;
   const revenueParams = [];
-  if (from) { revenueSql += ' AND date(closed_at) >= date(?)'; revenueParams.push(from); }
-  if (to) { revenueSql += ' AND date(closed_at) <= date(?)'; revenueParams.push(to); }
+  if (from) { revenueSql += ' AND date(revenue_date) >= date(?)'; revenueParams.push(from); }
+  if (to) { revenueSql += ' AND date(revenue_date) <= date(?)'; revenueParams.push(to); }
   const revenueRow = db.prepare(revenueSql).get(...revenueParams);
 
   let expenseSql = 'SELECT COALESCE(SUM(amount),0) AS total FROM expenses WHERE 1=1';
@@ -26,11 +40,40 @@ router.get('/summary', asyncRoute((req, res) => {
   if (to) { expenseSql += ' AND expense_date <= ?'; expenseParams.push(to); }
   const expenseRow = db.prepare(expenseSql).get(...expenseParams);
 
+  // Sotilgan taomlarning tan narxi (COGS — cost of goods sold): har bir
+  // yopilgan/bajarilgan buyurtma qatorini (bekor qilinmagan, active) shu
+  // taomning JORIY tan narxiga (menu_items.cost_price, kiritilmagan bo'lsa 0)
+  // ko'paytirib yig'indisi — ikkala buyurtma manbasi birgalikda (yuqoridagi
+  // daromad bilan bir xil sabab). Tan narx snapshot emas — sotuv paytidagi
+  // emas, HOZIRGI tan narx ishlatiladi (unit_price kabi alohida saqlanmaydi),
+  // chunki cost_price funksiyasi 2026-09-08'da qo'shilgan va order_items'da
+  // shunga mos ustun yo'q.
+  let cogsSql = `
+    SELECT COALESCE(SUM(qty * COALESCE(cost_price, 0)), 0) AS cogs FROM (
+      SELECT oi.quantity AS qty, mi.cost_price AS cost_price, o.closed_at AS cogs_date
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      JOIN menu_items mi ON mi.id = oi.menu_item_id
+      WHERE o.status = 'closed' AND oi.status = 'active'
+      UNION ALL
+      SELECT coi.quantity AS qty, mi.cost_price AS cost_price, co.created_at AS cogs_date
+      FROM customer_order_items coi
+      JOIN customer_orders co ON co.id = coi.customer_order_id
+      JOIN menu_items mi ON mi.id = coi.menu_item_id
+      WHERE co.status = 'completed'
+    ) combined WHERE 1=1
+  `;
+  const cogsParams = [];
+  if (from) { cogsSql += ' AND date(cogs_date) >= date(?)'; cogsParams.push(from); }
+  if (to) { cogsSql += ' AND date(cogs_date) <= date(?)'; cogsParams.push(to); }
+  const cogsRow = db.prepare(cogsSql).get(...cogsParams);
+
   res.json({
     revenue: revenueRow.revenue,
     orders_count: revenueRow.orders_count,
     expenses_total: expenseRow.total,
-    net: revenueRow.revenue - expenseRow.total,
+    cost_of_goods: cogsRow.cogs,
+    net: revenueRow.revenue - cogsRow.cogs - expenseRow.total,
   });
 }));
 

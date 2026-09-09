@@ -3,3 +3,4 @@ node_modules/
 *.log
 data/
 server/qz-keys/private-key.pem
+public/uploads/

@@ -1,7 +1,5 @@
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
 async function loadReport() {
   const from = document.getElementById('filterFrom').value;
   const to = document.getElementById('filterTo').value;
@@ -35,9 +33,12 @@ async function loadReport() {
           <div class="card-title">${escapeHtml(o.table_name)} — ${fmtMoney(o.total_amount)}</div>
           <div class="card-sub">${fmtDateTime(o.closed_at)} · ${escapeHtml(o.closed_by_name || '')}</div>
         </div>
-        <a class="btn small" href="../waiter/receipt.html?order=${o.id}">Chek</a>
+        <button class="btn small" data-order-id="${o.id}">Chek</button>
       </div>
     `).join('');
+    box.querySelectorAll('[data-order-id]').forEach((btn) => {
+      btn.addEventListener('click', () => openReceiptByOrderId(Number(btn.dataset.orderId)));
+    });
   } catch (err) {
     box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
   }

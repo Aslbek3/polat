@@ -1,7 +1,11 @@
+// Kassir "Stollar" ekrani — afitsiantning tables.js bilan bir xil ko'rinish/
+// naqsh, faqat /api/kassir/tables'dan o'qiydi va bosilganda order.html (kassir
+// papkasidagi, taom qo'shish tugmasisiz) sahifasiga o'tadi.
+// escapeHtml() — ../app.js'dan global.
 async function loadTables() {
   const grid = document.getElementById('tableGrid');
   try {
-    const tables = await api('/waiter/tables');
+    const tables = await api('/kassir/tables');
     if (tables.length === 0) {
       grid.innerHTML = '<p class="dim">Hali stollar qo\'shilmagan. Admin bilan bog\'laning.</p>';
       return;
@@ -18,10 +22,7 @@ async function loadTables() {
   }
 }
 
-// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
-// nusxa birlashtirildi).
 document.addEventListener('DOMContentLoaded', () => {
   loadTables();
-  // Boshqa afitsiant shu stolga buyurtma qo'shsa ham ko'rinishi uchun tez-tez yangilanadi.
   setInterval(loadTables, 10000);
 });

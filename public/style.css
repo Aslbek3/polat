@@ -145,6 +145,25 @@ input, select, textarea, button { font-size: 16px; } /* iOS zoom oldini olish */
 }
 .topbar .logout-btn:active { border-color: var(--gold); color: var(--gold-2); }
 
+/* Sidebar (>=720px) uchun "☰ Menyu" ochish tugmasi — app.js/initNavToggle()
+   tomonidan har admin sahifada topbar'ga dinamik qo'shiladi. Mobil pastki
+   tab-bar rejimida (720px'dan kichik) kerak emas, shuning uchun standart
+   holatda yashirin. */
+.nav-toggle-btn {
+  display: none;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 12px; font-size: 13px; color: var(--text-dim);
+  transition: border-color .15s var(--ease), color .15s var(--ease);
+}
+.nav-toggle-btn:active { border-color: var(--gold); color: var(--gold-2); }
+
+/* Sidebar orqasidagi qorong'ilashtiruvchi fon — ochiq bo'lganda bosilsa yopiladi. */
+.nav-backdrop {
+  position: fixed; inset: 0; background: rgba(6, 5, 3, 0.6); z-index: 25;
+  opacity: 0; pointer-events: none; transition: opacity .2s var(--ease);
+}
+.nav-backdrop.open { opacity: 1; pointer-events: auto; }
+
 main { max-width: 900px; margin: 0 auto; padding: 16px; }
 
 .bottom-nav {
@@ -163,12 +182,20 @@ main { max-width: 900px; margin: 0 auto; padding: 16px; }
 .bottom-nav a.active { color: var(--gold-2); font-weight: 600; }
 
 @media (min-width: 720px) {
+  /* Sidebar endi doim ochiq sticky panel emas — standart holatda yopiq,
+     chapdan suriladigan drawer (topbar'dagi "☰ Menyu" tugmasi bilan ochiladi,
+     bo'lim tugmasi yoki fon bosilsa yopiladi). Shu sabab position:fixed va
+     translateX bilan ekrandan chiqarib turiladi, oqim (flow)dan chiqarilgan
+     — main hamisha to'liq kenglikni egallaydi. */
   .bottom-nav {
-    position: sticky; top: 0; height: auto; flex-direction: column; width: 200px;
-    border-top: none; border-right: 1px solid var(--border); padding-top: 12px;
-    box-shadow: none;
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; width: 240px;
+    flex-direction: column; border-top: none; border-right: 1px solid var(--border);
+    padding-top: 12px; box-shadow: 8px 0 24px -8px rgba(0, 0, 0, 0.5);
+    z-index: 30; transform: translateX(-100%); transition: transform .2s var(--ease);
   }
+  .bottom-nav.open { transform: translateX(0); }
   .bottom-nav a { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 10px 20px; font-size: 14px; }
+  .nav-toggle-btn { display: inline-flex; align-items: center; }
   .app-shell { display: flex; }
   main { flex: 1; padding: 24px; margin: 0; max-width: 900px; }
   .app-body { padding-bottom: 0; }
@@ -220,6 +247,7 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
   background: rgba(0, 0, 0, 0.18); color: var(--text);
   transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
 }
+.field input[readonly] { opacity: 0.65; cursor: not-allowed; }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-light);
 }
@@ -237,6 +265,8 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
 }
 .btn.primary:active { filter: brightness(0.95); }
 .btn.danger { background: rgba(226, 102, 92, 0.08); border-color: var(--danger); color: var(--danger); }
+.btn.light { background: #fff; border-color: #fff; color: #1b1812; }
+.btn.light:active { filter: brightness(0.95); }
 .btn.block { width: 100%; }
 .btn.small { min-height: 36px; padding: 6px 12px; font-size: 13px; }
 
@@ -342,8 +372,32 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
   padding: 12px 4px; border-bottom: 1px solid var(--border);
 }
 .menu-item-row .mi-name { font-weight: 600; }
+.menu-item-row .mi-volume { font-weight: 400; color: var(--text-dim); font-size: 0.9em; }
 .menu-item-row .mi-price { color: var(--text-dim); font-size: 13px; }
 .menu-item-row .btn.add { min-width: 44px; }
+.menu-item-row.unavailable { opacity: 0.55; }
+.menu-item-row.unavailable .btn.add { cursor: not-allowed; }
+.menu-item-row .mi-name .badge { margin-left: 6px; vertical-align: middle; }
+
+/* Afitsiant menyusi (waiter/order.html #menuItems) — taomlar 2 ustunda, kichik
+   kartochka ko'rinishida chiqadi (admin panelning menyu ro'yxatiga tegmaydi,
+   u alohida .card ichida bir ustunda qolaveradi). */
+#menuItems {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+#menuItems .menu-item-row {
+  flex-direction: column; align-items: stretch; gap: 8px;
+  padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+#menuItems .menu-item-row .mi-price { margin-top: 2px; }
+#menuItems .menu-item-row .btn.add { width: 100%; min-width: 0; }
+#menuItems .menu-item-row .mi-info { cursor: pointer; }
+#menuItems .menu-item-row .mi-image {
+  width: 100%; height: 84px; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 6px;
+}
 
 .qty-stepper { display: flex; align-items: center; gap: 8px; }
 .qty-stepper button {

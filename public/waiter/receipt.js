@@ -1,81 +1,58 @@
 const params = new URLSearchParams(window.location.search);
 const ORDER_ID = params.get('order');
 const TABLE_ID = params.get('table');
-const PRINTER_NAME = 'Kassa-Printer';
 let lastView = null;
-let qzSecuritySetUp = false;
 
-// QZ Tray'ning har safar chiqadigan "Action Required" (imzosiz/anonim
-// ulanish) so'rovnomasini butunlay yo'qotish uchun — serverdagi
-// /api/admin/qz/certificate va /api/admin/qz/sign orqali ulanishni raqamli
-// imzolaymiz. Admin kompyuteridagi QZ Tray shu ochiq sertifikatni ("override.crt"
-// sifatida o'rnatilgan bo'lsa, polat/CLAUDE.mdga qarang) ishonchli deb tan olsa,
-// oyna umuman chiqmaydi. Faqat bir marta o'rnatiladi (har chop etishda emas).
-function setupQzSecurity() {
-  if (qzSecuritySetUp) return;
-  qzSecuritySetUp = true;
-  qz.security.setCertificatePromise((resolve, reject) => {
-    api('/admin/qz/certificate').then((data) => resolve(data.certificate)).catch(reject);
-  });
-  qz.security.setSignatureAlgorithm('SHA512');
-  qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
-    api('/admin/qz/sign', { method: 'POST', body: { request: toSign } })
-      .then((data) => resolve(data.signature))
-      .catch(reject);
-  });
-}
+// QZ Tray xavfsizlik sozlamasi, ESC/POS qurish va chop etishning o'zi endi
+// bu yerda TAKRORLANMAYDI — `public/app.js`dagi umumiy `printReceiptView()`
+// (+ `setupQzSecurity()`/`buildEscPosReceipt()`/`loadQzTray()`) ishlatiladi,
+// chunki bu sahifa ham `../app.js`ni ulaydi. MUHIM — 2026-09-07'da haqiqiy
+// production bug sifatida topildi: bu yerda ilgari xuddi shu nomlar bilan
+// (`let qzSecuritySetUp`, `function buildEscPosReceipt`) alohida nusxa bor
+// edi — `app.js`ga xuddi shu funksiyalar (admin modal uchun) qo'shilgach,
+// ikkala <script> BITTA sahifada (`let qzSecuritySetUp` ikkalasida ham)
+// "Identifier 'qzSecuritySetUp' has already been declared" SyntaxError
+// bilan to'qnashib, `receipt.js`ning BUTUN faylini ishga tushirmay qo'ygan
+// edi — natijada chek hech qachon yuklanmasdi ("Yuklanmoqda..." holatida
+// abadiy qotib qolardi). Endi bu yerda faqat shu sahifaga xos (`escapeHtml`,
+// `renderReceipt`, `load`) qoladi, umumiy qism esa `app.js`dan bir marta
+// olinadi — kelajakda shunga o'xshash nom to'qnashuvi bo'lmasligi uchun.
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-// Chap va o'ng matnni bitta qatorga (belgilangan kenglikda) tekislaydi —
-// termal printerda ustunlar (nom ... narx) to'g'ri qatorga tushishi uchun.
-function padLine(left, right, width = 42) {
-  left = String(left);
-  right = String(right);
-  const space = width - left.length - right.length;
-  if (space < 1) {
-    left = left.slice(0, Math.max(0, width - right.length - 1));
-    return `${left} ${right}`;
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
+//
+// Bu sahifaga amalda faqat ADMINISTRATOR keladi (admin panelidagi "chop
+// etish kutilmoqda" bildirishnomasi yangi tabda ochadi, yoki Hisobot
+// bo'limidagi "Chek" havolasi orqali) — afitsiantning o'z hisob-kitob
+// oqimi (order.js) endi bevosita shu sahifaga o'tmaydi. Shu sabab chek
+// muvaffaqiyatli chop etilgandan so'ng admin qo'lda "Stollarga qaytish"ni
+// (bu afitsiant uchun mo'ljallangan havola) bosishiga hojat qoldirmasdan,
+// avtomatik ravishda administrator bo'limiga qaytariladi.
+async function returnToAdminAfterPrint() {
+  try {
+    const me = await api('/me');
+    if (!me || me.role !== 'admin') return; // faqat admin uchun
+  } catch (e) {
+    return; // rolni aniqlab bo'lmasa hech narsa qilmaymiz
   }
-  return left + ' '.repeat(space) + right;
-}
-
-// Chekni ESC/POS xom (raw) buyruqlar ketma-ketligiga aylantiradi.
-// \x1B... — printer mikrosxemasiga to'g'ridan-to'g'ri boradigan buyruqlar
-// (tekislash/shrift/kesish), oddiy matn emas — brauzer print dialogidan
-// farqli o'laroq sifat va avtomatik kesish shu orqali ta'minlanadi.
-function buildEscPosReceipt(view) {
-  const WIDTH = 42; // 80mm qog'ozda standart shrift uchun taxminiy belgi soni
-  const activeItems = view.items.filter((it) => it.status === 'active');
-  const data = [];
-
-  data.push('\x1B\x40'); // ESC @ — printerni boshlang'ich holatga qaytarish
-  data.push('\x1B\x61\x01'); // markazga tekislash
-  data.push('\x1B\x21\x30'); // kattalashtirilgan shrift (sarlavha)
-  data.push("Po'lat restorani\n");
-  data.push('\x1B\x21\x00'); // oddiy shrift
-  data.push(`${view.order.table_name}\n`);
-  data.push(`${fmtDateTime(view.order.closed_at || view.order.opened_at)}\n`);
-  data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x61\x00'); // chapga tekislash
-
-  activeItems.forEach((it) => {
-    const name = `${it.name_snapshot} x${it.quantity}`;
-    data.push(padLine(name, fmtMoney(it.subtotal), WIDTH) + '\n');
-  });
-
-  data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x21\x30'); // jami summani ham kattaroq/qalin chiqarish
-  data.push(padLine('JAMI', fmtMoney(view.total), WIDTH) + '\n');
-  data.push('\x1B\x21\x00');
-  data.push('\x1B\x61\x01');
-  data.push('Xaridingiz uchun rahmat!\n');
-  data.push('\n\n\n');
-  data.push('\x1D\x56\x41\x00'); // GS V A 0 — qog'ozni avtomatik kesish
-
-  return data;
+  toast('Chek chop etildi — administrator bo\'limiga qaytilmoqda...');
+  setTimeout(() => {
+    // Bildirishnoma havolasi yangi tab (target="_blank") ochgan bo'lsa,
+    // shu tabni yopib, admin allaqachon ochiq turgan asosiy admin tabiga
+    // qaytariladi. Yopib bo'lmasa (masalan Hisobot sahifasidan xuddi shu
+    // tabda ochilgan bo'lsa) — qayerdan kelingan bo'lsa o'sha admin
+    // sahifasiga, aks holda admin bosh sahifasiga yo'naltiramiz.
+    if (window.opener && !window.opener.closed) {
+      window.close();
+    }
+    setTimeout(() => {
+      if (document.referrer && document.referrer.includes('/admin/')) {
+        window.location.href = document.referrer;
+      } else {
+        window.location.href = '../admin/index.html';
+      }
+    }, 300);
+  }, 900);
 }
 
 async function chekChopEtish() {
@@ -83,23 +60,14 @@ async function chekChopEtish() {
     alert("Chek ma'lumoti hali yuklanmagan.");
     return;
   }
-  if (typeof qz === 'undefined') {
-    alert('QZ Tray kutubxonasi yuklanmadi (internet aloqasini tekshiring).');
-    return;
-  }
   try {
-    setupQzSecurity();
-    if (!qz.websocket.isActive()) {
-      await qz.websocket.connect();
-    }
-    const config = qz.configs.create(PRINTER_NAME, { encoding: 'CP866' });
-    const data = buildEscPosReceipt(lastView);
-    await qz.print(config, data);
+    await printReceiptView(lastView); // app.js — umumiy QZ Tray ulanish+chop etish
+    returnToAdminAfterPrint();
   } catch (err) {
     console.error(err);
     alert(
       `Printerga chop etib bo'lmadi: ${err.message || err}\n\n` +
-      `Tekshiring: QZ Tray dasturi ishga tushirilganmi va Windows'da printer aynan "${PRINTER_NAME}" deb nomlanganmi.`
+      `Tekshiring: QZ Tray dasturi ishga tushirilganmi va Windows'da printer aynan "${RECEIPT_PRINTER_NAME}" deb nomlanganmi.`
     );
   }
 }
@@ -108,7 +76,7 @@ function renderReceipt(view) {
   const box = document.getElementById('receiptBox');
   const activeItems = view.items.filter((it) => it.status === 'active');
   box.innerHTML = `
-    <h2>Po'lat restorani</h2>
+    <h2>Ziyo Famliy restorani</h2>
     <div class="r-sub">${escapeHtml(view.order.table_name)} · ${fmtDateTime(view.order.closed_at || view.order.opened_at)}</div>
     <hr>
     <table>
@@ -154,4 +122,5 @@ document.getElementById('fallbackPrintLink').addEventListener('click', (e) => {
   e.preventDefault();
   window.print();
 });
+window.addEventListener('afterprint', returnToAdminAfterPrint);
 document.addEventListener('DOMContentLoaded', load);

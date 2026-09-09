@@ -52,6 +52,7 @@ app.use(auth.requireAuth);
 app.get('/api/me', auth.meRoute);
 
 app.use('/api/admin/menu', auth.requireRole('admin'), require('./routes/adminMenu'));
+app.use('/api/admin/inventory', auth.requireRole('admin'), require('./routes/adminInventory'));
 app.use('/api/admin/users', auth.requireRole('admin'), require('./routes/adminUsers'));
 app.use('/api/admin/tables', auth.requireRole('admin'), require('./routes/adminTables'));
 app.use('/api/admin/expenses', auth.requireRole('admin'), require('./routes/adminExpenses'));
@@ -67,6 +68,13 @@ app.use('/api/waiter', require('./routes/waiterOrders'));
 app.use('/api/waiter/notifications', require('./routes/waiterNotifications'));
 
 app.use('/api/chef', auth.requireRole(['admin', 'chef']), require('./routes/chefKitchen'));
+
+app.use('/api/courier', auth.requireRole(['admin', 'courier']), require('./routes/courierOrders'));
+
+app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirTables'));
+app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirBilling'));
+
+app.use('/api/delivery-alerts', auth.requireRole(['admin', 'chef', 'courier']), require('./routes/deliveryAlerts'));
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 

@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const header = document.getElementById('siteHeader');
   const navToggle = document.getElementById('navToggle');
   const navLinks = document.getElementById('navLinks');
+  const navClose = document.getElementById('navClose');
 
   // Header: scroll qilinganda qattiq fon
   const onScroll = () => {
@@ -18,15 +19,17 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('scroll', onScroll, { passive: true });
 
   // Mobil hamburger menyu
+  const closeNav = () => {
+    navToggle.classList.remove('open');
+    navLinks.classList.remove('open');
+  };
   navToggle.addEventListener('click', () => {
     navToggle.classList.toggle('open');
     navLinks.classList.toggle('open');
   });
+  if (navClose) navClose.addEventListener('click', closeNav);
   navLinks.querySelectorAll('a').forEach((a) => {
-    a.addEventListener('click', () => {
-      navToggle.classList.remove('open');
-      navLinks.classList.remove('open');
-    });
+    a.addEventListener('click', closeNav);
   });
 
   function todayISO() {
@@ -115,9 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ============ Dinamik menyu (DB'dan) — faqat ma'lumot uchun ============
+  // ============ Dinamik menyu (DB'dan) + savat/buyurtma ============
   const menuTabsEl = document.getElementById('menuTabs');
   const menuPanelsEl = document.getElementById('menuPanels');
+
+  const itemsById = {}; // menu_item_id -> DB'dan kelgan taom obyekti
+  const cart = {}; // menu_item_id -> { item, qty }
 
   function renderMenu(categories) {
     if (!categories || categories.length === 0) {
@@ -125,6 +131,8 @@ document.addEventListener('DOMContentLoaded', () => {
       menuPanelsEl.innerHTML = '<p class="dim center">Hozircha menyu qo\'shilmagan. Tez orada yangilanadi.</p>';
       return;
     }
+
+    categories.forEach((cat) => cat.items.forEach((it) => { itemsById[it.id] = it; }));
 
     menuTabsEl.innerHTML = categories
       .map((cat, i) => `<button class="menu-tab${i === 0 ? ' active' : ''}" data-cat="${cat.id}">${escapeHtml(cat.name)}</button>`)
@@ -135,11 +143,20 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="menu-panel${i === 0 ? ' active' : ''}" data-panel="${cat.id}">
           <div class="menu-list">
             ${cat.items.map((it) => `
-              <div class="menu-row">
+              <div class="menu-row${it.is_available ? '' : ' menu-row-unavailable'}">
+                ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="menu-row-image" alt="">` : ''}
                 <div class="menu-row-main">
-                  <h4>${escapeHtml(it.name)}</h4>
+                  <h4>${escapeHtml(it.name)}${it.volume ? ` <span class="menu-row-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="menu-row-badge">Tugadi</span>'}</h4>
+                  ${it.description ? `<p class="menu-row-desc">${escapeHtml(it.description)}</p>` : ''}
                   <div class="menu-row-price">${fmtSom(it.price)}</div>
                 </div>
+                ${it.is_available ? `
+                  <div class="menu-qty" data-id="${it.id}">
+                    <button type="button" class="qty-dec" aria-label="Kamaytirish">&minus;</button>
+                    <span class="qty-val">${cart[it.id] ? cart[it.id].qty : 0}</span>
+                    <button type="button" class="qty-inc" aria-label="Qo'shish">+</button>
+                  </div>
+                ` : ''}
               </div>
             `).join('')}
           </div>
@@ -161,6 +178,205 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // ---- Savat (qty tugmalari) ----
+  menuPanelsEl.addEventListener('click', (e) => {
+    const incBtn = e.target.closest('.qty-inc');
+    const decBtn = e.target.closest('.qty-dec');
+    if (!incBtn && !decBtn) return;
+    const wrap = e.target.closest('.menu-qty');
+    const id = Number(wrap.dataset.id);
+    const item = itemsById[id];
+    if (!item) return;
+
+    const current = cart[id] ? cart[id].qty : 0;
+    let next = current;
+    if (incBtn) next = Math.min(current + 1, 50);
+    if (decBtn) next = Math.max(current - 1, 0);
+
+    if (next === 0) delete cart[id];
+    else cart[id] = { item, qty: next };
+
+    wrap.querySelector('.qty-val').textContent = next;
+    updateCartBar();
+  });
+
+  const cartBar = document.getElementById('cartBar');
+  const cartCountEl = document.getElementById('cartCount');
+  const cartTotalEl = document.getElementById('cartTotal');
+  const cartOpenBtn = document.getElementById('cartOpenBtn');
+
+  function cartEntries() {
+    return Object.values(cart);
+  }
+
+  function updateCartBar() {
+    const entries = cartEntries();
+    const count = entries.reduce((sum, e) => sum + e.qty, 0);
+    const total = entries.reduce((sum, e) => sum + e.qty * e.item.price, 0);
+    if (count > 0) {
+      cartBar.classList.add('show');
+      cartCountEl.textContent = `${count} ta taom`;
+      cartTotalEl.textContent = fmtSom(total);
+    } else {
+      cartBar.classList.remove('show');
+    }
+  }
+
+  function clearCart() {
+    Object.keys(cart).forEach((k) => delete cart[k]);
+    menuPanelsEl.querySelectorAll('.qty-val').forEach((el) => { el.textContent = '0'; });
+    updateCartBar();
+  }
+
+  // ---- Buyurtma berish oynasi (checkout modal) ----
+  const checkoutBackdrop = document.getElementById('checkoutBackdrop');
+  const checkoutModalClose = document.getElementById('checkoutModalClose');
+  const checkoutForm = document.getElementById('checkoutForm');
+  const checkoutFormWrap = document.getElementById('checkoutFormWrap');
+  const checkoutSuccess = document.getElementById('checkoutSuccess');
+  const checkoutSuccessText = document.getElementById('checkoutSuccessText');
+  const checkoutSuccessClose = document.getElementById('checkoutSuccessClose');
+  const checkoutSummaryEl = document.getElementById('checkoutSummary');
+  const coError = document.getElementById('coError');
+  const coSubmit = document.getElementById('coSubmit');
+  const coName = document.getElementById('coName');
+  const coPhone = document.getElementById('coPhone');
+  const coAddress = document.getElementById('coAddress');
+  const coAddressField = document.getElementById('coAddressField');
+  const coNote = document.getElementById('coNote');
+  const fulfillmentToggle = document.getElementById('fulfillmentToggle');
+  const coLocationBtn = document.getElementById('coLocationBtn');
+  const coLocationStatus = document.getElementById('coLocationStatus');
+
+  let currentFulfillment = 'pickup';
+  let capturedLocation = null; // { lat, lng } | null — mijoz "Joylashuvni yuborish"ni bossagina to'ldiriladi
+
+  function resetLocation() {
+    capturedLocation = null;
+    coLocationStatus.textContent = '';
+    coLocationStatus.className = 'location-status';
+    coLocationBtn.disabled = false;
+    coLocationBtn.innerHTML = '&#128205; Joylashuvni yuborish';
+  }
+
+  fulfillmentToggle.querySelectorAll('.fulfillment-opt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      currentFulfillment = btn.dataset.fulfillment;
+      fulfillmentToggle.querySelectorAll('.fulfillment-opt').forEach((b) => b.classList.toggle('active', b === btn));
+      coAddressField.classList.toggle('hidden', currentFulfillment !== 'delivery');
+    });
+  });
+
+  coLocationBtn.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      coLocationStatus.textContent = "Qurilma joylashuvni aniqlay olmaydi, manzilni qo'lda yozing";
+      coLocationStatus.className = 'location-status err';
+      return;
+    }
+    coLocationBtn.disabled = true;
+    coLocationStatus.textContent = 'Joylashuv so\'ralmoqda...';
+    coLocationStatus.className = 'location-status';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        capturedLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        coLocationStatus.textContent = '✓ Joylashuv qo\'shildi';
+        coLocationStatus.className = 'location-status ok';
+        coLocationBtn.innerHTML = '&#128205; Joylashuvni yangilash';
+        coLocationBtn.disabled = false;
+      },
+      (err) => {
+        capturedLocation = null;
+        coLocationStatus.textContent = err.code === err.PERMISSION_DENIED
+          ? "Joylashuvga ruxsat berilmadi, manzilni qo'lda yozing"
+          : "Joylashuvni aniqlab bo'lmadi, manzilni qo'lda yozing";
+        coLocationStatus.className = 'location-status err';
+        coLocationBtn.disabled = false;
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+
+  function renderCheckoutSummary() {
+    const entries = cartEntries();
+    const total = entries.reduce((sum, e) => sum + e.qty * e.item.price, 0);
+    checkoutSummaryEl.innerHTML = entries
+      .map((e) => `<div class="checkout-summary-row"><span>${escapeHtml(e.item.name)} &times; ${e.qty}</span><strong>${fmtSom(e.item.price * e.qty)}</strong></div>`)
+      .join('') + `<div class="checkout-summary-total"><span>Jami</span><span class="amount">${fmtSom(total)}</span></div>`;
+  }
+
+  function openCheckoutModal() {
+    if (cartEntries().length === 0) return;
+    renderCheckoutSummary();
+    checkoutBackdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    checkoutFormWrap.classList.remove('hidden');
+    checkoutSuccess.classList.add('hidden');
+    coError.textContent = '';
+  }
+  function closeCheckoutModal() {
+    checkoutBackdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  cartOpenBtn.addEventListener('click', openCheckoutModal);
+  checkoutModalClose.addEventListener('click', closeCheckoutModal);
+  checkoutSuccessClose.addEventListener('click', closeCheckoutModal);
+  checkoutBackdrop.addEventListener('click', (e) => {
+    if (e.target === checkoutBackdrop) closeCheckoutModal();
+  });
+
+  checkoutForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    coError.textContent = '';
+
+    const entries = cartEntries();
+    if (entries.length === 0) return (coError.textContent = "Savat bo'sh");
+
+    const full_name = coName.value.trim();
+    const phone = coPhone.value.trim();
+    const address = coAddress.value.trim();
+    const note = coNote.value.trim();
+
+    if (!full_name) return (coError.textContent = 'Ismingizni kiriting');
+    if (!phone) return (coError.textContent = 'Telefon raqamingizni kiriting');
+    if (currentFulfillment === 'delivery' && !address) {
+      return (coError.textContent = 'Yetkazish manzilini kiriting');
+    }
+
+    coSubmit.disabled = true;
+    coSubmit.textContent = 'Yuborilmoqda...';
+    try {
+      const items = entries.map((e) => ({ menu_item_id: e.item.id, quantity: e.qty }));
+      const payload = { full_name, phone, fulfillment: currentFulfillment, address, note, items };
+      if (currentFulfillment === 'delivery' && capturedLocation) {
+        payload.location_lat = capturedLocation.lat;
+        payload.location_lng = capturedLocation.lng;
+      }
+      const res = await fetch('../api/public/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Xatolik yuz berdi, birozdan so'ng qayta urinib ko'ring");
+
+      checkoutSuccessText.textContent = `Hurmatli ${full_name}, buyurtmangiz qabul qilindi. Tez orada siz bilan bog'lanamiz.`;
+      checkoutFormWrap.classList.add('hidden');
+      checkoutSuccess.classList.remove('hidden');
+      checkoutForm.reset();
+      currentFulfillment = 'pickup';
+      fulfillmentToggle.querySelectorAll('.fulfillment-opt').forEach((b, i) => b.classList.toggle('active', i === 0));
+      coAddressField.classList.add('hidden');
+      resetLocation();
+      clearCart();
+    } catch (err) {
+      coError.textContent = err.message || "Xatolik yuz berdi, birozdan so'ng qayta urinib ko'ring";
+    } finally {
+      coSubmit.disabled = false;
+      coSubmit.textContent = 'Buyurtma berish';
+    }
+  });
+
   async function loadMenu() {
     try {
       const res = await fetch('../api/public/menu');
@@ -175,5 +391,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (backdrop.classList.contains('open')) closeBookModal();
+    if (checkoutBackdrop.classList.contains('open')) closeCheckoutModal();
   });
 });

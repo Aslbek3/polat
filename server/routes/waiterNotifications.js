@@ -7,43 +7,37 @@
 // (server/routes/chefKitchen.js GET /tables filtrlaydi).
 // Admin roli emas — faqat afitsiant (va u yerga ham kira oladigan admin) uchun,
 // requireAuth'dagi /api/waiter/* hudud qoidasi orqali cheklangan (server/index.js).
+//
+// Poll/tasdiqlash mantig'ining o'zi (grace-oyna, idempotentlik) server/services/
+// notifications.js'da umumiy — server/routes/deliveryAlerts.js bilan bir xil.
+// Bu yerga xos bo'lgan yagona narsa: FAQAT order_item_id to'ldirilgan (dine-in
+// "tayyor") qatorlar ko'rsatiladi/tasdiqlanadi — customer_order_id bilan
+// yozilgan (yetkazib berish) bildirishnomalar ATAYLAB bu yerda chiqmaydi va
+// bu yerdan tasdiqlanmaydi (ilgari filtr yo'q edi — afitsiant kuryer/oshpazga
+// tegishli "🚚 Yangi yetkazib berish buyurtmasi" xabarini ham ko'rib, uni
+// noto'g'ri "tasdiqlab" qo'yishi mumkin edi, 2026-09-09'da tuzatildi).
 const express = require('express');
-const { db, nowIso } = require('../db');
+const { db } = require('../db');
 const { asyncRoute } = require('../routeUtils');
+const notifications = require('../services/notifications');
 
 const router = express.Router();
 
-// Hali tasdiqlanmagan (acknowledged_at IS NULL) + yaqinda tasdiqlangan
-// (30 soniya ichida) yozuvlar — shu grace-oyna tufayli "<Ism> qabul qildi"
-// holati boshqa afitsiantlarning ekranida ham qisqa vaqt ko'rinib turadi,
-// so'ng ro'yxatdan avtomatik tushib qoladi.
 router.get('/unread', asyncRoute((req, res) => {
-  const graceCutoff = new Date(Date.now() - 30000).toISOString();
-  const rows = db
-    .prepare('SELECT * FROM notifications WHERE acknowledged_at IS NULL OR acknowledged_at >= ? ORDER BY id ASC')
-    .all(graceCutoff);
-  res.json(rows);
+  res.json(notifications.listUnread('order_item_id IS NOT NULL'));
 }));
 
 router.post('/:id/acknowledge', asyncRoute((req, res) => {
   const row = db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Bildirishnoma topilmadi' });
-  if (row.acknowledged_at) return res.json(row); // allaqachon tasdiqlangan — idempotent
+  if (!row || row.order_item_id == null) return res.status(404).json({ error: 'Bildirishnoma topilmadi' });
 
-  const run = db.transaction(() => {
-    const ts = nowIso();
-    const ackName = req.user.full_name || req.user.username;
-    db.prepare('UPDATE notifications SET is_read = 1, acknowledged_at = ?, acknowledged_by_name = ? WHERE id = ?')
-      .run(ts, ackName, req.params.id);
+  const ackName = req.user.full_name || req.user.username;
+  const result = notifications.acknowledge(row, ackName, (ts) => {
     // Shu bildirishnoma qaysi taomga tegishli bo'lsa (dine-in "tayyor" xabari),
     // o'sha taom endi "qabul qilingan" — oshpaz ekranidan yo'qoladi.
-    if (row.order_item_id) {
-      db.prepare('UPDATE order_items SET picked_up_at = ? WHERE id = ?').run(ts, row.order_item_id);
-    }
+    db.prepare('UPDATE order_items SET picked_up_at = ? WHERE id = ?').run(ts, row.order_item_id);
   });
-  run();
-
-  res.json(db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id));
+  res.json(result);
 }));
 
 module.exports = router;

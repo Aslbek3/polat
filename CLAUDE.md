@@ -2,12 +2,14 @@
 
 Repo ildizidagi asosiy `claude-code-web`dan **butunlay mustaqil** Node.js/Express 5 + better-sqlite3 veb-ilova (o'z `package.json`, o'z serveri, o'z SQLite bazasi — `data/polat.db`). `/root/vps/claudeweb/` uy papkasining o'zi ICHIDA joylashgan (`savdo-hisob`/`Post bot 10` kabi mustaqil loyiha), shuning uchun ACL izolyatsiyasiga to'liq mos.
 
-Uch turdagi foydalanuvchi uchun mo'ljallangan:
+Olti turdagi foydalanuvchi uchun mo'ljallangan:
 
-1. **Mijoz (login shart emas)** — landing sahifa: menyuni ko'radi, savatga qo'shib olib ketish/yetkazib berish buyurtmasi beradi, stol bron qiladi, restoran haqida ma'lumot va aloqa (manzil/xarita/telefon) ko'radi.
+1. **Mijoz (login shart emas)** — landing sahifa: menyuni ko'radi, har bir taomga miqdor (+/−) qo'shib savatga to'ldiradi, pastda suzuvchi savat panelidagi "Buyurtma berish" orqali olib ketish/yetkazib berish buyurtmasi beradi (yetkazib berishda ixtiyoriy ravishda brauzer GPS lokatsiyasini ham ulashishi mumkin), stol bron qiladi, restoran haqida ma'lumot va aloqa (manzil/xarita/telefon) ko'radi. (2026-09-08'gacha bu oqim faqat CSS darajasida tayyor edi, HTML/JS yo'q edi — pastdagi "Holat — 2026-09-08" bo'limiga qarang.)
 2. **Afitsiant** — stollarni boshqaradi: buyurtma qo'shadi, hisob-kitob qilib chek chiqaradi.
-3. **Oshpaz** — oshxona ekrani: band stollar va onlayn buyurtmalarni ko'radi, onlayn buyurtmani tasdiqlaydi/tayyor deb belgilaydi.
-4. **Admin** — hamma narsani boshqaradi (menyu, stollar, xodimlar, xarajat, bronlar, onlayn buyurtmalar, hisobot).
+3. **Oshpaz** — oshxona ekrani: band stollar va onlayn buyurtmalarni (endi olib ketish/yetkazib berish turi bilan) ko'radi, onlayn buyurtmani tasdiqlaydi/tayyor deb belgilaydi.
+4. **Dastavkachi** (`courier`, 2026-09-08'da qo'shildi) — faqat yetkazib berish buyurtmalarini ko'radi (`/courier/orders.html`): mijoz ismi/telefoni/manzili, ixtiyoriy GPS xaritaga havola, taomlar ro'yxati; oshxona "tayyor" deb belgilagandan keyin **"🚚 Yetkazildi"** tugmasi bilan yetkazganini qayd etadi.
+5. **Kassir** (`kassir`, 2026-09-09'da qo'shildi) — faqat hisob-kitob (`/kassir/tables.html`+`order.html`): stollarni ko'radi, joriy buyurtmani (faqat o'qish) ko'radi, "💳 Hisob-kitob qilish" bilan stolni yopib chek chiqaradi — taom qo'sha olmaydi/menyuni ko'rmaydi. Afitsiantning o'zi ham hamon stolni yopa oladi (ikkalasi bir-birini almashtirmaydi).
+6. **Admin** — hamma narsani boshqaradi (menyu, stollar, xodimlar — endi dastavkachi/kassir rollari bilan, xarajat, bronlar, onlayn buyurtmalar — chek chiqarish bilan, hisobot).
 
 ## Ishga tushirilgan holat
 
@@ -29,34 +31,45 @@ server/
   passwords.js          — scrypt parol xeshlash (tuz + timingSafeEqual)
   routeUtils.js         — asyncRoute() wrapper — 500 xatolarda mijozga umumiy xabar, tafsilot faqat logga
   services/orders.js     — stolga buyurtma qo'shish/yopish tranzaksion mantig'i (OrderError)
+  services/inventory.js  — Ombor (2026-09-07): mahsulot CRUD, kirim/chiqim (consume/release/adjustStock),
+                           menyu bilan avtomatik sinxronizatsiya (InventoryError) — pastdagi "Holat" bo'limiga qarang
   routes/
     adminMenu.js, adminUsers.js, adminTables.js, adminExpenses.js, adminReports.js,
-    adminReservations.js, adminCustomerOrders.js   — hammasi requireRole('admin')
+    adminReservations.js, adminCustomerOrders.js, adminInventory.js   — hammasi requireRole('admin')
     waiterTables.js, waiterMenu.js, waiterOrders.js — afitsiant (va admin) uchun
     chefKitchen.js                                  — oshpaz (va admin) uchun, faqat o'qish + onlayn buyurtma holati
+    courierOrders.js                                — dastavkachi (va admin) uchun, 2026-09-08 (pastga qarang)
+    deliveryAlerts.js                                — admin+oshpaz+dastavkachi BARAVAR ko'radigan "yangi yetkazib berish
+                                                        buyurtmasi" bildirishnomasi, 2026-09-08 (pastga qarang)
     publicMenu.js, publicReservations.js, publicCustomerOrders.js — login SHART EMAS (mijoz uchun)
 public/
-  login.html            — barcha xodim (admin/afitsiant/oshpaz) uchun yagona kirish sahifasi
-  app.js, style.css      — xodim sahifalari uchun umumiy (fetch wrapper, nav, toast, formatlash) — qorong'i/oltin uslub
+  login.html            — barcha xodim (admin/afitsiant/oshpaz/dastavkachi) uchun yagona kirish sahifasi
+  app.js, style.css      — xodim sahifalari uchun umumiy (fetch wrapper, nav, toast, formatlash, chek/QZ Tray
+                           infratuzilmasi — dine-in HAM, mijoz buyurtmasi HAM) — qorong'i/oltin uslub
   admin/                — index, menu, tables, waiters ("Xodimlar"), expenses, reservations,
-                           customer-orders, reports — har biri .html + .js
+                           customer-orders (endi "🖨 Chek" tugmasi + 15s avto-yangilanish bilan),
+                           reports, inventory ("Ombor") — har biri .html + .js
   waiter/                — tables, order, receipt
-  chef/                  — kitchen.html + kitchen.js (15s'da avtomatik yangilanadi)
+  chef/                  — kitchen.html + kitchen.js (15s'da avtomatik yangilanadi, endi olib ketish/yetkazib
+                           berish turini ham ko'rsatadi)
+  courier/               — orders.html + orders.js (2026-09-08, yangi — 15s'da avtomatik yangilanadi)
   landing/               — index.html, style.css, script.js — MIJOZLAR uchun, mustaqil dizayn tizimi
-                           (terracotta/qora/oltin, Playfair Display + Poppins), login shart emas
+                           (terracotta/qora/oltin, Playfair Display + Poppins), login shart emas;
+                           2026-09-08'dan to'liq ishlaydigan savat/checkout/lokatsiya bilan
 data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 ```
 
 ## Ma'lumotlar bazasi (SQLite, `server/schema.sql`)
 
-- **`users`** — `role` CHECK IN (`admin`, `waiter`, `chef`). Hech qachon hard-delete qilinmaydi, faqat `is_active=0`.
+- **`users`** — `role` CHECK IN (`admin`, `waiter`, `chef`, `courier`). Hech qachon hard-delete qilinmaydi, faqat `is_active=0`.
 - **`tables`** — restoran stollari (nom/raqam).
-- **`menu_categories`** / **`menu_items`** — `is_active` (soft-delete) + `is_available` (tezkor "tugadi" belgisi). Bitta umumiy menyu — ham afitsiant, ham oshpaz, ham mijoz (landing) shu yerdan o'qiydi.
+- **`menu_categories`** / **`menu_items`** — `is_active` (soft-delete) + `is_available` (tezkor "tugadi" belgisi). Bitta umumiy menyu — ham afitsiant, ham oshpaz, ham mijoz (landing) shu yerdan o'qiydi. `menu_categories.require_inventory_link` va `menu_items.inventory_item_id` — Ombor bilan bog'lanish (2026-09-07, pastga qarang).
+- **`inventory_items`** / **`inventory_movements`** — Ombor (2026-09-07): suv/salfetka va shunga o'xshash sarflanadigan mahsulotlar qoldig'i + har bir kirim/chiqim harakati tarixi. To'liq tafsilot pastdagi "Holat — 2026-09-07: Ombor (inventory) tizimi" bo'limida.
 - **`orders`** / **`order_items`** — afitsiant tomonidan stolga qo'shiladigan **dine-in** buyurtmalar. Bitta stolda bir vaqtning o'zida faqat bitta `open` buyurtma (qisman unikal indeks bilan DB darajasida kafolatlangan). Yopilganda `total_amount` hisoblanadi, chek (`getReceipt`) chiqariladi.
 - **`expenses`** — kunlik xarajatlar (hisobotdagi sof foyda hisobi uchun).
 - **`settings`** — key/value (hozircha ishlatilmayapti faol, kelajak uchun).
 - **`reservations`** — landing'dagi "Stol bron qilish" oynasidan (login shart emas). `status`: new/confirmed/cancelled.
-- **`customer_orders`** / **`customer_order_items`** — landing'dagi menyu+savat orqali kelgan **olib ketish/yetkazib berish** buyurtmalari (login shart emas, `orders`dan ATAYLAB alohida — bu yerda stol/afitsiant shart emas). `fulfillment`: pickup/delivery. `status`: new/confirmed/completed/cancelled. Narx HAR DOIM serverda menu_items'dan qayta hisoblanadi, mijoz yubor gan narxga ishonilmaydi.
+- **`customer_orders`** / **`customer_order_items`** — landing'dagi menyu+savat orqali kelgan **olib ketish/yetkazib berish** buyurtmalari (login shart emas, `orders`dan ATAYLAB alohida — bu yerda stol/afitsiant shart emas). `fulfillment`: pickup/delivery. `status`: new/confirmed/completed/cancelled — **diqqat, `completed` oshpaz tomonidan "taom tayyor" ma'nosida ishlatiladi, "yetkazib bo'lindi" degani EMAS** (pastdagi "Holat — 2026-09-08" bo'limidagi bug fix'ga qarang). `location_lat`/`location_lng` (2026-09-08) — mijoz brauzer Geolocation API orqali ixtiyoriy ulashgan GPS koordinata (yetkazib berishda). `delivered_at` (2026-09-08) — dastavkachi "🚚 Yetkazildi" bosgan vaqt, `status`dan ATAYLAB alohida ustun. Narx HAR DOIM serverda menu_items'dan qayta hisoblanadi, mijoz yuborgan narxga ishonilmaydi.
 
 **Muhim migratsiya eslatmasi:** SQLite'da ustunning CHECK shartini to'g'ridan-to'g'ri ALTER qilib bo'lmaydi. `'chef'` roli qo'shilganda (2026-08-26) mavjud `users` jadvali `server/db.js`dagi `migrateAddChefRole()` orqali xavfsiz qayta qurilib ko'chirildi (yangi jadval → INSERT SELECT → DROP → RENAME, `foreign_key_check` bilan tekshirilib). Idempotent — har safar server ko'tarilganda CHECK'da `'chef'` bor-yo'qligini tekshiradi, bor bo'lsa hech narsa qilmaydi. Kelajakda yana shunga o'xshash CHECK o'zgarishi kerak bo'lsa, shu funksiyani namuna sifatida ishlating.
 
@@ -64,7 +77,7 @@ data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 
 - Cookie: `polat_session` (HMAC-SHA256 imzolangan, `HttpOnly`, `SameSite=Lax`, `TRUST_PROXY=1` bo'lgani uchun HTTPS orqali `Secure` ham qo'shiladi).
 - `OPEN_PATHS` + `/landing/*` — login shart emas.
-- `requireAuth`: `/admin/*`, `/chef/*`, `/waiter/*` (va mos `/api/*`) — har biri faqat o'z roliga ochiq, **admin hammasiga kira oladi**. Boshqa rol hududiga kirishga urinilsa avtomatik o'z "uy" sahifasiga qaytariladi (`homeForRole()`).
+- `requireAuth`: `/admin/*`, `/chef/*`, `/waiter/*`, `/courier/*` (va mos `/api/*`) — har biri faqat o'z roliga ochiq, **admin hammasiga kira oladi**. Boshqa rol hududiga kirishga urinilsa avtomatik o'z "uy" sahifasiga qaytariladi (`homeForRole()`).
 - `requireRole(role|role[])` — bitta rol yoki massiv qabul qiladi (masalan `requireRole(['admin','chef'])`).
 - Parol: `scrypt` (tuz + `timingSafeEqual`), minimal uzunlik **6 belgi** (2026-08-26'da 4'dan oshirildi).
 
@@ -72,7 +85,9 @@ data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 
 **Afitsiant (dine-in):** `/waiter/tables.html` (stollar tarmog'i, bo'sh/band) → stolga kirib menyudan taom qo'shadi (`/waiter/order.html`, har bosilgan "+" alohida `order_items` qatori sifatida qo'shiladi, lekin oshpazga DARHOL yubormaydi — "Kutilmoqda" belgisi bilan ro'yxatda turadi) → hammasini yig'ib bo'lgach **"🍽️ Oshxonaga yuborish"** tugmasi (faqat hali yuborilmagan taom bo'lsa ko'rinadi, sonini ko'rsatadi) → shu paytgacha yig'ilgan taomlarning HAMMASI bitta paytda oshpazga ko'rinadigan bo'ladi → keyinroq yana taom qo'shilsa, xuddi shu tsikl takrorlanadi (yana "Kutilmoqda" → yana "Yuborish") → **"Hisob-kitob"** → stol yopiladi, chek chiqadi (`/waiter/receipt.html`, chop etish tugmasi bilan).
 
-**Oshpaz:** `/chef/kitchen.html` — band stollar (taom+miqdor, faqat ko'rish) va onlayn buyurtmalar (✅ Tasdiqlash / 🏁 Tayyor tugmalari bilan) ro'yxati, 15s'da avtomatik yangilanadi.
+**Oshpaz:** `/chef/kitchen.html` — band stollar (taom+miqdor, faqat ko'rish) va onlayn buyurtmalar (olib ketish/yetkazib berish belgisi + ✅ Tasdiqlash / 🏁 Tayyor tugmalari bilan) ro'yxati, 15s'da avtomatik yangilanadi.
+
+**Dastavkachi (2026-09-08):** `/courier/orders.html` — faqat `fulfillment='delivery'` (va bekor qilinmagan) buyurtmalar, 15s'da avtomatik yangilanadi. Har biri: mijoz ismi/telefoni/manzili, ixtiyoriy GPS xaritaga havola, taomlar, va oshxona "tayyor" (`status='completed'`) deb belgilagandan keyingina faollashadigan **"🚚 Yetkazildi"** tugmasi (`delivered_at` maydonini to'ldiradi — bekor qilib bo'lmaydi, idempotent himoyalangan).
 
 **Mijoz (landing, `/landing/`):**
 - **Hero** — restoran nomi, shior, "Stol bron qilish" (oyna/modal).
@@ -80,7 +95,7 @@ data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 - **Galereya, Biz haqimizda, Aloqa** (manzil/xarita/ish vaqti/telefon) — statik kontent (Unsplash surat manzillari, real suratlar bilan almashtirish mumkin).
 - Header'da **"Xodim kirishi"** — `/login.html`ga o'tadi.
 
-**Admin:** barcha bo'lim — Bosh sahifa (band stollar + kunlik statistika), Menyu, Stollar, **Xodimlar** (admin/afitsiant/oshpaz yaratish — rol tanlanadi), Xarajat, **Bronlar**, **Buyurtmalar** (onlayn, ✅/🏁/❌/🗑 bilan), Hisobot.
+**Admin:** barcha bo'lim — Bosh sahifa (band stollar + kunlik statistika), Menyu, Stollar, **Xodimlar** (admin/afitsiant/oshpaz/**dastavkachi** yaratish — rol tanlanadi), Xarajat, **Bronlar**, **Buyurtmalar** (onlayn, 15s avto-yangilanadi, 🖨 Chek/✅/🏁/❌/🗑 bilan — yetkazib berish buyurtmasi "tayyor" bo'lgandan keyin `delivered_at`ga qarab "🚚 Yetkazilishi kutilmoqda"/"✅ Yetkazildi" deb aniq ko'rsatiladi), **Ombor** (2026-09-07 — suv/salfetka va h.k. qoldig'i, kirim/chiqim, tarix, menyu bilan avtomatik bog'lanish), Hisobot.
 
 ## `.env` kalitlari
 
@@ -178,3 +193,232 @@ Foydalanuvchi so'rovi: "Afitsiant qabul qilganidan keyin oshpazdan mahsulot yo'q
 - **`server/routes/chefKitchen.js`** — `GET /tables` filtri kengaytirildi: `it.sent_at && !it.picked_up_at` (avval faqat `it.sent_at`). Ya'ni taom endi ikki shartda ko'rinadi — yuborilgan VA hali "qabul qilinmagan".
 - Ikkala yangi ustun ham `server/schema.sql`ga (yangi bazalar) va `server/db.js`dagi `migrateAddOrderItemPickedUpAt()`/`migrateAddNotificationOrderItemId()` (mavjud bazalar, idempotent `ALTER TABLE ADD COLUMN`) orqali qo'shildi — avvalgi crash-loop sababidan saboq olib, deploydan oldin `node22 -e "require('./server/db.js')"` bilan alohida sinaldi, xatosiz o'tgach `pm2 restart` qilindi.
 - **Tekshirilgan:** `node22 -c` barcha o'zgargan fayllarda xatosiz; migratsiya oldindan alohida sinaldi, `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online** (restart soni faqat +1). To'liq end-to-end HTTP oqim sinaldi: taom tayyor + yuborilgan holatda oshpaz ro'yxatida **bor** ekani tasdiqlandi → afitsiant tasdiqlagach oshpaz ro'yxatida **yo'q** (`items: []`) ekani tasdiqlandi. Test ma'lumotlari (stol/buyurtma/taom/bildirishnoma) to'liq hard-delete qilindi, production'dagi haqiqiy ma'lumotlarga tegilmadi.
+
+## Holat — 2026-09-07: Ombor (inventory) tizimi qo'shildi
+
+Foydalanuvchi so'rovi bilan bitta uzun sessiyada (bir nechta ketma-ket so'rov orqali, qadam-baqadam) yangi **Ombor** bo'limi qurildi: suv/salfetka va shunga o'xshash sarflanadigan mahsulotlar qoldig'ini boshqarish, menyu bilan avtomatik bog'lanish (narx/mavjudlik/ko'rinish), va bu bog'lanishni to'liq ikki tomonlama (ombor → menyu, menyu → ombor) qildi.
+
+**1. Asosiy CRUD + kirim/chiqim (`server/services/inventory.js`, yangi fayl):**
+- Yangi jadvallar: `inventory_items` (`name`, `unit`, `quantity`, `low_stock_threshold`, `cost_price`, `sale_price`, `volume`, `is_active`) va `inventory_movements` (append-only tarix — `delta`, `reason` CHECK IN `restock/adjustment/order/return`, `note`, `order_item_id`/`customer_order_item_id`, `created_by`, `created_at`).
+- `menu_items.inventory_item_id` (nullable, FK emas — SQLite ALTER cheklovi, ilova darajasida bog'lanish) — bitta menyu taomini bitta ombor mahsulotiga ixtiyoriy bog'laydi. Bir nechta menyu taomi bitta ombor mahsulotiga bog'lanishi CHEKLANMAGAN.
+- `InventoryError` (OrderError bilan bir xil naqsh, `status` maydoni bilan) — `routeUtils.js`dagi `asyncRoute()` avtomatik to'g'ri HTTP kod bilan qaytaradi.
+- `adminInventory.js` (`/api/admin/inventory/*`, `requireRole('admin')`): `GET/POST /items`, `PUT/DELETE /items/:id`, `POST /items/:id/adjust` (kirim/chiqim), `GET /items/:id/movements` (tarix).
+- **O'chirish naqshi** boshqa jadvallar bilan bir xil: harakat tarixi (`inventory_movements`) yo'q bo'lsa hard-delete, bor bo'lsa faqat `is_active=0` (soft-delete) + unga bog'langan menyu taomlari avtomatik "uziladi" (`inventory_item_id=NULL`).
+
+**2. Menyu bilan avtomatik sinxronizatsiya (bir tomonlama, ombor → menyu, "yagona manba" tamoyili):**
+- **Mavjudlik:** `syncMenuAvailability()` — bog'langan taomning `is_available`i endi QO'LDA emas, ombor qoldig'idan hisoblanadi (qoldiq>0 => mavjud, 0 => "tugadi"). `adminMenu.js`dagi `PATCH /items/:id/availability` bog'langan taom uchun **rad etiladi** (400, "Ombor bo'limidan boshqaring").
+- **Narx:** `syncMenuPricing()` — bog'langan taomning `price`i ombor mahsulotining `sale_price`idan olinadi. `adminMenu.js`dagi `POST/PUT /items` bog'langan holatda **mijoz/admin yuborgan narxni butunlay e'tiborsiz qoldiradi** (server tomonda majburan ombor narxi qo'yiladi — hatto qasddan boshqa narx yuborilsa ham, curl bilan sinalgan). `cost_price` (tan narxi) hech qachon menyu javoblarida chiqmaydi — faqat Ombor sahifasida (admin-only).
+- Admin panelida (`public/admin/menu.js`) bog'langan taom uchun "mavjud" checkbox o'rniga `📦 <ombor nomi> (<hajm>): <qoldiq> <birlik>` badge, narx maydoni esa ombor mahsuloti tanlanganda avtomatik to'ldirilib **readonly** bo'lib qoladi (`applyInventoryPriceLock()`).
+
+**3. Buyurtma paytida avtomatik kamayish/qaytarish (`server/services/orders.js`, `publicCustomerOrders.js`, `adminCustomerOrders.js`):**
+- Afitsiant taom qo'shsa (`addItemToTable`) — bog'langan bo'lsa `inventory.consume()` chaqiriladi (yetarli qoldiq bo'lmasa `InventoryError` — butun tranzaksiya, order_item qo'shilishi bilan birga, bekor bo'ladi).
+- Miqdor o'zgarsa (`updateOrderItemQuantity`) — faqat FARQ (delta) ombordan ayiriladi/qaytariladi.
+- Taom bekor qilinsa (`cancelOrderItem`) — to'liq miqdor omborga qaytariladi (`release()`), qayta bekor qilishdan himoyalangan.
+- Mijoz (landing) buyurtmasi (`publicCustomerOrders.js`) — xuddi shunday `consume()`, yetarli qoldiq bo'lmasa xatolik.
+- Admin mijoz buyurtmasini `cancelled`ga o'zgartirsa yoki hali yakunlanmagan buyurtmani o'chirsa (`adminCustomerOrders.js`) — ombor qoldig'i avtomatik qaytariladi (`returnStockForCustomerOrder()`).
+- Barcha harakatlar `inventory_movements`ga yoziladi (`reason='order'`/`'return'`) — Ombor sahifasidagi **"📜 Tarix"** oynasida ko'rinadi.
+
+**4. "Tugadi" ko'rinishi — oldin butunlay yashirilardi, endi belgi bilan ko'rsatiladi:**
+- `publicMenu.js`/`waiterMenu.js` avval `is_available=1` filtri bilan tugagan taomlarni ro'yxatdan butunlay olib tashlar edi (mijoz/afitsiant nega yo'qolganini bilmasdi) — endi filtr olib tashlandi, `is_available` maydoni item bilan birga qaytadi.
+- Frontend (`public/waiter/order.js`, `public/landing/script.js`) — tugagan taom endi ko'rinadi, lekin xira (`opacity`) va qizil **"Tugadi"** belgisi bilan, afitsiant ekranida `+` tugmasi o'rniga `—` (disabled).
+
+**5. Ombor mahsulotiga hajm (`volume`, masalan suv uchun "0.5L"/"1L") va tan narx/sotuv narx (`cost_price`/`sale_price`) qo'shildi** — Ombor sahifasidagi formada so'raladi, ro'yxatda ko'rsatiladi (foyda/birlik hisoblab chiqiladi), menyu tanlash select'ida ("Suv (0.5L) — 5 dona") va bog'langan taom badge'ida ("📦 Suv (0.5L): 5 dona") ko'rinadi.
+
+**6. Kirim/chiqim UX — avval bitta chalkash "± Qoldiq" (musbat=kirim/manfiy=chiqim bitta maydonda) tugmasi bor edi, endi ikkiga ajratildi:** **"📥 Kirim"** (aniq **"Necha dona keldi?"** so'raydi, faqat musbat son) va **"📤 Chiqim"** (**"Necha dona ketdi?"**) — ishora ichkarida avtomatik qo'yiladi. **"📜 Tarix"** tugmasi — har bir mahsulot uchun barcha kirim/chiqim/buyurtma-orqali-sarflangan/qaytgan harakatlarni (sana, miqdor, sabab, izoh, kim) ro'yxat qilib ko'rsatadi (`GET /items/:id/movements`).
+
+**7. Kategoriya darajasida "faqat ombor bilan bog'langan taomlar ko'rinsin" qoidasi (`menu_categories.require_inventory_link`):** yoqilgan kategoriyada (masalan "Ichimliklar") ombor bilan bog'lanmagan taomlar mijoz/afitsiant menyusida **butunlay yashirin** turadi (`publicMenu.js`/`waiterMenu.js` filtri), admin panelida esa baribir ko'rinadi — "🚫 Yashirin (ombor yo'q)" belgisi bilan. Admin panelida kategoriya modaliga checkbox qo'shildi, kategoriya kartasida "📦 Faqat ombor" badge chiqadi.
+
+**8. Real production bug topildi va tuzatildi — "omborga yangi qo'shilgan ichimliklar menyuda chiqmayapti":** 6-bosqichgacha ombor mahsuloti qo'shish **avtomatik** menyu taomi yaratmasdi — admin qo'lda Menyu bo'limiga o'tib, alohida taom yaratib, ombor bilan bog'lashi kerak edi (foydalanuvchi buni bilmagani uchun yangi qo'shgan "Flavis"/"Dena" ichimliklari menyuda ko'rinmay qoldi). Tuzatish: `inventory.createItem()`/`updateItem()`ga ixtiyoriy `menu_category_id` parametri qo'shildi — berilsa, `ensureMenuLink()` shu ombor mahsuloti asosida (nomi/hajmi/sotuv narxi bilan) menyu taomini **darhol** yaratib bog'laydi (allaqachon bog'langan bo'lsa jim o'tkazib yuboriladi — dublikat yaratilmaydi). Ombor formasiga **"Menyuda ko'rsatish"** bo'lim tanlash maydoni qo'shildi (`public/admin/inventory.html`/`.js`) — bog'lanmagan mahsulotlar uchun ro'yxatda qizil **"Menyuda yo'q"** belgisi chiqadi. Production'dagi "Flavis"/"Dena" shu funksiya orqali retroaktiv Ichimliklar bo'limiga bog'lab qo'yildi.
+
+**Migratsiyalar** (`server/db.js`, hammasi idempotent `ALTER TABLE ADD COLUMN`/yangi `CREATE TABLE IF NOT EXISTS`): `migrateAddMenuItemInventoryLink()`, `migrateAddInventoryPricing()`, `migrateAddInventoryVolume()`, `migrateAddCategoryInventoryRequirement()` — har biri alohida `pm2 restart` bosqichida production bazasida xatosiz o'tgani tasdiqlangan (`polat-error.log`ning eng oxirgi yozuvi hamon 2026-08-26'dagi eski, oldindan ma'lum bug — bu sessiyada YANGI xato qo'shilmagani shu orqali tasdiqlangan).
+
+**Tekshirilgan (har bosqichda):** `node22 -c` barcha yangi/o'zgargan JS faylda xatosiz; schema.sql `:memory:` bazada `foreign_keys=ON` bilan sinalgan; har migratsiya production `data/polat.db`ning **haqiqiy nusxasida** oldindan sinalgan; to'liq end-to-end HTTP oqimlar (ombor yaratish → menyuga bog'lash → buyurtma bilan kamayish → tugash → bekor qilish bilan qaytish → narx sinxronizatsiyasi → kategoriya filtri → avto-bog'lash) curl orqali qadamma-qadam tasdiqlangan, har safar test yozuvlari (`inventory_items`/`inventory_movements`/vaqtinchalik `menu_items`/`orders`) to'liq hard-delete qilib tozalangan, production ma'lumotlariga (Pepsi/Flavis/Dena va ularning haqiqiy zaxirasi) tegilmagan. Har bir bosqichdan keyin `pm2 restart polat --update-env` — jarayon barqaror **online**, crash-loop yo'q.
+
+## Holat — 2026-09-07: chek chop etilgach admin avtomatik o'z bo'limiga qaytariladi
+
+Foydalanuvchi so'rovi: "admin chekni chop etgandan so'ng avto ortga qaytsin administrator bo'limiga". Kontekst — chek amalda faqat ADMIN tomonidan chop etiladi: afitsiant stolni yopganda (`order.js`dagi `closeBtn`) chek endi o'zida chop etilmaydi (printer faqat administrator kompyuteriga ulangan), server buni `print_requests` navbatiga yozadi, admin panelidagi bildirishnoma kartasi (`app.js`dagi `renderPrintRequests()`) `../waiter/receipt.html?order=...`ni **yangi tabda** (`target="_blank"`) ochadi; shu bilan bir qatorda `admin/reports.js`dagi "Chek" havolasi ham xuddi shu sahifaga (bu safar xuddi shu tabda) olib boradi. Avval chek chop etilgach (QZ Tray yoki fallback brauzer chop etish) sahifada hech narsa avtomatik sodir bo'lmasdi — faqat afitsiant uchun mo'ljallangan "Stollarga qaytish" havolasi bor edi (admin uchun mantiqsiz).
+
+- **`public/waiter/receipt.js`** — yangi `returnToAdminAfterPrint()`: `GET /api/me` orqali joriy foydalanuvchi rolini so'raydi, faqat `role === 'admin'` bo'lsa davom etadi (afitsiant to'g'ridan-to'g'ri shu sahifaga kirib qolsa — kamdan-kam holat — hech narsa o'zgarmaydi). `toast()` bilan xabar ko'rsatib, so'ng: agar sahifa yangi tab sifatida ochilgan bo'lsa (`window.opener` bor) — shu tabni `window.close()` bilan yopadi (natijada admin allaqachon ochiq turgan asosiy admin tabiga "qaytadi"); yopib bo'lmasa (masalan Hisobot sahifasidan xuddi shu tabda ochilgan holat) — `document.referrer` `/admin/` ichida bo'lsa o'sha sahifaga, aks holda `../admin/index.html`ga yo'naltiradi.
+- Bu funksiya ham asosiy **"Chekni chop etish"** (QZ Tray, `chekChopEtish()` muvaffaqiyatli tugagach) tugmasidan, ham **"Oddiy (brauzer) chop etish"** havolasidan (`window.print()` + `afterprint` hodisasi) keyin ishga tushadi — ikkala chop etish yo'li ham bir xil xatti-harakatga ega.
+- **Tekshirilgan:** `node22 -c public/waiter/receipt.js` xatosiz; `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online** (crash-loop yo'q). Haqiqiy brauzerda QZ Tray orqali chop etish (Windows admin kompyuterida) hali sinalmagan — kod darajasida va syntaksis jihatidan tekshirilgan, funksional tasdiqni admin real ishlatganda berish tavsiya etiladi.
+
+## Holat — 2026-09-07: admin'ga "hisob-kitob qilindi" bildirishnomasi tezlashtirildi
+
+Foydalanuvchi so'rovi: "hisobot habari tezroq kelsin" — aniqlashtiruvchi savoldan (`AskUserQuestion`) so'ng bu admin panelidagi **"chek chop etish" bildirishnomasi** (`pollPrintRequests()`, `public/app.js`) ekani tasdiqlandi (afitsiant/oshpaz "taomi tayyor" bildirishnomasi emas).
+
+- **`public/app.js`, `initAdminPrintRequests()`** — `setInterval(pollPrintRequests, ...)` intervali **10000ms → 3000ms**ga tushirildi. Endi afitsiant stolni yopgandan keyin admin ekranida bildirishnoma ko'pi bilan ~3 soniyada (avval ~10 soniyagacha) chiqadi.
+- Afitsiant→oshpaz yo'nalishidagi boshqa poll (`pollWaiterNotifications`, "taomi tayyor" xabari) — **o'zgartirilmadi**, 10s'da qoladi (so'rov faqat admin bildirishnomasiga oid edi).
+- Statik `public/` fayli — build bosqichi yo'q, Express to'g'ridan-to'g'ri diskdan xizmat qiladi, `pm2 restart` shart emas (brauzerda hard-refresh yetarli). Faqat `node22 -c` bilan sintaksis tekshirildi.
+
+## Holat — 2026-09-07: chek chop etish endi yangi oyna/tab OCHMAYDI (modal)
+
+Foydalanuvchi so'rovi: "chek chqarish uchun har safar yangi oyna ochmasin". Aniqlashtiruvchi savoldan (`AskUserQuestion`) so'ng "modal oyna" varianti tanlandi: hech qanday yangi tab/window ochilmasin, chek shu (admin) sahifaning o'zida popup-modal ko'rinishida chiqib, o'sha yerdan chop etilsin.
+
+**Avvalgi holat:** admin panelidagi "chop etish kutilmoqda" bildirishnomasi (`renderPrintRequests()`, `public/app.js`) va Hisobot bo'limidagi "Chek" havolasi (`admin/reports.js`) ikkalasi ham `/waiter/receipt.html?order=...`ga (alohida sahifa, birinchisi `target="_blank"` bilan yangi tabda) navigatsiya qilardi — QZ Tray kutubxonasi va chop etish mantig'i faqat o'sha sahifada (`public/waiter/receipt.js`) mavjud edi.
+
+**Yangi holat — QZ Tray/chek mantig'i `public/app.js`ga (umumiy fayl) ko'chirildi**, endi hech qaysi tugma navigatsiya qilmaydi:
+
+- **`loadQzTray()`** — QZ Tray kutubxonasini (`qz-tray.js`, CDN) faqat kerak bo'lganda (chek birinchi marta chop etilayotganda) dinamik `<script>` bilan "lazy" yuklaydi — har bir admin sahifa yuklanishida oldindan yuklanmaydi.
+- **`setupQzSecurity()`, `padReceiptLine()`, `buildEscPosReceipt()`** — `receipt.js`dan bir xilda ko'chirilgan (o'zgarishsiz mantiq).
+- **`ensureReceiptModal()` / `renderReceiptBox()` / `showReceiptModal(view)`** — mavjud `.modal-backdrop`/`.modal`/`.modal-actions` CSS naqshidan (customConfirm/showInfoModal bilan bir xil) foydalanib, chekni (`.receipt` klassi, xuddi shu dizayn) modal ichida ko'rsatadi, "Chekni chop etish" va "Yopish" tugmalari bilan.
+- **`printReceiptView(view)`** — QZ ulanish + chop etish (avvalgi `chekChopEtish()` mantig'i, endi sahifa-agnostik funksiya sifatida).
+- **`openReceiptByOrderId(orderId)`** — `GET /api/waiter/orders/:id/receipt`ni chaqirib, `showReceiptModal()`ni ko'rsatadi (admin `/api/waiter/*`ga kira oladi — `server/auth.js`dagi rol qoidasi bo'yicha).
+- **`renderPrintRequests()`** — endi `<a href=... target="_blank">` o'rniga oddiy `<button>`, bosilganda `markPrintRequestPrinted()` (avvalgidek darhol navbatdan olib tashlaydi) VA `openReceiptByOrderId()` (modalni ochadi) ikkalasi ham chaqiriladi — sahifa hech qayerga ketmaydi.
+- **`admin/reports.js`**dagi "Chek" havolasi ham xuddi shunday `<button data-order-id>`ga almashtirildi, bosilganda `openReceiptByOrderId()` chaqiriladi.
+- **`public/waiter/receipt.html`/`receipt.js` o'zgartirilmadi, o'chirilmadi** — endi ilova ichidan hech qaysi tugma unga havola bermaydi (orphan holatga o'tdi), lekin fayl mustaqil ishlayveradi — kelajakda to'g'ridan-to'g'ri URL (`/waiter/receipt.html?order=X`) orqali qo'lda ochish hali ishlaydi (zaxira/troubleshooting uchun zarar keltirmaydi, shuning uchun ataylab o'chirilmadi).
+- Oldingi sessiyada (yuqoridagi "chek chop etilgach admin avtomatik o'z bo'limiga qaytariladi" bo'limi) qo'shilgan `receipt.js`dagi `returnToAdminAfterPrint()` endi ishlatilmaydi (chunki navigatsiya umuman yo'q — modal shunchaki yopiladi) — lekin o'zi ishlatilayotgan joyda (`receipt.html`ning mustaqil ochilishi) hamon to'g'ri ishlayveradi, shu sabab olib tashlanmadi.
+- **Tekshirilgan:** `node22 -c` ikkala o'zgargan faylda (`app.js`, `admin/reports.js`) xatosiz, CSS qavs balansi (157/157) tekshirildi; `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online** (restart soni faqat +1, crash-loop yo'q). **Haqiqiy brauzerda QZ Tray orqali modal ichidan chop etish (Windows admin kompyuterida, jismoniy printer bilan) hali amalda sinalmagan** — kod/sintaksis darajasida tekshirilgan, birinchi haqiqiy foydalanishda tasdiqlab qo'yish tavsiya etiladi.
+
+## Holat — 2026-09-07: "chek yuklanmayapti" — haqiqiy production bug topildi va tuzatildi
+
+Foydalanuvchi darhol keyingi xabarda "tekshir chek yuklanmayapti" dedi. Sabab — yuqoridagi modal o'zgarishida `public/app.js`ga QZ Tray mantig'i ko'chirilganda, u yerda `let qzSecuritySetUp = false;` va `function buildEscPosReceipt(view)` deb e'lon qilingan edi — lekin **xuddi shu nomlar** allaqachon `public/waiter/receipt.js`da ham bor edi (o'sha sahifa `../app.js`ni HAM, `receipt.js`ni HAM ketma-ket ulaydi). Ikkala `<script>` bitta HTML sahifada bo'lgani uchun ularning top-level `let`/`const` e'lonlari BITTA umumiy lexical scope'ni bo'lishadi — natijada brauzerda `receipt.html` ochilganda **`SyntaxError: Identifier 'qzSecuritySetUp' has already been declared`** paydo bo'lib, `receipt.js`ning BUTUN fayli parse bosqichida ishga tushmay qolardi. Bu esa faylning eng ohiridagi `document.addEventListener('DOMContentLoaded', load)` qatori HECH QACHON chaqirilmasligini anglatardi — demak chek ma'lumoti hech qachon so'ralmas, sahifa boshlang'ich statik **"Yuklanmoqda..."** matnida abadiy qotib qolardi. (`function` e'lonlari — masalan ikkalasida ham bo'lgan `buildEscPosReceipt` — xuddi shu tarzda to'qnashmaydi, faqat `let`/`const` uchun bu qat'iy SyntaxError.)
+
+- **Aniqlash usuli:** avval koddagi barcha yangi funksiyalarni real Node.js `vm` konteksti orqali ikkala skriptni ("app.js" so'ng "receipt.js") ketma-ket bitta lexical scope'da `vm.runInContext()` bilan ishga tushirib, brauzerdagi real vaziyat qayta hosil qilindi — shu orqali `SyntaxError: Identifier 'qzSecuritySetUp' has already been declared` xatosi tasdiqlandi (avval alohida `node22 -c` — faqat bitta faylni tekshiradi, shu sabab bunday kesishma xatoni umuman ko'rsatmaydi).
+- **Tuzatish — `public/waiter/receipt.js`:** endi umumiy QZ Tray mantiqni (`setupQzSecurity`, `padLine`/`buildEscPosReceipt`, `qzSecuritySetUp`) o'zida TAKRORLAMAYDI — bularning barchasi `app.js`da bir marta ta'riflangan (`printReceiptView()`, `RECEIPT_PRINTER_NAME` va h.k.), `chekChopEtish()` endi shunchaki `await printReceiptView(lastView)`ni chaqiradi. Faqat shu sahifaga xos qismlar (`escapeHtml`, `renderReceipt`, `load`, `returnToAdminAfterPrint`) qoldi — bularning nomlari `app.js`dagi hech narsaga to'g'ri kelmaydi, xavfsiz.
+- **Tekshirilgan:** `node22 -c` receipt.js'da xatosiz; yuqoridagi `vm.runInContext()` simulyatsiyasi endi ikkala skript ketma-ket yuklanganda **hech qanday xato bermasligini** tasdiqladi; haqiqiy HTTP orqali (`curl` bilan admin sifatida login qilib) `/waiter/receipt.html?order=38` 200 qaytardi, `/api/waiter/orders/38/receipt` to'g'ri JSON qaytardi, serverdan qaytgan `app.js`da `qzSecuritySetUp` 3 marta (o'z ichida, normal), `receipt.js`da esa endi 0 marta (olib tashlangani tasdiqlandi) uchrashini tekshirildi. `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online** (crash-loop yo'q).
+- **Saboq:** bir nechta `<script>` faylni bitta HTML sahifaga ulaganda, ular orasida `let`/`const` nom to'qnashuvi oddiy `node -c` (yagona fayl sintaksis tekshiruvi) bilan UMUMAN sezilmaydi — faqat ikkalasi HAQIQATDA bitta sahifada birga yuklanganda paydo bo'ladi. Kelajakda `app.js`ga umumiy funksiya/o'zgaruvchi qo'shilganda, uni ulaydigan har bir sahifa-maxsus skriptda (`receipt.js`, `order.js`, va h.k.) xuddi shu nom band emasligini tekshirish kerak.
+
+## Holat — 2026-09-08: admin panel chap menyusi (sidebar) ochiladigan/yopiladigan drawer qilindi
+
+Foydalanuvchi skrinshot bilan ko'rsatib so'radi: "shu tugmalar bo'limlarga kirganda [menyu] yopilsin, menyu bosilsa ochilsin" — ya'ni admin panel chap menyusi (Bosh sahifa/Menyu/Stollar/Xodimlar/Xarajat/Bronlar/Buyurtmalar/Ombor/Hisobot) har doim ochiq turishdan chiqib, tugma bilan ochiladigan/yopiladigan drawer'ga aylantirilishi kerak edi.
+
+**Kontekst — bitta `#bottomNav` ikki rejimda ishlaydi (`public/style.css`):** <720px kenglikda (telefon) — pastki gorizontal ikonka-bar (o'zgartirilmadi); >=720px kenglikda (planshet/kompyuter/landshaft telefon — foydalanuvchi skrinshotidagi holat aynan shu) — chapdagi vertikal sidebar, avval **doim ochiq/sticky** edi (200px joy egallab, hech qachon yopilmasdi).
+
+**O'zgarishlar (faqat >=720px rejimiga tegishli, mobil pastki bar tegilmadi):**
+- **`public/style.css`** — `@media (min-width:720px)` ichidagi `.bottom-nav` endi `position: sticky` emas, `position: fixed` + `transform: translateX(-100%)` bilan standart holatda ekrandan chiqarilgan (kenglik 200px→240px, oqim/flow'dan chiqarilgan, shuning uchun `main` doim to'liq kenglikni egallaydi); `.bottom-nav.open` — `transform: translateX(0)`. Yangi `.nav-toggle-btn` (topbar'dagi "☰ Menyu" tugmasi, standart holatda `display:none`, faqat >=720px'da `inline-flex`) va `.nav-backdrop` (ochiq bo'lganda fonni qorong'ilashtiradigan, bosilsa yopadigan qatlam) qo'shildi.
+- **`public/app.js`** — `initNav(activePage)` (allaqachon barcha 9 admin sahifaning o'z JS faylidan chaqirilib turadi) ichiga yangi `initNavToggle(nav)` qo'shildi: topbar'ga `#navToggleBtn` tugmasi va `#navBackdrop`ni dinamik yaratadi (`ensureNotifList()` bilan bir xil naqsh — 9 ta HTML faylni alohida tahrirlash shart bo'lmadi), tugma bosilsa `nav`/`backdrop`ga `.open` klassini almashtiradi, backdrop yoki istalgan nav-havola (`<a>`) bosilsa `.open`ni olib tashlaydi (menyu yopiladi).
+- `--nav-h`ga bog'liq boshqa qoidalar (`.fab`, `.order-total-bar`) tekshirildi — ularning ikkalasida ham allaqachon `@media(min-width:720px)` ustida mustaqil `bottom` qiymati bor edi (sidebar joyiga bog'liq emas), shuning uchun bu o'zgarish ularga ta'sir qilmadi.
+
+**Tekshirilgan:** `node22 -c app.js` xatosiz; `style.css`da qavslar balansi (163/163) teng; fayl egaligi `claudeweb:claudeweb`. Statik `public/` fayllari (build bosqichi yo'q) — `pm2 restart polat` shart emas, brauzerda hard-refresh yetarli. **Haqiqiy brauzerda vizual/interaktiv tekshiruv (tugma bosilganda ochilish, bo'lim tanlanganda yopilish, backdrop bosilganda yopilish) hali qilinmagan** — foydalanuvchi tomonidan amalda sinab ko'rish tavsiya etiladi.
+
+## Holat — 2026-09-08: mijoz landing sahifasida savat/checkout (haqiqatan) ishga tushirildi
+
+Loyiha hujjatida (yuqoridagi eski holatlar) va CSS'da (`public/landing/style.css`dagi `.cart-bar`, `.checkout-summary`, `.menu-qty`) savat/buyurtma oqimi ANCHADAN BERI "tayyor" deb yozib qo'yilgan edi, lekin tekshiruvda aniqlandiki HTML/JS tomoni umuman yo'q edi — mijoz menyuni faqat o'qiy olardi, "zakaz qilish" imkoniyati jismonan mavjud emas edi (faqat "Stol bron qilish" ishlardi). Backend (`server/routes/publicCustomerOrders.js`, `POST /api/public/orders`) esa allaqachon to'liq tayyor edi.
+
+- **`public/landing/index.html`** — pastda suzuvchi savat paneli (`#cartBar`, jami son+summa+"Buyurtma berish") va "Stol bron qilish" bilan bir xil uslubdagi checkout modal (`#checkoutBackdrop` — ism/telefon/olib ketish yoki yetkazib berish tugmalari/manzil/izoh/savat xulosasi/muvaffaqiyat ekrani) qo'shildi.
+- **`public/landing/script.js`** — har bir menyu qatoriga miqdor tugmalari (`−`/`+`, mavjud CSS'ga ulandi), savat holati (`cart` obyekti), checkout forma yuborilganda `POST ../api/public/orders`.
+- **`public/landing/style.css`** — `.fulfillment-toggle`/`.fulfillment-opt` (olib ketish/yetkazib berish tanlovi) yangi qo'shildi.
+- **Tekshirilgan:** `node22 -c` xatosiz, HTML `<div>` va CSS `{}` balansi teng. Statik fayl, `pm2 restart` shart emas.
+
+## Holat — 2026-09-08: "Xaritada ko'rish" tugmasi (oq fon) + GPS lokatsiya (`location_lat`/`location_lng`)
+
+Ikki alohida so'rov bilan: (1) checkout oynasida umumiy `.btn` uslubiga yangi **`.btn.light`** (oq fon, qora matn) varianti qo'shildi. (2) Yetkazib berish tanlanganda **"📍 Joylashuvni yuborish"** tugmasi — brauzer `navigator.geolocation.getCurrentPosition()` orqali GPS koordinatani so'raydi (ixtiyoriy, ruxsat berilmasa/xato bo'lsa buyurtma baribir manzil matni bilan davom etadi), muvaffaqiyatli bo'lsa buyurtma bilan birga `location_lat`/`location_lng` yuboriladi.
+
+- **`server/schema.sql` + `server/db.js`** — `customer_orders`ga `location_lat`/`location_lng` (REAL, nullable) ustunlari, `migrateAddCustomerOrderLocation()` bilan mavjud bazaga ham qo'shildi.
+- **`server/routes/publicCustomerOrders.js`** — qiymatlarni diapazon bo'yicha (-90..90/-180..180) tekshiradi, noto'g'ri bo'lsa jimgina e'tiborsiz qoldiradi.
+- **`public/admin/customer-orders.js`** — lokatsiya bor bo'lsa "🗺 Xaritada ko'rish" (Google Maps) havolasi chiqadi.
+- **Tekshirilgan:** migratsiya production bazada sinaldi, `pm2 restart` xatosiz, jarayon barqaror online.
+
+## Holat — 2026-09-08: "Dastavka" (courier) roli qo'shildi
+
+Yangi to'rtinchi xodim roli — faqat yetkazib berish buyurtmalarini ko'radigan/yetkazganini belgilaydigan dastavkachi.
+
+- **`users.role` CHECK'ga `'courier'` qo'shildi** — `migrateAddChefRole()` bilan bir xil xavfsiz "jadval qayta qurish" naqshi (`migrateAddCourierRole()`, SQLite CHECK'ni to'g'ridan-to'g'ri ALTER qilib bo'lmagani uchun).
+- **`customer_orders.delivered_at`** (nullable TEXT) — dastavkachi "Yetkazildi" bosgan vaqt. **ATAYLAB `status`dan alohida** — `status='completed'` allaqachon oshpaz tomonidan "taom tayyor" ma'nosida band (`server/routes/chefKitchen.js`), ikkalasini bitta ustunga sig'dirish chalkashlikka olib kelardi.
+- **`server/routes/courierOrders.js`** (yangi, `requireRole(['admin','courier'])`) — `GET /orders` (fulfillment='delivery', bekor qilinmagan), `PUT /orders/:id/deliver` (faqat `status='completed'` bo'lsa ruxsat, ikki marta bosib bo'lmaydi — idempotent himoya).
+- **`server/auth.js`** — `homeForRole('courier') → '/courier/orders.html'`, `/courier/*`+`/api/courier/*` hudud ajratildi.
+- **`public/courier/orders.html`+`orders.js`** (yangi) — 15s avto-yangilanadi, har buyurtmada mijoz/telefon/manzil/xarita havolasi/taomlar, pastda **yonma-yon 2 ustunda** "🗺 Xaritada ko'rish" (oq tugma) + "🚚 Yetkazildi" (faqat oshxona tayyor deganda faollashadi).
+- **`public/admin/waiters.js`/`waiters.html`** — "Xodimlar" bo'limida yangi foydalanuvchi yaratishda **"Dastavka"** roli tanlov sifatida qo'shildi (`ROLE_LABEL`/`ROLE_BADGE`).
+- **`server/routes/adminUsers.js`** — rol validatsiya massiviga `'courier'` qo'shildi.
+- **Tekshirilgan (production bazaga qarshi, to'liq oqim bilan):** migratsiya ikkalasi ham xatosiz; test dastavkachi hisobi bilan login → admin API'ga kirish urinishi to'g'ri **403** → tayyor bo'lmagan buyurtmani yetkazishga urinish rad etildi → admin tasdiqlab/tayyor deb belgilagach dastavkachi muvaffaqiyatli "yetkazdi" → ikkinchi marta urinish rad etildi. Barcha test ma'lumotlari tozalandi, `pm2 restart` xatosiz, jarayon barqaror online.
+
+## Holat — 2026-09-08: yangi yetkazib berish buyurtmasi — admin+oshpaz+dastavkachiga BARAVAR bildirishnoma
+
+Foydalanuvchi tasvirlagan jarayon: "mijoz yetkazib berishga buyurtma bersa, xabar oshpazga, administratorga va dastavkachiga borsin — dastavkachi admindan chekni oladi, keyin oshpazdan taomni olib yetkazadi." Buni ta'minlash uchun barcha uch rolga bir vaqtda ko'rinadigan bildirishnoma qo'shildi (afitsiant-oshpaz "taomi tayyor" bildirishnomasi bilan bir xil naqsh — poll + "Ko'rdim" tugmasi + ~30s grace-oyna).
+
+- **`notifications.customer_order_id`** (nullable, `migrateAddNotificationCustomerOrderId()`) — mavjud `order_item_id` (dine-in'ga xos) bilan aralashib ketmasligi uchun ATAYLAB alohida ustun.
+- **`server/routes/publicCustomerOrders.js`** — yangi **yetkazib berish** (delivery, pickup emas) buyurtmasi kelganda bir xil tranzaksiyada `notifications`ga `"🚚 Yangi yetkazib berish buyurtmasi: <ism> — <summa>"` yoziladi.
+- **`server/routes/deliveryAlerts.js`** (yangi) — `GET /unread`, `POST /:id/acknowledge`; `server/index.js`da `requireRole(['admin','chef','courier'])` bilan ulandi (afitsiant kira olmaydi).
+- **`public/app.js`** — yangi blok (`ensureDeliveryAlertList`/`renderDeliveryAlerts`/`pollDeliveryAlerts`/`initDeliveryAlerts`), `/admin/`, `/chef/`, `/courier/` sahifalarining barchasida 5s'da poll qiladi. **Alohida konteynerda** (`deliveryAlertList`, mavjud `notifList`dan farqli) — aks holda admin sahifasidagi "chek chop etish" bildirishnomalar ro'yxati bilan bir-birining innerHTML'ini almashtirib yuborardi.
+- **Tekshirilgan:** to'liq end-to-end — test buyurtma → bildirishnoma yozildi → admin/test-oshpaz/test-dastavkachi barchasi ko'ra oldi → biri "Ko'rdim" bosgach boshqalari ~30s ichida "kim ko'rdi"ni ko'rdi (grace-oyna ishladi). Test ma'lumotlari tozalandi.
+
+## Holat — 2026-09-08: adminda mijoz buyurtmasi uchun ham chek chiqarish qo'shildi
+
+Ilgari `public/app.js`dagi QZ Tray termal printer infratuzilmasi (`buildEscPosReceipt`, `renderReceiptBox`, `showReceiptModal`) faqat afitsiantning dine-in (stol) hisob-kitobi uchun ishlardi. Endi bir xil infratuzilma mijoz online buyurtmalari (`customer_orders`) uchun ham ishlaydi.
+
+- **`public/app.js`** — `renderReceiptBox`/`printReceiptView` endi `view.kind === 'customer'` bo'yicha ajratiladi (dine-in yo'li o'zgarmadi). Yangi `renderCustomerReceiptBox`, `buildEscPosReceiptCustomer`, `openCustomerReceiptModal(order)` — oxirgisi admin allaqachon yuklab olgan buyurtma obyektidan (items bilan birga) **hech qanday qo'shimcha API so'rovisiz** to'g'ridan-to'g'ri chek oynasini ochadi.
+- **`public/admin/customer-orders.js`** — har bir buyurtma kartochkasiga **"🖨 Chek"** tugmasi qo'shildi.
+- **Tekshirilgan:** funksiya nomlarida to'qnashuv yo'qligi tasdiqlandi (o'tgan safar xuddi shu turdagi to'qnashuv — "chek yuklanmayapti" — haqiqiy production bug bo'lgan edi, yuqoridagi "2026-09-07: chek yuklanmayapti" bo'limiga qarang); `renderCustomerReceiptBox`/`buildEscPosReceiptCustomer` Node `vm` konteksti orqali sinalib to'g'ri HTML/ESC-POS bayt chiqargani tasdiqlandi. **Haqiqiy termal printerga chop etish hali sinalmagan** (Windows/QZ Tray'ga bog'liq, faqat admin kompyuterida amalda tekshirish mumkin).
+
+## Holat — 2026-09-08: 2 ta real bug topildi va tuzatildi (yetkazib berish oqimi)
+
+Foydalanuvchi so'rovi bilan admin va oshpaz ekranlari yetkazib berish buyurtmasi bo'yicha tekshirildi, ikkita haqiqiy muammo aniqlandi (biri production bazadagi haqiqiy buyurtma — #9 — orqali tasdiqlandi):
+
+1. **Admin — chalg'ituvchi "Bajarildi" belgisi:** oshpaz taomni "tayyor" deb belgilasa (`status='completed'`), admin "Buyurtmalar"da **"Bajarildi"** (tugadi) deb ko'rsatilardi — hatto dastavkachi hali yetkazmagan bo'lsa ham (`delivered_at` bo'sh), hech qanday ogohlantirishsiz. Tuzatish: `public/admin/customer-orders.js` — endi yetkazib berish buyurtmasi uchun asosiy belgi `delivered_at`ga qarab **"🚚 Yetkazilishi kutilmoqda"** (hali yo'q) yoki **"✅ Yetkazildi"** (bor) deb aniq ko'rsatiladi.
+2. **Oshpaz — buyurtma turi umuman ko'rinmasdi:** `public/chef/kitchen.js`dagi onlayn buyurtmalar ro'yxati `fulfillment`ni (olib ketish/yetkazib berish) ko'rsatmasdi. Tuzatish: har qatorda endi **"Olib ketish"**/**"Yetkazib berish"** belgisi ham chiqadi.
+3. **Admin — sahifa avtomatik yangilanmasdi:** "Buyurtmalar" sahifasi faqat ochilganda bir marta yuklanardi (oshpaz/dastavkachi ekranlaridan farqli o'laroq avto-yangilanish yo'q edi) — dastavka holati o'zgarishini ko'rish uchun F5 kerak edi. Tuzatish: oshpaz/dastavkachi bilan bir xil **15s** avto-yangilanish qo'shildi.
+
+**Tekshirilgan:** ikkala render tuzatish ham Node `vm` konteksti orqali haqiqiy production ma'lumotlar (#8 — yetkazilgan, #9 — hali yetkazilmagan) bilan sinaldi, natija to'g'ri chiqdi. Statik fayllar, `pm2 restart` shart emas, baribir jarayon holati tekshirilib barqaror **online** ekani tasdiqlandi.
+
+## Holat — 2026-09-08: mijoz landing sahifasi — brend/manzil/aloqa ma'lumotlari yangilandi + mobil navigatsiya bugi tuzatildi
+
+Bir nechta ketma-ket kichik so'rov bilan `public/landing/index.html`/`style.css`/`script.js` mazmun va mobil navigatsiya jihatdan yangilandi:
+
+- **Brend nomi butun saytda "Po'lat" → "Ziyo Famliy"ga o'zgartirildi** — nafaqat landing, balki barcha sahifa (`title`, footer, login, admin/afitsiant/oshpaz/dastavkachi panellari sarlavhalari, `manifest.json` `name`/`short_name`, chek chiqarish shablonlari — `public/app.js` va `public/waiter/receipt.js`dagi "Po'lat restorani" matnlari) — jami 19 ta faylda. **Ataylab tegilmagan:** xaritadagi (`landing/index.html`, `contact-map` iframe) Google Maps'ning haqiqiy joy nomi ("Shaurma Po'lat Lavash") — bu texnik URL parametri, o'zgartirilsa xarita ishlamay qolishi mumkin edi; shuningdek `server/migrate.js`dagi `restaurant_name: "Po'lat"` default seed qiymati va `server/schema.sql`/`package.json`dagi ichki izoh/tavsif — bular saytda ko'rinmaydigan backend/hujjat matnlari.
+- **Manzil/joylashuv** — hero kicker "Toshkent · Fine dining" → "Farg'ona Quva · Fine dining"; "Manzil" qatori reverse-geocode orqali (Nominatim) aniqlangan haqiqiy manzilga — "Farg'ona viloyati, Quva tumani, Farg'ona halqa yo'li"ga; "Aloqa" bo'limidagi xarita iframe foydalanuvchi bergan haqiqiy Google Maps embed kodiga (`Shaurma Po'lat Lavash`, koordinata 40.5098512, 72.0861361) almashtirildi (`width`/`height` konteyner uchun `100%` qilib qoldirildi, `src`/`allowfullscreen`/`referrerpolicy` foydalanuvchi bergan holicha).
+- **Telefon** — ikkita raqam (`+998916527771`, `+998985757574`) "Telefon" qatorida ikkalasi ham ko'rsatiladi; "Qo'ng'iroq qilish" tugmasi oxirgi so'rovga ko'ra `+998985757574`ga ulangan.
+- **Ish vaqti** — "10:00–24:00" → "24/7".
+- **"Bizning tarix" matni** — yangi sarlavha ("Yetti yildan ortiq davom etayotgan ishtiyoq") va matn (2019-yil, "Ziyo famliy", Quva tumani, "sifatli, halollik sertifikati bor mahsulotlar").
+- **Oshpaz kartochkasi → "Bizning shior"** — "Bosh oshpaz — Alisher Qodirov" + shaxsiy iqtibos o'rniga "Bizning shior" yorlig'i va hero tagline matni ("Olov ustida pishirilgan taomlar, samimiy muhit va unutilmas kechqurun") qo'yildi (yonidagi rasm o'zgarishsiz qoldi).
+- **Bug: header brend nomi 2 qatorga bo'linib, navigatsiya siqilib ketardi** — "Po'lat" (qisqa) o'rniga uzunroq "Ziyo Famliy" matni sig'may, `.header-inner`dagi flex elementlar (brend/nav/tugma) 860–1040px oraliq kenglikda siqilib matn ichki qatorlarga bo'linib ketayotgan edi. Tuzatish: `.brand`ga `white-space: nowrap; flex-shrink: 0;` qo'shildi, mobil/off-canvas navigatsiyaga o'tish chegarasi `860px → 1040px`ga oshirildi (shu oraliqda endi siqilish o'rniga avtomatik mavjud hamburger+to'liq ekranli yon panelga o'tadi).
+- **Yon panelga yopish (×) tugmasi qo'shildi** — o'ng yuqori burchakda aylana shaklidagi `#navClose` tugmasi (`index.html`, `nav-links` ichida birinchi element), `script.js`da umumiy `closeNav()` funksiyasiga ulandi (hamburger va havola-bosilganda-yopish bilan bir xil mantiq).
+- **Yon paneldagi barcha tugmalar (5 ta havola + "Xodim kirishi" + × yopish) bir xil ko'rinishga keltirildi** — bir xil pill-shakl chegara (`1px solid rgba(255,255,255,0.3)`, `border-radius:999px`), bir xil `padding: 10px 30px` va `font-size: 20px` (ilgari "Xodim kirishi" boshqacha, kichikroq — 12px shrift, boshqa border-rang — ko'rinardi, global `.nav-login` qoidasi mobil oynada override qilindi).
+
+**Tekshirilgan:** har bosqichda `node -c` (JS sintaksis), CSS qavslar balansi va HTML `<div>` teglari soni tenglashtirilib tasdiqlandi. Barchasi statik `public/` fayllari (build bosqichi yo'q) — `pm2 restart polat` shart emas, brauzerda hard-refresh yetarli. **Haqiqiy brauzerda vizual tekshiruv (turli ekran kengliklarida, GPS/aloqa/xarita) hali to'liq qilinmagan** — foydalanuvchi skrinshotlar orqali bosqichma-bosqich tasdiqlagan holatlar bundan mustasno.
+
+## Holat — 2026-09-08: admin menyuga taom qo'shganda/tahrirlaganda "Tan narxi" maydoni qo'shildi
+
+Foydalanuvchi so'rovi: "admin menyu qo'shayotganda taom tan narxi bilan sotuvdagi narxini ham qo'sh" — ilgari `menu_items` jadvalida faqat sotuv narxi (`price`) bor edi, tan narx umuman saqlanmasdi (faqat Ombor bo'limidagi `inventory_items.cost_price`/`sale_price` — u ham faqat omborga bog'langan taomlar uchun). Endi HAR BIR menyu taomi (ombor bilan bog'langan yoki yo'q) uchun tan narx ixtiyoriy ravishda kiritilishi mumkin.
+
+- **`server/schema.sql`** — `menu_items`ga yangi `cost_price INTEGER` ustuni (nullable — majburiy emas, admin har doim ham tan narxni bilmasligi mumkin).
+- **`server/db.js`** — yangi `migrateAddMenuItemCostPrice()` (boshqa `menu_items` migratsiyalari bilan bir xil oddiy `ALTER TABLE ADD COLUMN` naqshi, idempotent), migratsiya ro'yxatiga qo'shildi.
+- **`server/routes/adminMenu.js`** — `POST/PUT /items` endi `cost_price`ni qabul qiladi (`parseOptionalCostPrice()` — bo'sh/berilmagan bo'lsa `NULL`, aks holda manfiy bo'lmagan butun son, aks holda 400). Taom ombor mahsulotiga bog'langan bo'lsa (mavjud "narx" mantig'i bilan bir xil qoida) — `cost_price` ham admin/mijoz yuborgan qiymatga qaramay har doim `inventory_items.cost_price`dan majburan olinadi (yagona manba).
+- **`server/routes/waiterMenu.js`** — avval `SELECT *` edi, endi aniq ustunlar ro'yxatiga o'zgartirildi (`cost_price` ATAYLAB chiqarib tashlangan) — tan narx **faqat admin panelida** ko'rinadi, afitsiant/mijoz (publicMenu.js allaqachon aniq ustun ro'yxati ishlatgani uchun xavfsiz edi) buni ko'rmaydi.
+- **`public/admin/menu.html`/`menu.js`** — taom modalida "Sotuv narxi"dan oldin yangi **"Tan narxi (so'm, ixtiyoriy — faqat admin ko'radi)"** maydoni; ombor mahsuloti tanlansa (mavjud narx-qulflash mantig'i bilan bir xil) tan narx ham avtomatik to'ldirilib readonly bo'ladi. Admin ro'yxatida (taom nomi ostida) tan narx kiritilgan bo'lsa `(tan narxi X so'm, foyda Y so'm)` kichik matn ko'rsatiladi.
+- **Tekshirilgan:** migratsiya avval `/tmp`dagi production baza nusxasida, so'ng haqiqiy bazada (`node22 -e "require('./server/db.js')"`) sinaldi — xatosiz, `cost_price` ustuni qo'shildi, mavjud qatorlar `cost_price=NULL` bilan qoldi (ma'lumot yo'qolmadi); `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online** (restart soni faqat +1, xato logidagi eski `acknowledged_at` yozuvi 26-avgustdan qolgan tarixiy holat ekani fayl vaqti bilan tasdiqlandi, yangi xato yo'q). To'liq end-to-end HTTP oqim admin sessiyasi orqali sinaldi: `cost_price` bilan/siz taom yaratish, `PUT` bilan yangilash, manfiy qiymat 400 qaytarishi, admin javobida `cost_price` bor-u afitsiant (`/api/waiter/menu`) va mijoz (`/api/public/menu`) javoblarida **yo'qligi** tasdiqlandi. Test taomlari sinovdan so'ng bazadan to'liq hard-delete qilindi (buyurtma tarixida ishlatilmagani uchun), production ma'lumotlariga iz qoldirilmadi.
+
+## Holat — 2026-09-08: Bosh sahifa/"Sof foyda" endi sotilgan taomlarning tan narxini hisobga oladi
+
+Foydalanuvchi so'rovi: "bugungi tushum" sotuv narxlari bo'yicha tursin (bu allaqachon shunday edi), "sof foyda" esa endi tan narxini ham hisobga olib chiqsin. Ilgari `GET /api/admin/reports/summary` (Bosh sahifa'dagi 4 ta stat-kartochka VA Hisobot sahifasi — ikkalasi ham shu bitta endpoint'dan foydalanadi) `net`ni faqat `revenue - expenses_total` deb hisoblardi — sotilgan taomlarning yuqoridagi bandda qo'shilgan `cost_price`si umuman hisobga olinmasdi, ya'ni "sof foyda" aslida faqat "tushum minus qo'lda kiritilgan xarajatlar" edi, haqiqiy mahsulot tannarxisiz.
+
+- **`server/routes/adminReports.js`** — `/summary`ga yangi COGS (cost of goods sold) so'rovi qo'shildi: yopilgan (`orders.status='closed'`) buyurtmalarning bekor qilinmagan (`order_items.status='active'`) qatorlarini `menu_items`ga bog'lab, `SUM(oi.quantity * COALESCE(mi.cost_price, 0))` — sana filtri (`from`/`to`) `revenue`/`expenses` bilan bir xil. Javobga yangi `cost_of_goods` maydoni qo'shildi, `net` endi `revenue - cost_of_goods - expenses_total`.
+- **Muhim cheklov:** tan narxi **snapshot emas** — `order_items`da (unit_price kabi) sotuv paytidagi tan narx alohida saqlanmaydi, shu sabab hisob-kitob HOZIRGI `menu_items.cost_price`dan foydalanadi (agar admin keyinchalik tan narxni o'zgartirsa, eski buyurtmalarning "sof foyda"si ham shu yangi qiymat bilan qayta hisoblanadi — sotuv narxi/`revenue` esa `order_items.unit_price` snapshot orqali o'zgarmasdan qoladi). Tan narxi kiritilmagan (`cost_price IS NULL`) taomlar COGS'ga `0` qo'shadi — ya'ni ular uchun "sof foyda" haqiqatda "sof" emas, oshirib ko'rsatiladi (admin ular uchun ham tan narx kiritishi tavsiya etiladi).
+- Frontend (`public/admin/index.js`/`index.html`, `public/admin/reports.js`/`reports.html`) **o'zgartirilmadi** — ular allaqachon `summary.net`ni to'g'ridan-to'g'ri ko'rsatgani uchun server tomonidagi formula tuzatilishi ikkala sahifada ham avtomatik qo'llanildi, yangi UI-elementi qo'shilmadi.
+- **Tekshirilgan:** yangi SQL so'rov haqiqiy production bazaga qarshi to'g'ridan-to'g'ri (`node22 -e`) sinaldi — bugungi kun uchun `revenue=236000`, `cogs=70000` to'g'ri hisoblandi (faqat tan narxi kiritilgan taomlar qo'shildi); endpoint autentifikatsiyasiz `401` qaytarishi tasdiqlandi (parol bilmasdan haqiqiy admin-sessiyali HTTP so'rov sinalmadi); `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online**.
+
+## Holat — 2026-09-09: to'liq audit (18 topilma) — barchasi tuzatildi
+
+Foydalanuvchi so'rovi bilan avval butun loyiha (server + public) satr-satr audit qilindi (7 mustaqil burchakdan: to'g'rilik, olib tashlangan xulq-atvor, qayta ishlatish/takrorlanish, samaradorlik, soddalashtirish, konvensiyalar/hujjat mosligi, arxitektura/kelajakka moslik), so'ng barcha 18 ta tasdiqlangan topilma tuzatildi. Hech qanday funksional so'rov o'zgartirilmadi — faqat xato/kamchiliklar.
+
+**Real xato/mantiqiy nuqsonlar (10 ta):**
+1. `server/routes/adminCustomerOrders.js` — allaqachon `completed` (tayyorlangan/yetkazilgan) buyurtma bekor qilinsa ombor noto'g'ri qaytarilardi (overselling xavfi) — endi DELETE handleridagi bilan bir xil qoida (`completed`dan keyin qaytarilmaydi).
+2. Xuddi shu faylda — bekor qilingan buyurtma qayta faollashtirilganda ombor endi qayta sarflanadi (`consumeStockForCustomerOrder()`, yetarli qoldiq bo'lmasa butun amal bekor bo'ladi).
+3. `server/routes/waiterNotifications.js` — endi faqat `order_item_id IS NOT NULL` (dine-in "tayyor") yozuvlarni ko'rsatadi/tasdiqlaydi — kuryer/oshpazga tegishli yetkazib berish bildirishnomasi afitsiantga endi chiqmaydi.
+4. `server/routes/adminReports.js` `/summary` — endi `customer_orders` (landing/olib ketish/yetkazib berish) ham `revenue`/`cost_of_goods`ga qo'shiladi (ilgari faqat dine-in `orders` hisoblanardi).
+5. `server/routes/adminMenu.js` — `GET /categories`/`GET /items` endi `?include_inactive=1` qo'llab-quvvatlaydi, `public/admin/menu.js`da yangi "🗑 O'chirilganlar" bo'limi ♻️ Tiklash tugmasi bilan — soft-delete qilingan kategoriya/taomni endi admin panelidan ko'rish/qaytarish mumkin.
+6. `server/services/inventory.js` `syncMenuPricing()` — endi `cost_price`ni ham (nafaqat `price`ni) bog'langan taom(lar)ga o'tkazadi.
+7. `ensureMenuLink()` — avtomatik yaratilgan menyu yozuviga endi `cost_price` ham kiritiladi (ilgari doim `NULL` qolardi).
+8. `server/routes/adminMenu.js` — `require_inventory_link` qoidasi endi serverda ham tekshiriladi (ilgari faqat frontendda) — lekin FAQAT bog'lanish/bo'lim haqiqatan o'zgartirilganda (eski, qoida qo'shilishidan oldingi yozuvlarni oddiy tahrirlash/tiklashni bloklamaydi).
+9. `getInventoryRow()` — endi faqat faol (`is_active=1`) ombor mahsulotlarini qaytaradi — taomni o'chirilgan ombor mahsulotiga bog'lab bo'lmaydi.
+10. `server/services/inventory.js` `createItem()`/`updateItem()` — `ensureMenuLink()` endi asosiy tranzaksiyadan TASHQARIDA chaqiriladi — eskirgan/noto'g'ri `menu_category_id` endi ombor mahsulotining o'zini yo'qqa chiqarmaydi, faqat `_link_warning` bilan ogohlantiradi (`public/admin/inventory.js` buni endi toast orqali ko'rsatadi).
+
+**Samaradorlik (1 ta):** `server/routes/courierOrders.js` `GET /orders` — N+1 so'rov o'rniga bitta `IN (...)` so'rov (15s'da poll qilinadigani uchun muhim).
+
+**Kod takrori/arxitektura (6 ta):** `server/services/notifications.js` (yangi) — `waiterNotifications.js`/`deliveryAlerts.js`dagi deyarli bir xil poll/tasdiqlash mantig'ini birlashtirdi; `server/db.js` — `addColumnIfMissing()` yordamchisi 12+ migratsiyani bittalab qatorga qisqartirdi, 4 ta haqiqiy o'lik migratsiya (`migrateAddInventoryPricing`/`Volume`/`CategoryInventoryRequirement`/`MenuItemCostPrice` — `schema.sql`da allaqachon bor ustunlar) olib tashlandi, `migrateAddChefRole`/`migrateAddCourierRole` yagona `migrateSyncUserRoles()`ga birlashtirildi; `server/services/inventory.js` — `computeAvailability()` yordamchisi 4 joydagi bir xil formulani birlashtirdi; **`server/roles.js`** (yangi) — yagona `ROLES`/`ROLE_NAMES`/`homeForRole()` manbasi, `auth.js`/`adminUsers.js`/`db.js` (CHECK constraint) endi shu yerdan o'qiydi (client tomon — `public/admin/waiters.js`, `public/login.html` — alohida runtime bo'lgani uchun hamon qo'lda mos saqlanadi, izoh bilan belgilangan); `escapeHtml()` 15 xil faylda takrorlangan edi — endi `public/app.js`da yagona (`public/landing/script.js` bundan mustasno, u `app.js`ni ulamaydi).
+
+**Konvensiya (1 ta):** `server/auth.js`/`public/app.js`dagi eskirgan "bu ilova /polat/ ostki yo'lida proksi qilinadi" izohlari — proksi allaqachon olib tashlangan (yuqoridagi "Ishga tushirilgan holat"ga qarang), izohlar haqiqiy arxitekturaga mos tuzatildi (funksional o'zgarish yo'q, nisbiy yo'l yondashuvi baribir to'g'ri edi).
+
+**Ataylab tegilmagan (arxitektura darajasidagi, kod bilan "tuzatib" bo'lmaydigan kamchiliklar):** bitta menyu taomi hamon faqat bitta ombor mahsulotiga bog'lanishi mumkin (retsept/ko'p-ingredientli taom — masalan kombo — qo'llab-quvvatlanmaydi; buni tuzatish yangi join-jadval bilan sxema qayta qurishni talab qiladi, hozircha real ehtiyoj yo'q); client-tomon rol ro'yxatlari (`waiters.js`, `login.html`) hamon qo'lda saqlanadi (build tizimi yo'qligi sababli server modulini ulab bo'lmaydi).
+
+## Holat — 2026-09-09 (2): yangi **kassir** roli qo'shildi (alohida login/parol, faqat hisob-kitob + chek)
+
+Foydalanuvchi so'rovi: kassir uchun alohida login/parol. Aniqlashtirish savoliga ko'ra kassir **faqat** stollarni hisob-kitob qilish (yopish) + chek chiqarish huquqiga ega — taom qo'sha olmaydi, menyuni ko'rmaydi. Afitsiantning o'zi ham hamon stolni yopa oladi (ikkalasi bir-birini almashtirmaydi — foydalanuvchi ataylab shunday tanladi).
+
+- **`server/roles.js`** — `ROLES` ro'yxatiga `{ name: 'kassir', homePath: '/kassir/tables.html' }` qo'shildi. Kechagi refaktordan keyin bu YAGONA kod o'zgarishi kifoya bo'ldi: `server/auth.js` (rol-hudud aniqlash + uy sahifasi), `server/db.js` (`migrateSyncUserRoles()` — `users.role` CHECK constraint'iga `kassir`ni AVTOMATIK qo'shdi, yangi migratsiya funksiyasi yozish shart bo'lmadi) va `server/routes/adminUsers.js` (rol validatsiyasi) — HAMMASI shu yagona ro'yxatdan o'qigani uchun o'zgarishsiz to'g'ri ishladi.
+- **`server/routes/kassirTables.js`** (yangi) — `GET /tables`, `GET /tables/:id/order`, `POST /tables/:id/close`, `POST /tables/:id/cancel-order` (bo'sh buyurtmani chek chiqarmasdan yopish), `GET /tables/:id/receipt/latest`, `GET /orders/:id/receipt` — barchasi `server/services/orders.js`dagi AFITSIANT bilan bir xil xizmat funksiyalaridan foydalanadi (taom qo'shish/miqdor o'zgartirish funksiyalari ATAYLAB ulanmagan). `server/index.js`da `requireRole(['admin','kassir'])` bilan `/api/kassir` ostida ulandi.
+- **`public/kassir/`** (yangi papka) — `tables.html`/`tables.js` (stollar ro'yxati, afitsiantnikiga o'xshash) va `order.html`/`order.js` (bitta stolning joriy buyurtmasini **faqat o'qish** uchun ko'rsatadi — miqdor +/− tugmalari yo'q, menyu yo'q — va **💳 Hisob-kitob qilish** tugmasi bilan yopib, chekni o'sha zahoti shu sahifaning o'zida ko'rsatadi/chop etadi).
+- **`public/app.js`** — `openReceiptByOrderId(orderId)` endi ixtiyoriy `area` parametr qabul qiladi (standart `'waiter'`, kassir sahifasi `'kassir'` bilan chaqiradi) — chek endpoint yo'li shunga qarab tanlanadi, boshqa chaqiruvchilar (admin print-navbat) o'zgarishsiz ishlayveradi.
+- **`public/login.html`** (redirect switch), **`public/admin/waiters.js`** (`ROLE_LABEL`/`ROLE_BADGE`), **`public/admin/waiters.html`** (yangi xodim qo'shish formasidagi rol `<select>`) — qo'lda qo'shilgan 3 ta joy (client-tomon, build tizimi yo'qligi sababli `server/roles.js`ni ulab bo'lmaydi — bu holat `server/roles.js`ning o'zida ham izohlangan).
+- **Tekshirilgan:** barcha yangi/o'zgargan fayl `node -c` xatosiz; butun server moduli qayta yuklanganda `migrateSyncUserRoles()` `users` jadvalini avtomatik qayta qurib `kassir`ni CHECK'ga qo'shgani (`SELECT sql FROM sqlite_master` bilan) va 4 ta mavjud foydalanuvchi/roli o'zgarishsiz qolgani tasdiqlandi; `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online**; **haqiqiy HTTP oqim** vaqtinchalik test foydalanuvchisi (`__test_kassir__`) bilan to'liq sinaldi — login `role:"kassir"` qaytardi, `GET /api/kassir/tables` `200`, `GET /api/waiter/tables` va `GET /api/admin/users` ikkalasi ham `403`, `GET /kassir/tables.html` `200`, `GET /waiter/tables.html` esa `302` bilan `/kassir/tables.html`ga qaytarib yubordi (`homeForRole()` to'g'ri ishlagani tasdiqlandi) — test foydalanuvchisi sinovdan so'ng bazadan butunlay o'chirildi, production ma'lumotlariga iz qoldirilmadi. **Haqiqiy admin panel orqali kassir xodim yaratish va chekni QZ Tray bilan haqiqiy printerga chop etish** hali amalda (real qurilmada) sinalmagan — admin tomonidan tekshirish tavsiya etiladi.
+
+**Tekshirilgan (avvalgi audit sessiyasi):** barcha o'zgargan/yangi 27 ta fayl `node -c` bilan sintaksis xatosiz; `node22 -e "require('./server/index.js')"` orqali butun server moduli (barcha `require()`lar, `server/db.js`dagi barcha migratsiyalar) haqiqiy production bazasiga qarshi xatosiz yuklandi (migratsiya loglari chiqmadi — bu barcha ustun/rol allaqachon mavjudligini, ya'ni "o'lik" deb topilgan 4 ta migratsiya haqiqatan xavfsiz o'chirilganini tasdiqladi); yangi murakkab SQL so'rovlar (`adminReports.js` COGS/revenue UNION, `courierOrders.js` IN-so'rov, `adminMenu.js` dinamik WHERE) alohida `db.prepare()` bilan sinaldi; `node server/migrate.js` xatosiz; `pm2 restart polat --update-env` xatosiz, jarayon 45+ soniya barqaror **online** (restart soni o'zgarmadi — yangi xato yo'q; xato logidagi yagona `acknowledged_at` yozuvi fayl vaqti bilan 2026-08-26'dan qolgan eski/tarixiy holat ekani alohida tasdiqlandi), `GET /api/ping` va `GET /api/public/menu` `200` qaytardi, `pm2 save` bilan saqlandi.

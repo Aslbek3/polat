@@ -4,10 +4,8 @@ const TABLE_ID = params.get('table');
 let menuCategories = [];
 let activeCategoryId = null;
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
+// escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
+// nusxa birlashtirildi).
 async function loadTableName() {
   try {
     const tables = await api('/waiter/tables');
@@ -52,17 +50,34 @@ function renderMenuItems() {
     return;
   }
   box.innerHTML = cat.items.map((it) => `
-    <div class="menu-item-row">
-      <div>
-        <div class="mi-name">${escapeHtml(it.name)}</div>
+    <div class="menu-item-row${it.is_available ? '' : ' unavailable'}">
+      <div class="mi-info" data-info="${it.id}">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mi-image">` : ''}
+        <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="mi-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="badge low">Tugadi</span>'}</div>
         <div class="mi-price">${fmtMoney(it.price)}</div>
       </div>
-      <button class="btn add" data-add="${it.id}">+</button>
+      ${it.is_available ? `<button class="btn add" data-add="${it.id}">+</button>` : `<button class="btn add" disabled>—</button>`}
     </div>
   `).join('');
   box.querySelectorAll('[data-add]').forEach((btn) => {
     btn.addEventListener('click', () => addItem(Number(btn.dataset.add)));
   });
+  // Taom nomi/narxi ustiga (+ tugmasi emas) bosilsa — tavsifini ko'rsatadi.
+  // Tavsifni admin panelida (Menyu > taomni tahrirlash > "Tavsif" maydoni) kiritadi.
+  box.querySelectorAll('[data-info]').forEach((el) => {
+    el.addEventListener('click', () => showItemInfo(Number(el.dataset.info)));
+  });
+}
+
+function showItemInfo(menuItemId) {
+  const cat = menuCategories.find((c) => c.id === activeCategoryId);
+  const item = cat && cat.items.find((it) => it.id === menuItemId);
+  if (!item) return;
+  const body = (item.description && item.description.trim())
+    ? item.description.trim()
+    : "Bu taom haqida hali ma'lumot kiritilmagan — administrator admin panelda (Menyu) qo'shishi kerak.";
+  const title = item.volume ? `${item.name} (${item.volume})` : item.name;
+  showInfoModal(title, body);
 }
 
 async function addItem(menuItemId) {
@@ -94,12 +109,33 @@ function renderOrder(view) {
   const box = document.getElementById('orderLines');
   const totalEl = document.getElementById('totalAmount');
   const sendBtn = document.getElementById('sendBtn');
-  if (!view || view.items.length === 0) {
+  const closeBtn = document.getElementById('closeBtn');
+  const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+
+  if (!view) {
     box.innerHTML = '<p class="dim">Hozircha buyurtma yo\'q — pastdagi menyudan taom tanlang.</p>';
     totalEl.textContent = fmtMoney(0);
     sendBtn.style.display = 'none';
+    closeBtn.style.display = '';
+    cancelOrderBtn.style.display = 'none';
     return;
   }
+
+  if (view.items.length === 0) {
+    // Buyurtma ochiq turibdi, lekin qo'shilgan taomlarning hammasi bekor qilingan.
+    // closeTable() bunday holatda kamida bitta faol taom talab qilib rad etadi
+    // (bo'sh chek chiqmasin uchun) — shu sabab stolni bo'shatishning yagona yo'li
+    // "Bekor qilish" (cancel-order) bo'ladi, "Hisob-kitob" bu holatda yashiriladi.
+    box.innerHTML = '<p class="dim">Barcha taomlar bekor qilindi. Stolni bo\'shatish uchun "Bekor qilish" tugmasini bosing.</p>';
+    totalEl.textContent = fmtMoney(0);
+    sendBtn.style.display = 'none';
+    closeBtn.style.display = 'none';
+    cancelOrderBtn.style.display = '';
+    return;
+  }
+
+  closeBtn.style.display = '';
+  cancelOrderBtn.style.display = 'none';
   box.innerHTML = view.items.map((it) => `
     <div class="order-line">
       <div>
@@ -164,6 +200,18 @@ document.getElementById('closeBtn').addEventListener('click', async () => {
     // qo'shadi (print_requests) va admin panelida ko'rinadi.
     await api(`/waiter/tables/${TABLE_ID}/close`, { method: 'POST' });
     toast("Hisob-kitob yakunlandi — chek administratorga yuborildi.");
+    setTimeout(() => { window.location.href = 'tables.html'; }, 900);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+});
+
+document.getElementById('cancelOrderBtn').addEventListener('click', async () => {
+  const ok = await customConfirm('Buyurtmada taom yo\'q. Stolni bo\'shatib, buyurtmani bekor qilasizmi? Chek chiqmaydi.');
+  if (!ok) return;
+  try {
+    await api(`/waiter/tables/${TABLE_ID}/cancel-order`, { method: 'POST' });
+    toast('Buyurtma bekor qilindi — stol bo\'shatildi.');
     setTimeout(() => { window.location.href = 'tables.html'; }, 900);
   } catch (err) {
     toast(err.message, 'error');
