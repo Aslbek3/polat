@@ -12,12 +12,70 @@ const { createRateLimiter } = require('./routeUtils');
 
 const PORT = process.env.PORT || 3213;
 const HOST = process.env.HOST || '127.0.0.1';
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+
+// SESSION_SECRET (2026-09-10): bo'sh bo'lsa avvalgidek tasodifiy kalit
+// yaratiladi (dev uchun qulay), LEKIN endi bu jimgina emas — server har
+// qayta ishga tushganda barcha xodimlar tizimdan chiqib ketishini
+// ogohlantirib aytadi. PM2 crash-loop bo'lsa bu "nega hamma doim chiqib
+// ketyapti?" degan tushunarsiz muammoga aylanardi.
+const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
+  console.warn(
+    '[polat] ⚠️  SESSION_SECRET .env da qo\'yilmagan — vaqtinchalik tasodifiy kalit ' +
+    "ishlatilmoqda. Server qayta ishga tushganda BARCHA xodimlar tizimdan chiqib " +
+    'ketadi. Doimiy qiymat qo\'ying:\n' +
+    '    node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+  );
+  return crypto.randomBytes(32).toString('hex');
+})();
 
 const app = express();
 if (TRUST_PROXY) app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
+
+// Xavfsizlik sarlavhalari (2026-09-10). ATAYLAB `helmet` o'rniga qo'lda —
+// loyihaning mavjud falsafasi shu (rate-limiter ham shunday yozilgan):
+// keraklisi 20 qator, tashqi dependency esa yangilanish/audit yuki qo'shadi.
+//
+// CSP ro'yxati loyihada HAQIQATDA ishlatiladigan manbalardan tuzilgan:
+//   cdn.jsdelivr.net    — QZ Tray kutubxonasi (public/app.js loadQzTray)
+//   fonts.googleapis.com — landing sahifa shriftlari
+//   images.unsplash.com  — landing sahifa suratlari
+//   www.google.com       — landing "Aloqa" bo'limidagi xarita iframe'i
+//   ws/wss localhost     — QZ Tray mahalliy dasturi bilan aloqa (chek chop etish)
+//
+// ⚠️ 'unsafe-inline': public/login.html ichida inline <script> bor va butun
+// loyihada 90+ inline style="..." atributi ishlatiladi. Ularsiz sahifalar
+// ishlamay qoladi. Shu sabab CSP bu yerda XSS'ga qarshi TO'LIQ himoya emas —
+// asosiy himoya hamon escapeHtml(). Lekin u baribir muhim narsani beradi:
+// tashqi (begona domendagi) skript yuklanishini va ma'lumot chiqarib
+// yuborilishini bloklaydi.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: https://images.unsplash.com",
+  "frame-src https://www.google.com",
+  "connect-src 'self' ws://localhost:* wss://localhost:* ws://127.0.0.1:* wss://127.0.0.1:*",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+app.use((req, res, next) => {
+  // Brauzer Content-Type'ni "taxmin qilmasin" — yuklangan rasm papkasi
+  // (public/uploads/, login talab qilmaydi) uchun ayniqsa muhim: mimetype
+  // mijoz tomonidan beriladi, sniffing bo'lsa .png nomli fayl HTML sifatida
+  // bajarilib ketishi mumkin edi.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=(), payment=()');
+  res.setHeader('Content-Security-Policy', CSP);
+  next();
+});
 
 // Unauthenticated health check.
 app.get('/api/ping', (req, res) => {
