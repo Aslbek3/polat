@@ -61,14 +61,76 @@ function createAuth({ sessionSecret }) {
 
   const getUserById = db.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1');
 
+  // Foydalanuvchining "autentifikatsiya muhri" — parol xeshi va
+  // session_version'dan olingan qisqa HMAC (2026-09-10).
+  //
+  // NEGA XESHNING O'ZI EMAS: cookie ichiga parol xeshini qo'yish uni
+  // brauzerga oshkor qilardi. HMAC esa faqat SESSION_SECRET bilan qayta
+  // hisoblanadi — mijoz undan hech narsa bilib ololmaydi.
+  //
+  // NEGA session_version'ning O'ZI EMAS: u faqat kod uni oshirishni
+  // ESLAGAN joyda ishlaydi. Parol xeshini ham aralashtirish parol
+  // O'ZGARISHINING HAR QANDAY YO'LINI (API, qo'lda SQL, kelajakdagi yangi
+  // route) avtomatik qamrab oladi — "versiyani oshirishni unutish" degan
+  // xatolar sinfini butunlay yo'q qiladi.
+  function authStamp(user) {
+    return crypto
+      .createHmac('sha256', sessionSecret)
+      .update(`${user.password_hash}.${Number(user.session_version) || 0}`)
+      .digest('hex')
+      .slice(0, 16);
+  }
+
+  // Cookie ichidagi imzolangan qiymat formati (2026-09-10):
+  //     "<userId>.<authStamp>.<issuedAtMs>"
+  //
+  // ILGARI faqat "<userId>" imzolanardi. Uch jiddiy kamchiligi bor edi:
+  //   1. Cookie HECH QACHON eskirmasdi — `Max-Age` faqat BRAUZER tomonida,
+  //      server uni umuman tekshirmasdi. O'g'irlangan cookie abadiy ishlardi.
+  //   2. Parolni tiklash eski sessiyani bekor qilmasdi — xodim ishdan
+  //      ketganda parolini almashtirish yetarli emas edi.
+  //   3. Sessiyani bekor qilishning yagona yo'li `is_active = 0` edi, ya'ni
+  //      hisobni butunlay bloklash.
+  //
+  // Endi `sessionVersion` bazadagi qiymatga MOS kelishi shart (parol
+  // tiklanganda oshiriladi — server/routes/adminUsers.js), va `issuedAtMs`
+  // SESSION_MAX_AGE_MS dan eski bo'lsa cookie rad etiladi.
+  //
+  // ESKI FORMATDAGI cookie'lar (faqat raqam) endi qabul qilinmaydi — bu
+  // ATAYLAB: yangi versiya joylashtirilganda hamma bir marta qayta login
+  // qiladi, shundan keyin barcha eski (potentsial o'g'irlangan) cookie'lar
+  // kuchini yo'qotadi.
+  const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 kun
+
   function currentUser(req) {
     const raw = parseCookies(req)[COOKIE_NAME];
     const value = verify(raw);
     if (!value) return null;
-    const id = Number(value);
-    if (!Number.isFinite(id)) return null;
+
+    const parts = value.split('.');
+    if (parts.length !== 3) return null;
+
+    const id = Number(parts[0]);
+    const stamp = parts[1];
+    const issuedAt = Number(parts[2]);
+    if (!Number.isInteger(id) || !Number.isInteger(issuedAt) || !stamp) return null;
+
+    // Kelajakdagi sana (soat noto'g'ri qo'yilgan mijoz yoki soxta cookie) ham
+    // rad etiladi — aks holda "abadiy" cookie yasash mumkin bo'lardi.
+    const age = Date.now() - issuedAt;
+    if (age < 0 || age > SESSION_MAX_AGE_MS) return null;
+
     const user = getUserById.get(id);
-    return user || null;
+    if (!user) return null;
+
+    // Muhrni doimiy vaqtda solishtiramiz — bu yerda maxfiylik sizishi
+    // ehtimoli past, lekin imzo tekshiruvi bilan bir xil qat'iylik saqlanadi.
+    const expected = Buffer.from(authStamp(user));
+    const given = Buffer.from(stamp);
+    if (given.length !== expected.length) return null;
+    if (!crypto.timingSafeEqual(given, expected)) return null;
+
+    return user;
   }
 
   function setCookie(res, req, token, maxAgeSeconds) {
@@ -138,8 +200,10 @@ function createAuth({ sessionSecret }) {
     if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
       return res.status(401).json({ error: "Login yoki parol noto'g'ri" });
     }
-    const token = sign(String(user.id));
-    setCookie(res, req, token, 2592000);
+    // Cookie'ning `Max-Age`i va serverdagi SESSION_MAX_AGE_MS bir xil (30 kun)
+    // bo'lishi kerak — biri brauzerni tozalaydi, ikkinchisi serverda majburlaydi.
+    const token = sign(`${user.id}.${authStamp(user)}.${Date.now()}`);
+    setCookie(res, req, token, SESSION_MAX_AGE_MS / 1000);
     res.json({ ok: true, role: user.role, full_name: user.full_name || user.username });
   }
 

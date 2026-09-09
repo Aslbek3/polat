@@ -30,26 +30,63 @@ function asyncRoute(fn) {
 // ilovaning nginx orqali yuborgan haqiqiy mijoz IP'sini ko'rsatadi.
 // Xotirada saqlanadi (bitta process, cluster emas) — restart bo'lsa
 // hisoblagich tozalanadi, bu qabul qilinadi.
-function createRateLimiter({ windowMs, max, message }) {
-  const hits = new Map(); // ip -> { count, resetAt }
+// 2026-09-10: `keyFn` qo'shildi. Ilgari kalit har doim `req.ip` edi — bu
+// login himoyasi uchun YETARLI EMAS: hujumchi IP almashtirib (proksi/botnet)
+// cheklovni butunlay aylanib o'tadi. Endi login uchun IKKI qatlam qo'yiladi
+// (server/index.js): IP bo'yicha (hajmli hujumga qarshi) VA hisob nomi
+// bo'yicha (bitta parolni tanlashga qarshi — IP almashtirish yordam bermaydi).
+//
+// `skipSuccessful: true` — faqat MUVAFFAQIYATSIZ urinishlar sanaladi
+// (javob 4xx/5xx bo'lsa). Shunday bo'lmasa oddiy foydalanuvchi kun davomida
+// bir necha marta kirib chiqsa ham cheklovga urilardi.
+function createRateLimiter({ windowMs, max, message, keyFn, skipSuccessful = false }) {
+  const hits = new Map(); // kalit -> { count, resetAt }
+  let lastSweep = Date.now();
+
+  // Eskirgan yozuvlarni davriy tozalash. Ilgari bu faqat `hits.size > 5000`
+  // bo'lganda ishlardi — ya'ni xotira avval 5000 yozuvgacha o'sib, keyin HAR
+  // so'rovda to'liq skanerlanardi. Endi vaqt bo'yicha, bir oynada bir marta.
+  function sweep(now) {
+    if (now - lastSweep < windowMs) return;
+    lastSweep = now;
+    for (const [key, val] of hits) {
+      if (val.resetAt <= now) hits.delete(key);
+    }
+  }
+
   return (req, res, next) => {
     const now = Date.now();
-    const ip = req.ip || 'unknown';
-    let entry = hits.get(ip);
+    sweep(now);
+
+    const key = keyFn ? keyFn(req) : (req.ip || 'unknown');
+    // keyFn null qaytarsa (masalan login nomi yuborilmagan) — cheklamaymiz,
+    // bunday so'rovni baribir validatsiya 400 bilan rad etadi.
+    if (key == null) return next();
+
+    let entry = hits.get(key);
     if (!entry || entry.resetAt <= now) {
       entry = { count: 0, resetAt: now + windowMs };
-      hits.set(ip, entry);
+      hits.set(key, entry);
     }
-    entry.count += 1;
-    if (entry.count > max) {
-      return res.status(429).json({ error: message || "Juda ko'p so'rov yuborildi, birozdan so'ng qayta urinib ko'ring" });
+
+    if (entry.count >= max) {
+      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({
+        error: message || "Juda ko'p so'rov yuborildi, birozdan so'ng qayta urinib ko'ring",
+      });
     }
-    // Xotira cheksiz o'smasligi uchun eskirgan yozuvlarni tasodifiy tozalab turamiz.
-    if (hits.size > 5000) {
-      for (const [key, val] of hits) {
-        if (val.resetAt <= now) hits.delete(key);
-      }
+
+    if (skipSuccessful) {
+      // Hisoblagichni javob tayyor bo'lgandan keyin, faqat muvaffaqiyatsiz
+      // bo'lsa oshiramiz.
+      res.on('finish', () => {
+        if (res.statusCode >= 400) entry.count += 1;
+      });
+    } else {
+      entry.count += 1;
     }
+
     next();
   };
 }

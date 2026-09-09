@@ -31,7 +31,46 @@ app.get('/', (req, res) => res.redirect('/landing/'));
 
 const auth = createAuth({ sessionSecret: SESSION_SECRET });
 
-app.post('/api/login', auth.loginRoute);
+// 2026-09-10: `/api/login` da HECH QANDAY cheklov yo'q edi (CLAUDE.md
+// "Xavfsizlik — 2026-08-26" bo'limida ataylab qoldirilgan deb belgilangan).
+// Ikki oqibati bor edi:
+//   1. Brute-force — parol minimumi 6 belgi, urinishlar soni cheksiz.
+//   2. DoS — parol tekshiruvi `scrypt` (~50-100 ms) va u SINXRON, ya'ni
+//      Node event loop'ini bloklaydi. Bir necha o'nlab parallel login
+//      so'rovi butun saytni (chek chop etish, oshxona ekrani — hammasini)
+//      qotirib qo'yardi.
+//
+// Ikki qatlam qo'yiladi va IKKALASI ham faqat MUVAFFAQIYATSIZ urinishni
+// sanaydi (`skipSuccessful`) — normal ishlayotgan xodim hech qachon
+// cheklovga urilmaydi:
+//   - HISOB bo'yicha (10/15 daq) — asosiy himoya. Hujumchi IP almashtirsa
+//     ham bitta hisobga urinishlar soni cheklangan.
+//   - IP bo'yicha (40/15 daq) — hajmli hujumga qarshi ikkinchi qatlam.
+//     Ataylab yuqoriroq: bitta NAT ortidagi butun restoran xodimlari
+//     (bir nechta planshet) bir IP'dan kirishi mumkin.
+const LOGIN_WINDOW_MS = 15 * 60_000;
+
+const loginAccountLimiter = createRateLimiter({
+  windowMs: LOGIN_WINDOW_MS,
+  max: 10,
+  skipSuccessful: true,
+  keyFn: (req) => {
+    const username = req.body && req.body.username;
+    return typeof username === 'string' && username.trim()
+      ? `user:${username.trim().toLowerCase()}`
+      : null;
+  },
+  message: "Bu hisobga juda ko'p urinish bo'ldi. 15 daqiqadan so'ng qayta urinib ko'ring",
+});
+
+const loginIpLimiter = createRateLimiter({
+  windowMs: LOGIN_WINDOW_MS,
+  max: 40,
+  skipSuccessful: true,
+  message: "Juda ko'p urinish bo'ldi. 15 daqiqadan so'ng qayta urinib ko'ring",
+});
+
+app.post('/api/login', loginIpLimiter, loginAccountLimiter, auth.loginRoute);
 app.post('/api/logout', auth.logoutRoute);
 
 // Landing sahifadagi bron oynasi va menyu/savat/buyurtma — mehmon login

@@ -72,12 +72,13 @@ function migrateSyncUserRoles() {
           role TEXT NOT NULL CHECK (role IN (${roleList})),
           full_name TEXT,
           is_active INTEGER NOT NULL DEFAULT 1,
+          session_version INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL
         );
       `);
       db.exec(`
-        INSERT INTO users_new (id, username, password_hash, password_salt, role, full_name, is_active, created_at)
-        SELECT id, username, password_hash, password_salt, role, full_name, is_active, created_at FROM users;
+        INSERT INTO users_new (id, username, password_hash, password_salt, role, full_name, is_active, session_version, created_at)
+        SELECT id, username, password_hash, password_salt, role, full_name, is_active, session_version, created_at FROM users;
       `);
       db.exec('DROP TABLE users;');
       db.exec('ALTER TABLE users_new RENAME TO users;');
@@ -91,6 +92,14 @@ function migrateSyncUserRoles() {
   } finally {
     db.pragma('foreign_keys = ON');
   }
+}
+
+// 'users.session_version' (2026-09-10) — imzolangan sessiya cookie'sini
+// bekor qilish imkoni. Parol tiklanganda yoki hisob bloklanganda oshiriladi,
+// shundan keyin eski cookie darhol ishlamay qoladi (server/auth.js).
+// Idempotent, oddiy ALTER ADD COLUMN.
+function migrateAddUserSessionVersion() {
+  addColumnIfMissing('users', 'session_version', 'session_version INTEGER NOT NULL DEFAULT 0');
 }
 
 // 'orders.status' CHECK'iga 'cancelled' qo'shish (2026-09-10). SQLite'da
@@ -286,6 +295,11 @@ function migrateAddMenuItemParent() {
 // Har doim serverni ko'tarishda sxema mavjudligini tekshiramiz (CREATE TABLE IF NOT EXISTS
 // bo'lgani uchun xavfsiz, ma'lumotni o'chirmaydi) — alohida `npm run migrate` ham mavjud.
 ensureSchema();
+// MUHIM TARTIB: session_version migrateSyncUserRoles()dan OLDIN qo'shilishi
+// shart — u jadvalni qayta qurayotganda ustunlarni nom bo'yicha ko'chiradi,
+// ya'ni ustun hali mavjud bo'lmasa INSERT...SELECT "no such column" bilan
+// yiqilardi (2026-09-10).
+migrateAddUserSessionVersion();
 migrateSyncUserRoles();
 migrateSyncOrderStatus();
 migrateAddOrderItemReadyAt();

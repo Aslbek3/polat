@@ -142,8 +142,34 @@ test("to'g'ri login va parol 200, rol va cookie qaytaradi", async (t) => {
   assert.match(raw, /HttpOnly/, "cookie HttpOnly bo'lishi shart (JS o'qiy olmasin)");
   assert.match(raw, /SameSite=Lax/);
   assert.match(raw, /Path=\//);
-  // Cookie ichida foydalanuvchi id'si imzolangan holda turadi.
-  assert.strictEqual(decodeURIComponent(raw.split(';')[0].split('=')[1]), signValue(String(user.id)));
+  // Cookie ichidagi qiymat "<userId>.<authStamp>.<issuedAtMs>" ko'rinishida
+  // bo'lib, butunligicha HMAC bilan imzolanadi (2026-09-10 formati).
+  // `authStamp` — parol xeshi + session_version'dan olingan ICHKI muhr; test
+  // uni ataylab qayta hisoblamaydi (implementatsiya tafsilotiga bog'lanmaslik
+  // uchun). Buning o'rniga imzo haqiqiyligi va qiymat tuzilishi tekshiriladi.
+  const cookieValue = decodeURIComponent(raw.split(';')[0].split('=')[1]);
+  const idx = cookieValue.lastIndexOf('.');
+  const signedPart = cookieValue.slice(0, idx);
+  const signature = cookieValue.slice(idx + 1);
+
+  assert.strictEqual(
+    signature,
+    crypto.createHmac('sha256', SECRET).update(signedPart).digest('hex'),
+    "cookie imzosi haqiqiy bo'lishi kerak"
+  );
+
+  const parts = signedPart.split('.');
+  assert.strictEqual(parts.length, 3, "qiymat 3 qismdan iborat bo'lishi kerak");
+  assert.strictEqual(parts[0], String(user.id), 'birinchi qism — foydalanuvchi id');
+  assert.ok(parts[1].length > 0, 'ikkinchi qism — autentifikatsiya muhri');
+  const issuedAt = Number(parts[2]);
+  assert.ok(
+    Number.isInteger(issuedAt) && Math.abs(Date.now() - issuedAt) < 60_000,
+    'uchinchi qism — hozirgi vaqt belgisi'
+  );
+
+  // Parol xeshi cookie'ga OSHKOR BO'LMASLIGI shart.
+  assert.ok(!cookieValue.includes(user.password_hash), "parol xeshi cookie ichida bo'lmasligi shart");
 });
 
 test("noto'g'ri parol 401 qaytaradi va cookie o'rnatmaydi", async (t) => {
@@ -240,10 +266,18 @@ test('buzilgan cookie qabul qilinmaydi (qiymat, imzo, imzosiz qiymat)', async (t
   const token = decodeURIComponent(cookie.slice(COOKIE_NAME.length + 1));
   const qiymat = token.slice(0, token.lastIndexOf('.'));
   const imzo = token.slice(token.lastIndexOf('.') + 1);
-  assert.strictEqual(qiymat, String(user.id));
+  // Qiymat "<userId>.<authStamp>.<issuedAtMs>" (2026-09-10 formati).
+  const qiymatQismlari = qiymat.split('.');
+  assert.strictEqual(qiymatQismlari.length, 3);
+  assert.strictEqual(qiymatQismlari[0], String(user.id));
+
+  // Id'ni boshqa foydalanuvchiga almashtirib, IMZONI o'zgarishsiz qoldirish —
+  // eng muhim hujum stsenariysi (afitsiant o'zini admin qilib ko'rsatishi).
+  const idAlmashtirilgan = [boshqa.id, qiymatQismlari[1], qiymatQismlari[2]].join('.');
 
   const buzilganlar = {
-    "qiymat almashtirilgan (boshqa foydalanuvchi id'si)": `${boshqa.id}.${imzo}`,
+    "qiymat almashtirilgan (boshqa foydalanuvchi id'si)": `${idAlmashtirilgan}.${imzo}`,
+    "eski format (faqat id imzolangan)": `${user.id}.${crypto.createHmac('sha256', SECRET).update(String(user.id)).digest('hex')}`,
     "imzo o'zgartirilgan": `${qiymat}.${imzo.slice(0, -1)}${imzo.slice(-1) === 'a' ? 'b' : 'a'}`,
     'imzo qisqartirilgan': `${qiymat}.${imzo.slice(0, 32)}`,
     'imzosiz qiymat': qiymat,

@@ -18,6 +18,12 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK (role IN ('admin', 'waiter', 'chef', 'courier')),
   full_name TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
+  -- session_version (2026-09-10) — imzolangan cookie ichiga shu raqam ham
+  -- kiradi. Parol tiklanganda/hisob bloklanganda oshiriladi, natijada eski
+  -- cookie DARHOL ishlamay qoladi. Ilgari cookie faqat foydalanuvchi id'sini
+  -- imzolar edi, ya'ni o'g'irlangan cookie CHEKSIZ amal qilardi va parolni
+  -- almashtirish ham uni bekor qilmasdi.
+  session_version INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
