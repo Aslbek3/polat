@@ -93,6 +93,69 @@ function migrateSyncUserRoles() {
   }
 }
 
+// 'orders.status' CHECK'iga 'cancelled' qo'shish (2026-09-10). SQLite'da
+// mavjud CHECK'ni ALTER bilan o'zgartirib bo'lmaydi — migrateSyncUserRoles()
+// bilan bir xil usulda jadval qayta quriladi.
+//
+// NEGA: bo'sh buyurtmani bekor qilish (cancelEmptyOrder) ilgari uni 'closed'
+// qilib qo'yardi. Natijada u adminReports '/summary' dagi orders_count'ga
+// haqiqiy buyurtma bo'lib qo'shilar, kassirBilling '/bills' ro'yxatida esa
+// 0 so'mlik soxta chek bo'lib chiqardi. Migratsiya eski shunday yozuvlarni
+// ('Bekor qilindi...' izohi bilan belgilangan) 'cancelled'ga ko'chiradi.
+//
+// MUHIM: 'orders' jadvali DROP qilinganda uning indekslari ham yo'qoladi —
+// ensureSchema() bu migratsiyadan OLDIN ishlagani uchun ular qayta
+// yaratilmaydi, shu sabab bu yerda qo'lda tiklanadi.
+function migrateSyncOrderStatus() {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
+  if (!row || row.sql.includes("'cancelled'")) return;
+
+  console.log("Migratsiya: 'orders' jadvaliga 'cancelled' holati qo'shilmoqda...");
+  db.pragma('foreign_keys = OFF');
+  try {
+    const run = db.transaction(() => {
+      db.exec(`
+        CREATE TABLE orders_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          table_id INTEGER NOT NULL REFERENCES tables(id),
+          status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'cancelled')),
+          opened_by INTEGER NOT NULL REFERENCES users(id),
+          opened_at TEXT NOT NULL,
+          closed_by INTEGER REFERENCES users(id),
+          closed_at TEXT,
+          total_amount INTEGER,
+          note TEXT
+        );
+      `);
+      db.exec(`
+        INSERT INTO orders_new (id, table_id, status, opened_by, opened_at, closed_by, closed_at, total_amount, note)
+        SELECT id, table_id, status, opened_by, opened_at, closed_by, closed_at, total_amount, note FROM orders;
+      `);
+      db.exec('DROP TABLE orders;');
+      db.exec('ALTER TABLE orders_new RENAME TO orders;');
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_one_open_per_table ON orders(table_id) WHERE status = 'open';");
+      db.exec('CREATE INDEX IF NOT EXISTS idx_orders_table ON orders(table_id);');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);');
+
+      // Eski 'bekor qilingan' yozuvlarni to'g'ri holatga ko'chirish.
+      const moved = db
+        .prepare("UPDATE orders SET status = 'cancelled' WHERE status = 'closed' AND total_amount = 0 AND note LIKE 'Bekor qilindi%'")
+        .run();
+      if (moved.changes > 0) {
+        console.log(`Migratsiya: ${moved.changes} ta eski bekor qilingan buyurtma 'cancelled'ga ko'chirildi.`);
+      }
+    });
+    run();
+    const check = db.pragma('foreign_key_check');
+    if (check.length > 0) {
+      throw new Error('foreign_key_check muvaffaqiyatsiz: ' + JSON.stringify(check));
+    }
+    console.log("Migratsiya tugadi: 'cancelled' holati qo'shildi.");
+  } finally {
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // 'order_items'ga 'ready_at' ustuni (oshpaz "tayyor" belgisi) qo'shish — CHECK
 // constraint emas, oddiy nullable ustun, shuning uchun rol qo'shishdagi kabi
 // jadvalni butunlay qayta qurish shart emas, oddiy ALTER ADD COLUMN yetarli.
@@ -224,6 +287,7 @@ function migrateAddMenuItemParent() {
 // bo'lgani uchun xavfsiz, ma'lumotni o'chirmaydi) — alohida `npm run migrate` ham mavjud.
 ensureSchema();
 migrateSyncUserRoles();
+migrateSyncOrderStatus();
 migrateAddOrderItemReadyAt();
 migrateAddOrderItemSentAt();
 migrateAddNotificationAck();

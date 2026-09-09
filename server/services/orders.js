@@ -123,6 +123,14 @@ function updateOrderItemQuantity(orderItemId, quantity, userId) {
     if (!order || order.status !== 'open') {
       throw new OrderError('Bu buyurtma allaqachon yopilgan, o\'zgartirib bo\'lmaydi');
     }
+    // 2026-09-10: ilgari bu tekshiruv YO'Q edi — bekor qilingan qatorning
+    // miqdorini oshirish ombordan qoldiqni qayta sarflar, lekin qator hamon
+    // 'cancelled' bo'lgani uchun na hisobga kirar, na uni qayta bekor qilib
+    // qoldiqni qaytarib bo'lardi (cancelOrderItem faqat 'active' qatorni
+    // qaytaradi). Ya'ni qoldiq butunlay yo'qolardi.
+    if (orderItem.status !== 'active') {
+      throw new OrderError("Bu qator bekor qilingan, miqdorini o'zgartirib bo'lmaydi");
+    }
 
     // Miqdor o'zgarsa (masalan afitsiant + / − tugmasi bilan) va taom omborga
     // bog'langan bo'lsa — faqat FARQNI (delta) ombordan ayiramiz/qaytaramiz,
@@ -256,9 +264,14 @@ function cancelEmptyOrder(tableId, waiterId) {
       );
     }
 
+    // 2026-09-10: ilgari bu yerda status 'closed' qo'yilardi — natijada bekor
+    // qilingan buyurtma adminReports '/summary' dagi orders_count'ga haqiqiy
+    // buyurtma bo'lib qo'shilar, kassirBilling '/bills' ro'yxatida esa
+    // 0 so'mlik soxta chek bo'lib chiqardi. Endi alohida 'cancelled' holati
+    // (schema.sql CHECK + server/db.js migrateSyncOrderStatus()).
     const ts = nowIso();
     db.prepare(
-      `UPDATE orders SET status = 'closed', closed_by = ?, closed_at = ?, total_amount = 0,
+      `UPDATE orders SET status = 'cancelled', closed_by = ?, closed_at = ?, total_amount = 0,
        note = 'Bekor qilindi (barcha taomlar bekor qilingan edi)' WHERE id = ?`
     ).run(waiterId, ts, orderRow.id);
 

@@ -84,7 +84,12 @@ CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category_id);
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   table_id INTEGER NOT NULL REFERENCES tables(id),
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  -- 'cancelled' (2026-09-10) — bo'sh buyurtmani bekor qilish ILGARI uni
+  -- 'closed' qilib qo'yardi, natijada u hisobotda haqiqiy buyurtma bo'lib
+  -- sanalar, kassir 'Hisoblar' ro'yxatida esa 0 so'mlik soxta chek bo'lib
+  -- chiqardi. Endi alohida holat. server/db.js migrateSyncOrderStatus()
+  -- mavjud bazalarga shu CHECK'ni qayta quradi.
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed', 'cancelled')),
   opened_by INTEGER NOT NULL REFERENCES users(id),
   opened_at TEXT NOT NULL,
   closed_by INTEGER REFERENCES users(id),

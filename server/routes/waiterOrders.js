@@ -57,7 +57,8 @@ router.post('/tables/:id/cancel-order', asyncRoute((req, res) => {
 
 router.get('/tables/:id/receipt/latest', asyncRoute((req, res) => {
   const order = db
-    .prepare('SELECT id FROM orders WHERE table_id = ? ORDER BY id DESC LIMIT 1')
+    // 2026-09-10: bekor qilingan buyurtma chiqarilmaydi — u chek EMAS
+    .prepare("SELECT id FROM orders WHERE table_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1")
     .get(req.params.id);
   if (!order) return res.status(404).json({ error: "Bu stol uchun hali buyurtma bo'lmagan" });
   res.json(getReceipt(order.id));

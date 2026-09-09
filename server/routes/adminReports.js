@@ -79,7 +79,7 @@ router.get('/summary', asyncRoute((req, res) => {
 
 router.get('/orders', asyncRoute((req, res) => {
   const { from, to } = dateRange(req.query);
-  const status = req.query.status && ['open', 'closed'].includes(req.query.status) ? req.query.status : null;
+  const status = req.query.status && ['open', 'closed', 'cancelled'].includes(req.query.status) ? req.query.status : null;
   let sql = `
     SELECT o.id, o.status, o.total_amount, o.opened_at, o.closed_at, t.name AS table_name,
            COALESCE(ou.full_name, ou.username) AS opened_by_name,
