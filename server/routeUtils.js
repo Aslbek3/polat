@@ -11,11 +11,20 @@ function asyncRoute(fn) {
       fn(req, res);
     } catch (err) {
       const status = err.status || 500;
-      if (status >= 500) {
+      // 2026-09-10: `status` ATAYLAB qo'yilgan 5xx xatolar endi o'z
+      // xabarini saqlaydi. Ilgari har qanday >=500 umumiy "Server xatosi"
+      // ga aylanardi va bu `adminQz.js` dagi 503 ni ham yutardi — u yerdagi
+      // xabar ("QZ kaliti topilmadi, server/qz-keys/ ga qo'ying") ataylab
+      // adminga mo'ljallangan va lazy-load o'zgarishining butun maqsadi
+      // shu edi. `err.status` YO'Q xatolar (kutilmagan qulashlar) esa
+      // avvalgidek yashiriladi — ichki tafsilot mijozga chiqmasligi kerak.
+      const isDeliberate = Boolean(err.status);
+      if (status >= 500 && !isDeliberate) {
         console.error(err);
         res.status(status).json({ error: "Server xatosi, birozdan so'ng qayta urinib ko'ring" });
         return;
       }
+      if (status >= 500) console.error(err); // ataylab bo'lsa ham logga yozamiz
       res.status(status).json({ error: err.message || 'Xatolik yuz berdi' });
     }
   };

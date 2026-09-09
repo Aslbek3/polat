@@ -129,9 +129,19 @@ const loginAccountLimiter = createRateLimiter({
   skipSuccessful: true,
   keyFn: (req) => {
     const username = req.body && req.body.username;
-    return typeof username === 'string' && username.trim()
-      ? `user:${username.trim().toLowerCase()}`
-      : null;
+    if (typeof username !== 'string') return null;
+    const trimmed = username.trim();
+    if (!trimmed) return null;
+    // ⚠️ 2026-09-10: UZUNLIK CHEGARASI SHART. Bu satr Map KALITI sifatida
+    // butun 15 daqiqalik oyna davomida xotirada saqlanadi. Chegara
+    // bo'lmasa: IP-limiter 40 muvaffaqiyatsiz urinishga ruxsat beradi ->
+    // har biri ~1 MB unikal `username` bilan -> bitta IP'dan 40 MB, 15
+    // daqiqa ushlab turiladi. Bir necha IP -> GB'lar. PM2 FORK rejimida
+    // (bitta process) bu butun ilovani o'ldirardi, ya'ni limiter aynan
+    // o'zi to'sishi kerak bo'lgan DoS uchun vosita bo'lib qolardi.
+    // Haqiqiy login 64 belgidan uzun bo'lmaydi.
+    if (trimmed.length > 64) return null;
+    return `user:${trimmed.toLowerCase()}`;
   },
   message: "Bu hisobga juda ko'p urinish bo'ldi. 15 daqiqadan so'ng qayta urinib ko'ring",
 });

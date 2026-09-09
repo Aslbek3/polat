@@ -22,6 +22,10 @@ router.post('/', asyncRoute((req, res) => {
   if (!phoneNum || phoneNum.replace(/\D/g, '').length < 7) {
     return res.status(400).json({ error: "Telefon raqamini to'g'ri kiriting" });
   }
+  // 2026-09-10: uzunlik chegaralari — publicCustomerOrders.js dagi bilan
+  // bir xil sabab (ochiq endpoint, cheksiz matn = boshqariladigan baza o'sishi).
+  if (phoneNum.length > 30) return res.status(400).json({ error: 'Telefon raqami juda uzun' });
+  if (noteText.length > 1000) return res.status(400).json({ error: 'Izoh juda uzun' });
   if (!Number.isFinite(size) || size <= 0 || size > 50) {
     return res.status(400).json({ error: "Kishilar sonini to'g'ri kiriting" });
   }

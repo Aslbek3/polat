@@ -87,6 +87,12 @@ router.put('/categories/:id', asyncRoute((req, res) => {
   const existing = db.prepare('SELECT * FROM menu_categories WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Kategoriya topilmadi' });
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : existing.name;
+  // NEGA (2026-09-10 auditi): ilgari PUT nomni UMUMAN tekshirmasdi — POST bo'sh
+  // nomni 400 bilan rad etardi, lekin tahrirlashda String('   ').trim() = ''
+  // bemalol saqlanardi. Natijada menyuda NOMSIZ bo'lim paydo bo'lardi (mijoz
+  // menyusida bo'sh tugma), va uni faqat bazadan qo'lda tuzatish mumkin edi.
+  // Tekshiruv POST'dagi bilan bir xil bo'lishi shart.
+  if (!name) return res.status(400).json({ error: 'Nom kiritilishi shart' });
   const sortOrder = req.body?.sort_order !== undefined ? Number(req.body.sort_order) : existing.sort_order;
   const isActive = req.body?.is_active !== undefined ? (req.body.is_active ? 1 : 0) : existing.is_active;
   const requireInventoryLink = req.body?.require_inventory_link !== undefined
@@ -271,6 +277,10 @@ router.put('/items/:id', asyncRoute((req, res) => {
   const existing = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Taom topilmadi' });
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : existing.name;
+  // NEGA (2026-09-10 auditi): PUT /categories/:id bilan bir xil sabab — bo'sh
+  // nom tahrirlashda o'tib ketardi va nomsiz taom chekda ham bo'sh
+  // name_snapshot bo'lib muhrlanib qolardi.
+  if (!name) return res.status(400).json({ error: 'Nom kiritilishi shart' });
   const priceRaw = req.body?.price !== undefined ? Math.round(Number(req.body.price)) : existing.price;
   // Ota taom (parent_item_id) o'zgartirilayotgan bo'lsa — bog'lanish qoidalari
   // POST'dagi bilan bir xil (resolveParentItemId), qo'shimcha: taomning o'zi
@@ -281,10 +291,22 @@ router.put('/items/:id', asyncRoute((req, res) => {
     return res.status(400).json({ error: "Bu taomning o'zi turlarga ega — uni boshqa taomning turiga aylantirib bo'lmaydi" });
   }
   const parentItemId = parentRowChange === undefined ? existing.parent_item_id : (parentRowChange ? parentRowChange.id : null);
-  // Tur (variant) bo'lsa — kategoriya har doim ota taomnikiga tenglashtiriladi.
-  const categoryId = parentRowChange
-    ? parentRowChange.category_id
-    : (req.body?.category_id !== undefined ? Number(req.body.category_id) : existing.category_id);
+  // Tur (variant) bo'lsa — kategoriya HAR DOIM ota taomnikidan olinadi,
+  // so'rovdagi category_id e'tiborsiz qoldiriladi.
+  // NEGA (2026-09-10 auditi): ilgari bu tenglashtirish faqat AYNI so'rovda
+  // parent_item_id kelganda ishlardi. Ya'ni mavjud variantga {category_id: X}
+  // yuborilsa, u otasidan boshqa bo'limga ko'chib ketardi — kod izohi
+  // ("variant har doim ota bilan bir xil kategoriyada", resolveParentItemId)
+  // shu yo'lda buzilardi. Endi yakuniy parentItemId mavjud bo'lsa, kategoriya
+  // otadan o'qiladi (parentRowChange bo'lmasa — bazadan alohida so'rov bilan).
+  const requestedCategoryId = req.body?.category_id !== undefined ? Number(req.body.category_id) : existing.category_id;
+  let categoryId = requestedCategoryId;
+  if (parentItemId) {
+    const parentRow = parentRowChange
+      || db.prepare('SELECT id, category_id FROM menu_items WHERE id = ?').get(parentItemId);
+    if (!parentRow) return res.status(404).json({ error: 'Ota taom topilmadi' });
+    categoryId = parentRow.category_id;
+  }
   const sortOrder = req.body?.sort_order !== undefined ? Number(req.body.sort_order) : existing.sort_order;
   const isActive = req.body?.is_active !== undefined ? (req.body.is_active ? 1 : 0) : existing.is_active;
   const description = req.body?.description !== undefined ? (String(req.body.description).trim() || null) : existing.description;
@@ -334,6 +356,24 @@ router.put('/items/:id', asyncRoute((req, res) => {
   db.prepare(
     'UPDATE menu_items SET name = ?, price = ?, cost_price = ?, category_id = ?, sort_order = ?, is_active = ?, description = ?, image_url = ?, volume = ?, inventory_item_id = ?, parent_item_id = ?, is_available = ?, updated_at = ? WHERE id = ?'
   ).run(name, price, costPrice, categoryId, sortOrder, isActive, description, imageUrl, volume, inventoryItemId, parentItemId, isAvailable, nowIso(), req.params.id);
+  // Ota taom boshqa bo'limga ko'chirilgan bo'lsa — turlari ham u bilan birga
+  // ko'chadi.
+  // NEGA (2026-09-10 auditi): ilgari turlar eski category_id da qolib ketardi.
+  // Ro'yxat ko'rinishida sezilmasdi (publicMenu/waiterMenu/kassirMenu
+  // variantlarni faqat parent_item_id bo'yicha oladi), lekin uchta real
+  // oqibati bor edi: (1) require_inventory_link ikki manbadan hisoblanardi —
+  // variant YANGI bo'lim bayrog'i bilan filtrlanib mijoz menyusidan jimgina
+  // yo'qolardi, PUT bilan tuzatishga urinilsa esa validatsiya ESKI bo'lim
+  // qoidasini tekshirib bog'lanmagan holicha saqlashga ruxsat berardi
+  // ("arvoh" yozuv abadiy qolardi); (2) GET /items?category_id=<yangi>
+  // variantni qaytarmasdi (endpoint kontrakti buzuq); (3) DELETE
+  // /categories/<eski> ko'rinmas variant tufayli hard-delete o'rniga
+  // soft-delete qilardi.
+  if (categoryChanged && !parentItemId) {
+    db.prepare('UPDATE menu_items SET category_id = ?, updated_at = ? WHERE parent_item_id = ?').run(
+      categoryId, nowIso(), existing.id
+    );
+  }
   // Rasm almashtirilgan/olib tashlangan bo'lsa — eski faylni diskdan tozalaymiz
   // (bo'sh joy to'planib qolmasin uchun).
   if (existing.image_url && existing.image_url !== imageUrl) deleteOldImageIfLocal(existing.image_url);
@@ -374,6 +414,19 @@ router.delete('/items/:id', asyncRoute((req, res) => {
     db.prepare('SELECT 1 FROM order_items WHERE menu_item_id = ? LIMIT 1').get(req.params.id) ||
     db.prepare('SELECT 1 FROM customer_order_items WHERE menu_item_id = ? LIMIT 1').get(req.params.id);
   if (!usedInOrders) {
+    // NEGA (2026-09-10 auditi): yuqoridagi hasActiveChildren() faqat FAOL
+    // turlarni sanaydi, shu sabab turlari AVVAL soft-delete qilingan ota taom
+    // bemalol HARD-delete qilinardi va o'sha turlar mavjud bo'lmagan
+    // parent_item_id ga ishora qilib qolardi (parent_item_id FK emas —
+    // schema.sql). Admin keyin turni "♻️ Tiklash" bilan qaytarsa, u HECH
+    // QANDAY menyuda ko'rinmasdi: publicMenu/waiterMenu/kassirMenu asosiy
+    // ro'yxatga faqat parent_item_id IS NULL taomlarni oladi, variants esa
+    // endi yo'q ota orqali hech qachon so'ralmaydi. Shu sabab ota o'chishidan
+    // OLDIN barcha bolalarning (faol va nofaol) bog'lanishini uzamiz — ular
+    // oddiy taomga aylanadi va ko'rinadi.
+    db.prepare('UPDATE menu_items SET parent_item_id = NULL, updated_at = ? WHERE parent_item_id = ?').run(
+      nowIso(), req.params.id
+    );
     db.prepare('DELETE FROM menu_items WHERE id = ?').run(req.params.id);
     if (existing.image_url) deleteOldImageIfLocal(existing.image_url);
     return res.json({ ok: true });

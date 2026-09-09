@@ -329,6 +329,15 @@ function release(inventoryItemId, qty, { orderItemId, customerOrderItemId, userI
   const qtyNum = Number(qty);
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) return;
   const run = db.transaction(() => {
+    // 2026-09-10: mavjudlik tekshiruvi qo'shildi (`consume()` da allaqachon
+    // bor edi). Ilgari yo'q id bilan chaqirilsa `UPDATE` JIMGINA 0 qator
+    // o'zgartirar, keyingi `INSERT INTO inventory_movements` esa FK'ga
+    // urilib "FOREIGN KEY constraint failed" otardi. `status` maydoni
+    // bo'lmagani uchun `asyncRoute` uni 500 "Server xatosi"ga aylantirardi,
+    // va chaqiruvchilar katta tranzaksiya ichida bo'lgani uchun BUTUN amal
+    // rollback bo'lardi — afitsiant taomni bekor qila olmasdi va sababini
+    // bilmasdi. Endi toza 404 (InventoryError) qaytadi.
+    getItemRow(inventoryItemId);
     const ts = nowIso();
     db.prepare('UPDATE inventory_items SET quantity = quantity + ?, updated_at = ? WHERE id = ?').run(qtyNum, ts, inventoryItemId);
     db.prepare(

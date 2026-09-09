@@ -36,11 +36,20 @@ router.post('/', asyncRoute((req, res) => {
   const lng = Number(location_lng);
   const hasLocation = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 
+  // 2026-09-10: `note`/`address`/`phone` uchun UZUNLIK CHEGARASI qo'shildi.
+  // Ilgari faqat `full_name` (120) cheklangan edi. Bu ochiq (login shart
+  // emas) endpoint: bitta IP daqiqasiga 5 ta so'rov yubora oladi
+  // (publicWriteLimiter) va har birida ~1 MB `note` bo'lsa — kuniga ~7 GB
+  // SQLite o'sishi. Admin "Buyurtmalar" sahifasida pagination yo'q, ya'ni
+  // u bu yozuvlarni butunlay yuklab brauzerni ham o'ldirardi.
   if (!name) return res.status(400).json({ error: 'Ismingizni kiriting' });
   if (name.length > 120) return res.status(400).json({ error: 'Ism juda uzun' });
   if (!phoneNum || phoneNum.replace(/\D/g, '').length < 7) {
     return res.status(400).json({ error: "Telefon raqamini to'g'ri kiriting" });
   }
+  if (phoneNum.length > 30) return res.status(400).json({ error: 'Telefon raqami juda uzun' });
+  if (addressText.length > 500) return res.status(400).json({ error: 'Manzil juda uzun' });
+  if (noteText.length > 1000) return res.status(400).json({ error: 'Izoh juda uzun' });
   if (fulfillmentType === 'delivery' && !addressText) {
     return res.status(400).json({ error: 'Yetkazish manzilini kiriting' });
   }

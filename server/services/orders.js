@@ -6,6 +6,7 @@
 // tranzaksiyada bajariladi.
 const { db, nowIso } = require('../db');
 const inventory = require('./inventory');
+const { parseQuantity } = require('../validation');
 
 class OrderError extends Error {
   constructor(message, status = 400) {
@@ -70,10 +71,11 @@ function getOpenOrderForTable(tableId) {
 }
 
 function addItemToTable(tableId, menuItemId, quantity, waiterId) {
-  const qty = Number(quantity);
-  if (!Number.isFinite(qty) || qty <= 0 || !Number.isInteger(qty)) {
-    throw new OrderError("Miqdor noto'g'ri");
-  }
+  // 2026-09-10: YUQORI CHEGARA qo'shildi. Ilgari faqat "butun va musbat"
+  // tekshirilardi — ya'ni {"quantity": 9007199254740991} yuborish
+  // orders.total_amount ga ~9.0e19 yozar va hisobotni ABADIY buzardi
+  // (yopilgan buyurtmani tuzatish yoki o'chirish uchun ilovada yo'l yo'q).
+  const qty = parseQuantity(quantity);
 
   const run = db.transaction(() => {
     const table = getTable(tableId);
@@ -115,10 +117,11 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
 }
 
 function updateOrderItemQuantity(orderItemId, quantity, userId) {
-  const qty = Number(quantity);
-  if (!Number.isFinite(qty) || qty <= 0 || !Number.isInteger(qty)) {
-    throw new OrderError("Miqdor noto'g'ri");
-  }
+  // 2026-09-10: YUQORI CHEGARA qo'shildi. Ilgari faqat "butun va musbat"
+  // tekshirilardi — ya'ni {"quantity": 9007199254740991} yuborish
+  // orders.total_amount ga ~9.0e19 yozar va hisobotni ABADIY buzardi
+  // (yopilgan buyurtmani tuzatish yoki o'chirish uchun ilovada yo'l yo'q).
+  const qty = parseQuantity(quantity);
 
   const run = db.transaction(() => {
     const orderItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(orderItemId);

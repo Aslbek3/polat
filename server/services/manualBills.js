@@ -4,6 +4,7 @@
 // erkin nom + narx + miqdor kiritadi, server faqat qiymatlarni tekshiradi va
 // subtotal/jamini o'zi hisoblaydi (mijoz tomonidan yuborilgan jamiga ishonilmaydi).
 const { db, nowIso } = require('../db');
+const { MAX_AMOUNT, MAX_QUANTITY } = require('../validation');
 
 class ManualBillError extends Error {
   constructor(message, status = 400) {
@@ -25,10 +26,24 @@ function validateItems(rawItems) {
     const quantity = Number(raw && raw.quantity);
     if (!name) throw new ManualBillError("Taom nomi kiritilmagan qator bor");
     if (name.length > 200) throw new ManualBillError(`"${name.slice(0, 30)}..." nomi juda uzun`);
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+
+    // 2026-09-10: ilgari narx uchun faqat `Number.isFinite(x) && x > 0`
+    // tekshirilardi — na yuqori chegara, na butun son talabi bor edi:
+    //   {"unit_price": 1e308, "quantity": 2}  ->  subtotal = Infinity
+    // SQLite uni saqlaydi, SUM() ham Infinity qaytaradi, JSON.stringify
+    // esa `null` — ya'ni /api/admin/reports/summary DOIMO
+    // `revenue: null` qaytarardi va manual_bills'ni o'chirish endpointi
+    // ham yo'q. Kasr narx esa (0.5) "1.5 so'm"lik chek chiqarardi.
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || unitPrice > MAX_AMOUNT) {
       throw new ManualBillError(`"${name}" uchun narx noto'g'ri`);
     }
-    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isInteger(quantity)) {
+    // Butunlik alohida — bu yerda qiymat allaqachon haqiqiy musbat son,
+    // shuning uchun foydalanuvchiga aniq sababni aytamiz (0.5 kabi kasr
+    // narx "1.5 so'm"lik chek chiqarardi).
+    if (!Number.isInteger(unitPrice)) {
+      throw new ManualBillError(`"${name}" uchun narx butun son bo'lishi kerak (tiyin yo'q)`);
+    }
+    if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) {
       throw new ManualBillError(`"${name}" uchun miqdor noto'g'ri`);
     }
     return { name, unit_price: unitPrice, quantity, subtotal: unitPrice * quantity };

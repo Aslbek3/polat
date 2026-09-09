@@ -34,9 +34,18 @@ router.get('/tables', asyncRoute((req, res) => {
   res.json(withItems);
 }));
 
+// 2026-09-10: ilgari bu yerda `SELECT *` edi va oshpaz ekraniga mijozning
+// TELEFON RAQAMI, UY MANZILI va aniq GPS koordinatasi ham kelardi — garchi
+// `public/chef/kitchen.js` ularni chizmasa ham. Oshxona planshetidagi
+// hisob (yoki o'sha planshetni qo'lga kiritgan har kim) DevTools -> Network
+// orqali har 15 soniyada yangilanadigan shu javobdan barcha yetkazib berish
+// mijozlarining shaxsiy ma'lumotini yig'ib olishi mumkin edi.
+// Oshpazga bularning hech biri kerak emas — kuryer va adminda qoladi.
+const CHEF_ORDER_FIELDS = 'id, full_name, fulfillment, status, note, total_amount, created_at';
+
 router.get('/orders', asyncRoute((req, res) => {
   const rows = db
-    .prepare("SELECT * FROM customer_orders WHERE status IN ('new', 'confirmed') ORDER BY id ASC")
+    .prepare(`SELECT ${CHEF_ORDER_FIELDS} FROM customer_orders WHERE status IN ('new', 'confirmed') ORDER BY id ASC`)
     .all();
   const itemsStmt = db.prepare('SELECT * FROM customer_order_items WHERE customer_order_id = ?');
   res.json(rows.map((o) => ({ ...o, items: itemsStmt.all(o.id) })));
@@ -52,19 +61,40 @@ router.put('/items/:id/ready', asyncRoute((req, res) => {
     return res.status(400).json({ error: "Bu taom hali afitsiant tomonidan oshxonaga yuborilmagan" });
   }
   const ready = !!req.body?.ready;
-  db.prepare('UPDATE order_items SET ready_at = ? WHERE id = ?').run(ready ? new Date().toISOString() : null, req.params.id);
 
-  // Faqat "tayyor" deb belgilanganda (tayyor emasga qaytarilganda emas) afitsiantga
-  // bildirishnoma yuboriladi — stol nomi order_id -> orders.table_id -> tables orqali.
-  if (ready) {
-    const table = db
-      .prepare(`SELECT t.name AS name FROM orders o JOIN tables t ON t.id = o.table_id WHERE o.id = ?`)
-      .get(item.order_id);
-    if (table) {
-      db.prepare('INSERT INTO notifications (message, is_read, order_item_id, created_at) VALUES (?, 0, ?, ?)')
-        .run(`${table.name} taomi tayyor: ${item.name_snapshot}`, item.id, nowIso());
-    }
+  // 2026-09-10: IDEMPOTENT qilindi va bitta tranzaksiyaga o'raldi.
+  // Ilgari `{ready:true}` ikki marta yuborilsa (oshpaz ikki marta bosdi
+  // yoki tarmoq qayta urindi) IKKITA bildirishnoma qatori yaratilardi va
+  // afitsiant bir xil taomni ikki marta ko'rardi. Ikkita yozuv alohida
+  // bajarilardi, ya'ni ular orasida xato bo'lsa holat nomuvofiq qolardi.
+  if (ready && item.ready_at) {
+    return res.json({ ok: true, ready: true }); // allaqachon tayyor — hech narsa qilinmaydi
   }
+
+  const run = db.transaction(() => {
+    db.prepare('UPDATE order_items SET ready_at = ? WHERE id = ?')
+      .run(ready ? nowIso() : null, req.params.id);
+
+    // Faqat "tayyor" deb belgilanganda (tayyor emasga qaytarilganda emas)
+    // afitsiantga bildirishnoma yuboriladi — stol nomi
+    // order_id -> orders.table_id -> tables orqali.
+    if (ready) {
+      const table = db
+        .prepare(`SELECT t.name AS name FROM orders o JOIN tables t ON t.id = o.table_id WHERE o.id = ?`)
+        .get(item.order_id);
+      if (table) {
+        db.prepare('INSERT INTO notifications (message, is_read, order_item_id, created_at) VALUES (?, 0, ?, ?)')
+          .run(`${table.name} taomi tayyor: ${item.name_snapshot}`, item.id, nowIso());
+      }
+    } else {
+      // "Tayyor emas"ga qaytarilsa, tasdiqlanmagan bildirishnomani ham
+      // olib tashlaymiz — aks holda afitsiant ekranida allaqachon bekor
+      // qilingan "tayyor" xabari osilib qolardi.
+      db.prepare('DELETE FROM notifications WHERE order_item_id = ? AND acknowledged_at IS NULL')
+        .run(req.params.id);
+    }
+  });
+  run();
 
   res.json({ ok: true, ready });
 }));

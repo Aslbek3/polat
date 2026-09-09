@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, nowIso } = require('../db');
 const { asyncRoute } = require('../routeUtils');
+const { parseAmount, parseDate, parseText } = require('../validation');
 
 const router = express.Router();
 
@@ -16,26 +17,41 @@ router.get('/', asyncRoute((req, res) => {
 
 router.post('/', asyncRoute((req, res) => {
   const { amount, expense_date, note, category } = req.body || {};
-  const amountNum = Number(amount);
-  if (!Number.isFinite(amountNum) || amountNum <= 0) return res.status(400).json({ error: "Summani to'g'ri kiriting" });
-  const date = expense_date && String(expense_date).trim() ? String(expense_date).trim() : nowIso().slice(0, 10);
+  // 2026-09-10: summaga YUQORI CHEGARA va sanaga FORMAT tekshiruvi qo'shildi.
+  // Sana ilgari umuman tekshirilmasdi va bu jimgina buzilishga olib kelardi:
+  // xarajat sanasi SATR sifatida solishtiriladi (`expense_date >= ?`), daromad
+  // esa `date()` bilan normallashtiriladi. Format boshqacha bo'lsa (masalan
+  // "10.09.2026") xarajat HECH QANDAY sanali filtrga tushmaydi, lekin
+  // filtrsiz jamiga kiradi — "Hisobot" sahifasi filtr bilan va filtrsiz
+  // TURLI sof foyda ko'rsatardi va sabab hech qayerda ko'rinmasdi.
+  const amountNum = parseAmount(amount, { field: 'Summa' });
+  const date = expense_date && String(expense_date).trim()
+    ? parseDate(expense_date, { field: 'Sana' })
+    : nowIso().slice(0, 10);
+  const noteText = parseText(note, { field: 'Izoh', max: 1000 });
+  const categoryText = parseText(category, { field: 'Turkum', max: 100 });
   const info = db
     .prepare(
       `INSERT INTO expenses (amount, expense_date, note, category, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .run(Math.round(amountNum), date, note || null, category || null, req.user.id, nowIso());
+    .run(amountNum, date, noteText, categoryText, req.user.id, nowIso());
   res.json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(info.lastInsertRowid));
 }));
 
 router.put('/:id', asyncRoute((req, res) => {
   const existing = db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Xarajat topilmadi' });
-  const amount = req.body?.amount !== undefined ? Math.round(Number(req.body.amount)) : existing.amount;
-  const date = req.body?.expense_date !== undefined ? String(req.body.expense_date).trim() : existing.expense_date;
-  const note = req.body?.note !== undefined ? req.body.note : existing.note;
-  const category = req.body?.category !== undefined ? req.body.category : existing.category;
-  if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: "Summani to'g'ri kiriting" });
+  // POST bilan bir xil tekshiruvlar (2026-09-10) — ilgari PUT'da summaga
+  // chegara ham, sanaga format tekshiruvi ham yo'q edi.
+  const amount = req.body?.amount !== undefined ? parseAmount(req.body.amount, { field: 'Summa' }) : existing.amount;
+  const date = req.body?.expense_date !== undefined
+    ? parseDate(req.body.expense_date, { field: 'Sana' })
+    : existing.expense_date;
+  const note = req.body?.note !== undefined ? parseText(req.body.note, { field: 'Izoh', max: 1000 }) : existing.note;
+  const category = req.body?.category !== undefined
+    ? parseText(req.body.category, { field: 'Turkum', max: 100 })
+    : existing.category;
   db.prepare('UPDATE expenses SET amount = ?, expense_date = ?, note = ?, category = ? WHERE id = ?').run(
     amount, date, note, category, req.params.id
   );

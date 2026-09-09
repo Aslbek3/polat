@@ -95,18 +95,31 @@ function releaseStock(orderId) {
 // takrorlanuvchi siklni zararsiz qiladi.
 function planStockChange(order, nextStatus) {
   const current = order.stock_state || HELD;
+
+  // 'spent' TERMINAL: taom tayyorlangan, mahsulot ketgan. Bundan keyingi
+  // hech qanday holat o'zgarishi ombor qoldig'iga tegmaydi.
   if (current === SPENT) return { action: null, nextStockState: SPENT };
 
-  const wasActive = order.status !== 'cancelled';
+  // ⚠️ 2026-09-10 (2-bosqich audit): 'spent' belgisi endi 'completed'ga
+  // KIRISH paytida qo'yiladi, undan CHIQISH paytida emas.
+  //
+  // Ilgari qoida "bekor qilish paytidagi status 'completed' bo'lsa
+  // qaytarma" edi — ya'ni bazadagi FAKTGA emas, o'tish yo'liga bog'liq edi.
+  // Shu sabab uni chetlab o'tish mumkin edi (haqiqiy probe bilan tasdiqlangan):
+  //     new -> completed  (taom tayyorlandi, mahsulot sarflandi)
+  //     completed -> confirmed  (admin orqaga qaytardi)
+  //     confirmed -> cancelled  -> ombor QAYTARILDI (+3 dona)
+  // Natijada omborda mavjud bo'lmagan mahsulot "paydo bo'lardi".
+  if (nextStatus === 'completed') {
+    return current === RELEASED
+      ? { action: 'consume', nextStockState: SPENT }
+      : { action: null, nextStockState: SPENT };
+  }
+
   const willBeActive = nextStatus !== 'cancelled';
 
   if (current === HELD && !willBeActive) {
-    // Tayyorlangan (completed) buyurtma bekor qilinsa mahsulot allaqachon
-    // ishlatilgan — omborga qaytarilmaydi, lekin qayta sarflanmasligi uchun
-    // 'spent' deb belgilanadi.
-    return order.status === 'completed'
-      ? { action: null, nextStockState: SPENT }
-      : { action: 'release', nextStockState: RELEASED };
+    return { action: 'release', nextStockState: RELEASED };
   }
 
   if (current === RELEASED && willBeActive) {
@@ -114,7 +127,6 @@ function planStockChange(order, nextStatus) {
   }
 
   // Qolgan barcha holatlar (masalan new -> confirmed) ombor uchun betaraf.
-  void wasActive;
   return { action: null, nextStockState: current };
 }
 

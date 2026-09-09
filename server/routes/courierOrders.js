@@ -21,13 +21,26 @@ const router = express.Router();
 // proporsional o'sib borardi. Endi items bitta IN(...) so'rov bilan olinib,
 // JS tomonida guruhlanadi — buyurtmalar soni qancha bo'lmasin doim 2 ta so'rov.
 router.get('/orders', asyncRoute((req, res) => {
+  // ⚠️ 2026-09-10: bu so'rov ILGARI CHEKLANMAGAN edi — `status != 'cancelled'`
+  // bo'lgan BARCHA yetkazib berish buyurtmalari, jumladan allaqachon
+  // yetkazilgan ARXIV ham (faqat oxiriga saralanardi) qaytarilardi. Ekran
+  // esa har 15 soniyada poll qiladi. Ikkita oqibati bor edi:
+  //   1. O'lchangan qat'iy chegara: pastdagi `IN (...)` SQLite'ning
+  //      SQLITE_MAX_VARIABLE_NUMBER (32766) chegarasiga uriladi —
+  //      32767-buyurtmadan boshlab kuryer ekrani BUTUNLAY 500 bilan o'ladi.
+  //   2. Undan ancha oldin: kuniga 10 ta yetkazish -> 1 yildan keyin har
+  //      15 soniyada ~3650 buyurtma va ~10 000 qator JSON uzatiladi.
+  // Kuryerga faqat yetkazilmaganlar va so'nggi sutkadagilar kerak.
+  const MAX_ROWS = 300;
   const rows = db
     .prepare(
       `SELECT * FROM customer_orders
        WHERE fulfillment = 'delivery' AND status != 'cancelled'
-       ORDER BY (delivered_at IS NOT NULL), id DESC`
+         AND (delivered_at IS NULL OR delivered_at >= datetime('now', '-1 day'))
+       ORDER BY (delivered_at IS NOT NULL), id DESC
+       LIMIT ?`
     )
-    .all();
+    .all(MAX_ROWS);
   if (rows.length === 0) return res.json([]);
   const ids = rows.map((o) => o.id);
   const placeholders = ids.map(() => '?').join(',');
