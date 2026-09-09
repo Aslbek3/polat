@@ -74,12 +74,17 @@ router.post('/', asyncRoute((req, res) => {
       )
       .run(name, phoneNum, fulfillmentType, addressText || null, hasLocation ? lat : null, hasLocation ? lng : null, noteText || null, totalAmount, ts);
 
+    // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10, sabab
+    // server/schema.sql'dagi izohda: hisobot o'tmishga qarab o'zgarmasligi uchun).
     const insertItem = db.prepare(
-      `INSERT INTO customer_order_items (customer_order_id, menu_item_id, name_snapshot, unit_price, quantity, subtotal)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO customer_order_items (customer_order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     for (const r of resolved) {
-      const itemInfo = insertItem.run(info.lastInsertRowid, r.item.id, r.item.name, r.item.price, r.quantity, r.item.price * r.quantity);
+      const itemInfo = insertItem.run(
+        info.lastInsertRowid, r.item.id, r.item.name, r.item.price, r.item.cost_price,
+        r.quantity, r.item.price * r.quantity
+      );
       // Ichimlik (yoki boshqa) taom omborga bog'langan bo'lsa — shu miqdorni
       // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato
       // otadi, butun buyurtma (customer_orders yozuvi bilan birga) bekor bo'ladi.

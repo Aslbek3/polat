@@ -52,25 +52,38 @@ router.get('/summary', asyncRoute((req, res) => {
   const expenseRow = db.prepare(expenseSql).get(...expenseParams);
 
   // Sotilgan taomlarning tan narxi (COGS — cost of goods sold): har bir
-  // yopilgan/bajarilgan buyurtma qatorini (bekor qilinmagan, active) shu
-  // taomning JORIY tan narxiga (menu_items.cost_price, kiritilmagan bo'lsa 0)
-  // ko'paytirib yig'indisi — ikkala buyurtma manbasi birgalikda (yuqoridagi
-  // daromad bilan bir xil sabab). Tan narx snapshot emas — sotuv paytidagi
-  // emas, HOZIRGI tan narx ishlatiladi (unit_price kabi alohida saqlanmaydi),
-  // chunki cost_price funksiyasi 2026-09-08'da qo'shilgan va order_items'da
-  // shunga mos ustun yo'q.
+  // yopilgan/bajarilgan buyurtma qatorini (bekor qilinmagan, active) tan
+  // narxiga ko'paytirib yig'indisi — ikkala buyurtma manbasi birgalikda
+  // (yuqoridagi daromad bilan bir xil sabab).
+  //
+  // 2026-09-10: tan narx endi SOTUV PAYTIDAGI nusxadan
+  // (`cost_price_snapshot`) olinadi, `menu_items`dan JONLI EMAS. Ilgari admin
+  // taomning tan narxini o'zgartirsa, ALLAQACHON YOPILGAN o'tgan oylarning
+  // "Sof foyda"si ham qayta hisoblanib o'zgarib ketardi — bir xil hisobotni
+  // ikki marta ochib ikki xil raqam ko'rish mumkin edi. Sotuv narxi
+  // (`unit_price`) allaqachon nusxa edi, tan narx esa emas — shu
+  // nomuvofiqlik yopildi (schema.sql'dagi izohga qarang).
+  //
+  // COALESCE(...snapshot, mi.cost_price) — migratsiyadan oldin yaratilgan
+  // va nusxasi to'ldirilmagan (masalan taomi o'chirilgan) yozuvlar uchun
+  // eski xulq saqlanadi; shu sabab menu_items JOIN olib tashlanmagan, faqat
+  // LEFT JOIN qilingan.
   let cogsSql = `
     SELECT COALESCE(SUM(qty * COALESCE(cost_price, 0)), 0) AS cogs FROM (
-      SELECT oi.quantity AS qty, mi.cost_price AS cost_price, o.closed_at AS cogs_date
+      SELECT oi.quantity AS qty,
+             COALESCE(oi.cost_price_snapshot, mi.cost_price) AS cost_price,
+             o.closed_at AS cogs_date
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
-      JOIN menu_items mi ON mi.id = oi.menu_item_id
+      LEFT JOIN menu_items mi ON mi.id = oi.menu_item_id
       WHERE o.status = 'closed' AND oi.status = 'active'
       UNION ALL
-      SELECT coi.quantity AS qty, mi.cost_price AS cost_price, co.created_at AS cogs_date
+      SELECT coi.quantity AS qty,
+             COALESCE(coi.cost_price_snapshot, mi.cost_price) AS cost_price,
+             co.created_at AS cogs_date
       FROM customer_order_items coi
       JOIN customer_orders co ON co.id = coi.customer_order_id
-      JOIN menu_items mi ON mi.id = coi.menu_item_id
+      LEFT JOIN menu_items mi ON mi.id = coi.menu_item_id
       WHERE co.status = 'completed'
     ) combined WHERE 1=1
   `;

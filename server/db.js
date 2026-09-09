@@ -94,6 +94,28 @@ function migrateSyncUserRoles() {
   }
 }
 
+// 'cost_price_snapshot' (2026-09-10) — sotilgan paytdagi tan narx.
+// Batafsil sabab schema.sql'da. Mavjud yozuvlar menu_items'dagi JORIY
+// qiymatdan to'ldiriladi — bu ideal emas (haqiqiy tarixiy narx ma'lum emas),
+// lekin hech bo'lmasa hisobot BUNDAN KEYIN o'zgarmas bo'lib qoladi.
+function migrateAddOrderItemCostSnapshot() {
+  for (const table of ['order_items', 'customer_order_items']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (cols.some((c) => c.name === 'cost_price_snapshot')) continue;
+    addColumnIfMissing(table, 'cost_price_snapshot', 'cost_price_snapshot INTEGER');
+    const filled = db
+      .prepare(
+        `UPDATE ${table} SET cost_price_snapshot =
+           (SELECT m.cost_price FROM menu_items m WHERE m.id = ${table}.menu_item_id)
+         WHERE cost_price_snapshot IS NULL AND menu_item_id IS NOT NULL`
+      )
+      .run();
+    if (filled.changes > 0) {
+      console.log(`Migratsiya: '${table}' — ${filled.changes} ta qatorga tan narx nusxasi yozildi.`);
+    }
+  }
+}
+
 // 'customer_orders.stock_state' (2026-09-10) — buyurtmaning ombor qoldig'iga
 // nisbatan holati ('held'/'released'/'spent'). Batafsil izoh schema.sql'da,
 // mantiq server/services/customerOrders.js'da.
@@ -334,6 +356,7 @@ migrateAddCustomerOrderLocation();
 migrateAddCustomerOrderDeliveredAt();
 migrateAddNotificationCustomerOrderId();
 migrateAddCustomerOrderStockState();
+migrateAddOrderItemCostSnapshot();
 
 function nowIso() {
   return new Date().toISOString();

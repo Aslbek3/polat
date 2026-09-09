@@ -83,13 +83,21 @@ function makeClosedOrder({ closedAt, items = [], userId, tableId, status = 'clos
     .run(tid, status, uid, openedAt, status === 'closed' ? uid : null, status === 'closed' ? closedAt : null, status === 'closed' ? total : null);
   const orderId = info.lastInsertRowid;
 
+  // cost_price_snapshot — haqiqiy kod yo'li (services/orders.js
+  // addItemToTable) sotuv paytidagi tan narxni shu ustunga yozadi, shuning
+  // uchun test yordamchisi ham xuddi shunday qiladi: berilmasa taomning
+  // O'SHA PAYTDAGI menu_items.cost_price qiymati olinadi (2026-09-10).
   const insertItem = h.db.prepare(
-    `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, quantity, subtotal, added_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  const menuCost = h.db.prepare('SELECT cost_price FROM menu_items WHERE id = ?');
   for (const it of items) {
+    const costSnapshot = it.costPrice !== undefined
+      ? it.costPrice
+      : (menuCost.get(it.menuItemId)?.cost_price ?? null);
     insertItem.run(
-      orderId, it.menuItemId, it.name || 'Taom', it.unitPrice, it.quantity,
+      orderId, it.menuItemId, it.name || 'Taom', it.unitPrice, costSnapshot, it.quantity,
       it.unitPrice * it.quantity, uid, it.status || 'active', openedAt
     );
   }
@@ -525,8 +533,12 @@ test("summary: o'tgan hisobotning tan narxi keyingi narx o'zgarishidan keyin ham
   const before = await withRouter(adminReportsRouter, adminUser(), (base) =>
     getJson(base, '/summary', { from: DAY, to: DAY })
   );
-  assert.strictEqual(before.body.cost_of_goods, 10000, '2 dona × 5000 — sotuv paytidagi tan narx');
-  assert.strictEqual(before.body.net, 20000 - 10000);
+  // Daromad = 2 dona × 20 000 = 40 000; tan narx = 2 × 5 000 = 10 000.
+  const REVENUE = 40000;
+  const COGS = 10000;
+  assert.strictEqual(before.body.revenue, REVENUE);
+  assert.strictEqual(before.body.cost_of_goods, COGS, '2 dona × 5000 — sotuv paytidagi tan narx');
+  assert.strictEqual(before.body.net, REVENUE - COGS);
 
   // Buyurtma YOPILGANIDAN KEYIN taomning tan narxi o'zgardi (yetkazib beruvchi
   // narxni ko'tardi). Bu faqat KELAJAKDAGI sotuvlarga ta'sir qilishi kerak.
@@ -538,8 +550,8 @@ test("summary: o'tgan hisobotning tan narxi keyingi narx o'zgarishidan keyin ham
 
   assert.strictEqual(
     after.body.cost_of_goods,
-    10000,
+    COGS,
     "o'tgan hisobotdagi tan narx (snapshot) menyu narxi o'zgargach ham o'zgarmasligi kerak"
   );
-  assert.strictEqual(after.body.net, 20000 - 10000, 'sof foyda ham o\'zgarmasligi kerak');
+  assert.strictEqual(after.body.net, REVENUE - COGS, 'sof foyda ham o\'zgarmasligi kerak');
 });

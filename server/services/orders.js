@@ -91,10 +91,14 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
     }
 
     const subtotal = item.price * qty;
+    // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10). Sotuv
+    // narxi (unit_price) allaqachon shu yerda "muzlatilar" edi, tan narx esa
+    // hisobotda menu_items'dan JONLI o'qilardi — natijada narx keyin
+    // o'zgartirilsa o'tgan oylarning foydasi ham o'zgarib ketardi.
     const info = db.prepare(
-      `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, quantity, subtotal, added_by, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)`
-    ).run(order.id, item.id, item.name, item.price, qty, subtotal, waiterId, ts);
+      `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+    ).run(order.id, item.id, item.name, item.price, item.cost_price, qty, subtotal, waiterId, ts);
 
     // Taom omborga (masalan suv/salfetka) bog'langan bo'lsa — shu miqdorni
     // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato otadi,

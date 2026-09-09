@@ -118,6 +118,14 @@ CREATE TABLE IF NOT EXISTS order_items (
   menu_item_id INTEGER NOT NULL REFERENCES menu_items(id),
   name_snapshot TEXT NOT NULL,
   unit_price INTEGER NOT NULL,
+  -- cost_price_snapshot (2026-09-10) — sotilgan PAYTDAGI tan narx.
+  -- NEGA KERAK: adminReports '/summary' COGS'ni ilgari menu_items.cost_price
+  -- dan JONLI o'qirdi. Ya'ni admin bugun tan narxni o'zgartirsa, O'TGAN
+  -- oylarning "Sof foyda" ko'rsatkichi ham o'zgarib ketardi — hisobot
+  -- takrorlanmas (non-reproducible) edi. Sotuv narxi allaqachon snapshot
+  -- edi (unit_price), tan narx esa emas — nomuvofiqlik.
+  -- NULL = eski yozuv (migratsiya paytida to'ldirilmagan).
+  cost_price_snapshot INTEGER,
   quantity INTEGER NOT NULL DEFAULT 1,
   subtotal INTEGER NOT NULL,
   added_by INTEGER NOT NULL REFERENCES users(id),
@@ -210,6 +218,9 @@ CREATE TABLE IF NOT EXISTS customer_order_items (
   menu_item_id INTEGER REFERENCES menu_items(id),
   name_snapshot TEXT NOT NULL,
   unit_price INTEGER NOT NULL,
+  -- cost_price_snapshot (2026-09-10) — order_items dagi bilan bir xil sabab
+  -- (yuqoridagi izohga qarang): hisobot o'tmishga qarab o'zgarmasligi uchun.
+  cost_price_snapshot INTEGER,
   quantity INTEGER NOT NULL,
   subtotal INTEGER NOT NULL
 );
