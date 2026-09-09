@@ -1,14 +1,19 @@
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const { openDatabase } = require('./sqliteDriver');
 const { ROLE_NAMES } = require('./roles');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// `POLAT_DB_PATH` — testlar uchun (`:memory:`) yoki muqobil joylashuv uchun.
+// Berilmasa odatdagi `data/polat.db`. Papka faqat haqiqiy fayl bazasi uchun
+// yaratiladi — xotiradagi baza uchun disk papkasi kerak emas (2026-09-10).
+const DB_PATH = process.env.POLAT_DB_PATH || path.join(__dirname, '..', 'data', 'polat.db');
 
-const DB_PATH = path.join(DATA_DIR, 'polat.db');
+if (DB_PATH !== ':memory:') {
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
 
-const db = new Database(DB_PATH);
+const db = openDatabase(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
