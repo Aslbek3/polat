@@ -31,6 +31,21 @@ const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
 
 const app = express();
 if (TRUST_PROXY) app.set('trust proxy', 1);
+
+// ⚠️ 2026-09-10 — AVTORIZATSIYANI BUTUNLAY CHETLAB O'TISH XATOSI TUZATILDI.
+// Express'da `case sensitive routing` STANDART HOLATDA O'CHIQ, ya'ni
+// `app.use('/api/waiter', ...)` `/api/WAITER/...` so'rovini ham qabul qiladi.
+// `server/auth.js` dagi rol-hudud tekshiruvi esa `req.path.startsWith(
+// '/api/waiter/')` — HARFGA SEZGIR. Natijada prefiks harfini o'zgartirish
+// tekshiruvni butunlay o'tkazib yuborardi:
+//     dastavkachi sessiyasi + POST /api/WAITER/tables/1/close  ->  200
+//     (stol yopildi, total_amount yozildi, chek navbatiga tushdi)
+// Chef/courier/kassir uchun ham xuddi shunday ishlardi.
+// Ikki qatlamli tuzatish: (1) shu sozlama, (2) pastda /api/waiter ga ham
+// boshqalar kabi ANIQ requireRole() qo'shildi — himoya endi prefiks
+// tasodifiga emas, aniq ro'yxatga tayanadi.
+app.set('case sensitive routing', true);
+app.set('strict routing', false);
 app.use(express.json({ limit: '1mb' }));
 
 // Xavfsizlik sarlavhalari (2026-09-10). ATAYLAB `helmet` o'rniga qo'lda —
@@ -170,10 +185,17 @@ app.use('/api/admin/print-requests', auth.requireRole('admin'), require('./route
 // ulanishini tasdiqlaydi) — kassirga ham ochish xavfsiz.
 app.use('/api/qz', auth.requireRole(['admin', 'kassir']), require('./routes/adminQz'));
 
-app.use('/api/waiter', require('./routes/waiterTables'));
-app.use('/api/waiter', require('./routes/waiterMenu'));
-app.use('/api/waiter', require('./routes/waiterOrders'));
-app.use('/api/waiter/notifications', require('./routes/waiterNotifications'));
+// 2026-09-10: bu 4 ta mount ILGARI YAGONA edi — requireRole()siz, faqat
+// requireAuth()dagi URL-prefiks tekshiruviga tayanardi (qolgan hamma
+// guruhda aniq requireRole bor edi). Yuqoridagi "case sensitive routing"
+// izohiga qarang: aynan shu yagona bo'shliq har qanday xodimga afitsiant
+// endpointlarini (stol yopish, chek, taom qo'shish) ochib qo'yardi.
+// Endi himoya ikki qatlamli va prefiks harfiga bog'liq emas.
+const waiterOnly = auth.requireRole(['admin', 'waiter']);
+app.use('/api/waiter', waiterOnly, require('./routes/waiterTables'));
+app.use('/api/waiter', waiterOnly, require('./routes/waiterMenu'));
+app.use('/api/waiter', waiterOnly, require('./routes/waiterOrders'));
+app.use('/api/waiter/notifications', waiterOnly, require('./routes/waiterNotifications'));
 
 app.use('/api/chef', auth.requireRole(['admin', 'chef']), require('./routes/chefKitchen'));
 
