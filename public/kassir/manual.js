@@ -32,18 +32,46 @@ function removeRow(row) {
   recalcTotal();
 }
 
-function readRows() {
+// Qator + uning DOM elementi (noto'g'ri qatorni vizual belgilash uchun kerak).
+function readRowEntries() {
   return Array.from(itemRowsEl.querySelectorAll('.item-row')).map((row) => ({
+    row,
     name: row.querySelector('.rowName').value.trim(),
     unit_price: Number(row.querySelector('.rowPrice').value),
     quantity: Number(row.querySelector('.rowQty').value),
   }));
 }
 
+// NEGA `Number.isInteger` (2026-09-10): server (services/manualBills.js)
+// `!Number.isInteger(quantity)` bo'lsa so'rovni rad etadi, client esa faqat
+// `Number.isFinite && > 0` ni tekshirardi. Kassir miqdorga `1.5` yozsa jami
+// summa ekranda TO'G'RI ko'rinardi, "Chek chiqarish"da esa tushunarsiz xato
+// chiqardi va qaysi qator aybdorligi ko'rinmasdi. Endi qoida ikkala tomonda
+// bir xil, noto'g'ri qator esa qizil ramka bilan belgilanadi.
+// (YUQORI chegaralar — MAX_QUANTITY/MAX_AMOUNT — server tomonida
+// `server/validation.js`da turadi va o'z tushunarli xatosini qaytaradi;
+// bu yerda takrorlanmaydi, aks holda ikki joyda ushlab turish kerak bo'lardi.)
+function isValidPrice(unitPrice) {
+  return Number.isFinite(unitPrice) && unitPrice > 0;
+}
+function isValidQty(quantity) {
+  return Number.isSafeInteger(quantity) && quantity > 0;
+}
+
+function markInput(input, bad) {
+  if (!input) return;
+  input.style.borderColor = bad ? 'var(--danger)' : '';
+}
+
 function recalcTotal() {
-  const total = readRows().reduce((sum, it) => {
-    if (!it.name || !Number.isFinite(it.unit_price) || !Number.isFinite(it.quantity)) return sum;
-    if (it.unit_price <= 0 || it.quantity <= 0) return sum;
+  const total = readRowEntries().reduce((sum, it) => {
+    const priceInput = it.row.querySelector('.rowPrice');
+    const qtyInput = it.row.querySelector('.rowQty');
+    // Yozib turgan paytda bo'sh maydon "xato" deb belgilanmaydi — faqat
+    // to'ldirilgan, lekin qoidaga to'g'ri kelmaydigan qiymat belgilanadi.
+    markInput(priceInput, priceInput.value !== '' && !isValidPrice(it.unit_price));
+    markInput(qtyInput, qtyInput.value !== '' && !isValidQty(it.quantity));
+    if (!it.name || !isValidPrice(it.unit_price) || !isValidQty(it.quantity)) return sum;
     return sum + it.unit_price * it.quantity;
   }, 0);
   document.getElementById('totalAmount').textContent = fmtMoney(total);
@@ -221,17 +249,29 @@ document.getElementById('createBtn').addEventListener('click', async () => {
   // Bo'sh (nomi yo'q) qatorlarni tashlab, faqat to'ldirilganlarini yuboramiz —
   // odatda oxirgi qator bo'sh qoladi (kassir "+ Qator qo'shish"ni ehtiyot
   // uchun bosib qo'ygan bo'lishi mumkin).
-  const items = readRows().filter((it) => it.name);
-  if (items.length === 0) {
+  const entries = readRowEntries().filter((it) => it.name);
+  if (entries.length === 0) {
     toast("Kamida bitta taom kiriting", 'error');
     return;
   }
-  const invalid = items.find((it) => !Number.isFinite(it.unit_price) || it.unit_price <= 0
-    || !Number.isFinite(it.quantity) || it.quantity <= 0);
+  const invalid = entries.find((it) => !isValidPrice(it.unit_price) || !isValidQty(it.quantity));
   if (invalid) {
-    toast(`"${invalid.name}" uchun narx/miqdor noto'g'ri`, 'error');
+    // Aybdor qatorni ko'rsatamiz — ilgari faqat toast chiqardi va uzun
+    // ro'yxatda qaysi qator ekanini topish qiyin edi (2026-09-10).
+    const priceBad = !isValidPrice(invalid.unit_price);
+    markInput(invalid.row.querySelector('.rowPrice'), priceBad);
+    markInput(invalid.row.querySelector('.rowQty'), !isValidQty(invalid.quantity));
+    invalid.row.scrollIntoView({ block: 'center' });
+    const badInput = invalid.row.querySelector(priceBad ? '.rowPrice' : '.rowQty');
+    badInput.focus();
+    let reason;
+    if (priceBad) reason = "narx noto'g'ri";
+    else if (Number.isFinite(invalid.quantity) && !Number.isInteger(invalid.quantity)) reason = "miqdor butun son bo'lishi kerak";
+    else reason = "miqdor noto'g'ri";
+    toast(`"${invalid.name}" uchun ${reason}`, 'error');
     return;
   }
+  const items = entries.map(({ name, unit_price, quantity }) => ({ name, unit_price, quantity }));
 
   const btn = document.getElementById('createBtn');
   btn.disabled = true;

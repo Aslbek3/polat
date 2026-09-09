@@ -72,6 +72,11 @@ async function chekChopEtish() {
   }
 }
 
+// NEGA orderStatusLabel() (2026-09-10): ilgari bu yerda
+// `status === 'closed' ? 'Yopilgan' : 'Ochiq'` turardi — ya'ni BEKOR
+// QILINGAN buyurtma (`cancelled`) chekda "Ochiq" deb ko'rsatilardi.
+// Endi ../app.js'dagi umumiy `orderStatusLabel()` ishlatiladi (uchala
+// holat: open/closed/cancelled).
 function renderReceipt(view) {
   const box = document.getElementById('receiptBox');
   const activeItems = view.items.filter((it) => it.status === 'active');
@@ -95,7 +100,7 @@ function renderReceipt(view) {
     <div class="dim" style="font-size:12px;">
       ${view.order.opened_by_name ? `Ochdi: ${escapeHtml(view.order.opened_by_name)}<br>` : ''}
       ${view.order.closed_by_name ? `Yopdi: ${escapeHtml(view.order.closed_by_name)}<br>` : ''}
-      Holat: ${view.order.status === 'closed' ? 'Yopilgan' : 'Ochiq'}
+      Holat: ${orderStatusLabel(view.order.status)}
     </div>
   `;
 }

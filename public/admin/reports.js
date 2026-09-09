@@ -18,20 +18,34 @@ async function loadReport() {
     toast(err.message, 'error');
   }
 
+  // Holat filtri (2026-09-10). NEGA: server `status` parametrida 'open',
+  // 'closed' va (2026-09-10 dan) 'cancelled'ni qo'llab-quvvatlaydi, bu yerda
+  // esa 'closed' QATTIQ yozib qo'yilgan edi va tanlash imkoni yo'q edi —
+  // natijada admin bekor qilingan stol buyurtmalarini hisobotda umuman
+  // ko'ra olmasdi (ular "yo'qolgan"dek tuyulardi).
+  const STATUS_TITLE = {
+    closed: 'Yopilgan buyurtmalar',
+    open: 'Ochiq buyurtmalar',
+    cancelled: 'Bekor qilingan buyurtmalar',
+    '': 'Barcha buyurtmalar',
+  };
+  const status = document.getElementById('filterStatus').value;
+  document.getElementById('orderListTitle').textContent = STATUS_TITLE[status] || 'Buyurtmalar';
+
   const box = document.getElementById('orderList');
   try {
     const qs2 = new URLSearchParams(qs);
-    qs2.set('status', 'closed');
+    if (status) qs2.set('status', status);
     const orders = await api(`/admin/reports/orders?${qs2.toString()}`);
     if (orders.length === 0) {
-      box.innerHTML = '<p class="dim">Yopilgan buyurtma topilmadi.</p>';
+      box.innerHTML = '<p class="dim">Buyurtma topilmadi.</p>';
       return;
     }
     box.innerHTML = orders.map((o) => `
       <div class="card card-row">
         <div>
-          <div class="card-title">${escapeHtml(o.table_name)} — ${fmtMoney(o.total_amount)}</div>
-          <div class="card-sub">${fmtDateTime(o.closed_at)} · ${escapeHtml(o.closed_by_name || '')}</div>
+          <div class="card-title">${escapeHtml(o.table_name)} — ${fmtMoney(o.total_amount)} <span class="badge ${o.status === 'closed' ? 'ok' : o.status === 'cancelled' ? 'low' : 'debt'}">${escapeHtml(orderStatusLabel(o.status))}</span></div>
+          <div class="card-sub">${fmtDateTime(o.closed_at || o.opened_at)} · ${escapeHtml(o.closed_by_name || o.opened_by_name || '')}</div>
         </div>
         <button class="btn small" data-order-id="${o.id}">Chek</button>
       </div>
@@ -45,6 +59,9 @@ async function loadReport() {
 }
 
 document.getElementById('filterBtn').addEventListener('click', loadReport);
+// Holat tanlanishi bilan darhol qayta yuklanadi — "Ko'rsatish"ni qayta
+// bosish shart emas (2026-09-10).
+document.getElementById('filterStatus').addEventListener('change', loadReport);
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav('reports');

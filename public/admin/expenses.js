@@ -31,7 +31,10 @@ async function loadExpenses() {
   }
 }
 
-document.getElementById('addBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10): bu POST idempotent
+// emas, sekin tarmoqda ikkinchi bosish bir xil xarajatni IKKI MARTA yozardi
+// va hisobotdagi "Sof foyda" noto'g'ri chiqardi.
+document.getElementById('addBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const amount = Number(document.getElementById('fAmount').value);
   const expense_date = document.getElementById('fDate').value || todayStr();
   const category = document.getElementById('fCategory').value.trim();
@@ -47,12 +50,13 @@ document.getElementById('addBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 document.getElementById('filterBtn').addEventListener('click', loadExpenses);
 
 async function delExpense(id) {
-  if (!confirm("Xarajatni o'chirasizmi?")) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  if (!(await customConfirm("Xarajatni o'chirasizmi?"))) return;
   try {
     await api(`/admin/expenses/${id}`, { method: 'DELETE' });
     toast("O'chirildi");

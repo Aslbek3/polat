@@ -31,6 +31,19 @@
           <div class="form-grid" style="flex-direction:row; gap:8px; align-items:flex-end;">
             <div class="field"><label>Dan</label><input id="filterFrom" type="date"></div>
             <div class="field"><label>Gacha</label><input id="filterTo" type="date"></div>
+            <!-- Holat filtri (2026-09-10): server GET /admin/reports/orders endi
+                 'closed'dan tashqari 'open' va 'cancelled'ni ham qo'llab-quvvatlaydi,
+                 frontendda esa 'closed' QATTIQ yozib qo'yilgan edi — admin bekor
+                 qilingan stol buyurtmalarini umuman ko'ra olmasdi. -->
+            <div class="field">
+              <label>Holat</label>
+              <select id="filterStatus">
+                <option value="closed">Yopilgan</option>
+                <option value="">Hammasi</option>
+                <option value="open">Ochiq</option>
+                <option value="cancelled">Bekor qilingan</option>
+              </select>
+            </div>
             <button class="btn primary" id="filterBtn">Ko'rsatish</button>
           </div>
         </div>
@@ -42,7 +55,7 @@
           <div class="stat-tile"><div class="label">Yopilgan buyurtma</div><div class="value" id="statOrders">—</div></div>
         </div>
 
-        <div class="card-title mt-16">Yopilgan buyurtmalar</div>
+        <div class="card-title mt-16" id="orderListTitle">Yopilgan buyurtmalar</div>
         <div id="orderList" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>

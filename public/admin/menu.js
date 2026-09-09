@@ -12,6 +12,13 @@ let currentImageUrl = null; // taom modalida hozir tanlangan rasm URL'i (ixtiyor
 // O'chirilgan (is_active=0) kategoriya/taomlar bo'limi ochiq/yopiqligi —
 // standart holatda yopiq (2026-09-09'da qo'shildi, pastdagi izohga qarang).
 let showInactive = false;
+// Ombor ro'yxati (`GET /admin/inventory/items`) yuklanmay qoldimi (2026-09-10).
+// NEGA: ilgari bu so'rovning xatosi `.catch(() => [])` bilan JIMGINA bo'sh
+// massivga aylanardi — admin buni sezmasdi, keyin omborga bog'langan taomni
+// tahrirlab "Saqlash" bosganda bog'lanish uzilib ketardi. Batafsil izoh
+// renderInventorySelect() ustida.
+let inventoryLoadFailed = false;
+let inventoryLoadError = '';
 
 // escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
 // nusxa birlashtirildi).
@@ -37,12 +44,25 @@ function singularizeCategoryName(name) {
 async function loadAll() {
   const box = document.getElementById('categoryList');
   try {
+    inventoryLoadFailed = false;
+    inventoryLoadError = '';
     [categories, items, inventoryItems] = await Promise.all([
       api('/admin/menu/categories?include_inactive=1'),
       api('/admin/menu/items?include_inactive=1'),
-      api('/admin/inventory/items').catch(() => []), // ombor bo'lmasa ham menyu ishlayversin
+      // Ombor bo'lmasa ham menyu ishlayversin — LEKIN xatoni jimgina yutmaymiz
+      // (2026-09-10): bo'sh ro'yxat bilan davom etsak, tahrirlash modalidagi
+      // select mos option topolmay bo'sh qolardi va "Saqlash" taomni ombordan
+      // uzib yuborardi. Endi bayroq qo'yiladi va admin toast bilan ogohlantiriladi.
+      api('/admin/inventory/items').catch((err) => {
+        inventoryLoadFailed = true;
+        inventoryLoadError = err.message;
+        return [];
+      }),
     ]);
     render();
+    if (inventoryLoadFailed) {
+      toast(`Ombor ro'yxati yuklanmadi (${inventoryLoadError}). Taomni tahrirlashda ombor bog'lanishini o'zgartirmang.`, 'error');
+    }
   } catch (err) {
     box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
   }
@@ -201,7 +221,10 @@ function closeCatModal() { document.getElementById('catModal').classList.add('hi
 
 document.getElementById('addCatBtn').addEventListener('click', () => openCatModal(null));
 document.getElementById('catCancelBtn').addEventListener('click', closeCatModal);
-document.getElementById('catSaveBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10). Aks holda sekin
+// tarmoqda ikkinchi bosish ikkinchi POST yuborib, dublikat kategoriya/taom
+// yaratardi.
+document.getElementById('catSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const name = document.getElementById('catName').value.trim();
   const sort_order = Number(document.getElementById('catSort').value) || 0;
   const require_inventory_link = document.getElementById('catRequireInventory').checked;
@@ -218,10 +241,11 @@ document.getElementById('catSaveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 async function delCategory(id) {
-  if (!confirm("Kategoriyani o'chirasizmi? (unga tegishli taomlar ko'rinmay qoladi)")) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  if (!(await customConfirm("Kategoriyani o'chirasizmi? (unga tegishli taomlar ko'rinmay qoladi)"))) return;
   try {
     await api(`/admin/menu/categories/${id}`, { method: 'DELETE' });
     toast("O'chirildi");
@@ -276,12 +300,34 @@ function closeItemModal() { document.getElementById('itemModal').classList.add('
 // Taom modalidagi "Ombor mahsuloti bilan bog'lash" select'ini har safar ochilganda
 // joriy ombor ro'yxati bilan to'ldiradi (faol mahsulotlar + hozir tanlangan bo'lsa
 // o'chirilgan bo'lsa ham ko'rinishi uchun).
+//
+// ⚠️ 2026-09-10: yuqoridagi va'da ("tanlangan bo'lsa ... ko'rinishi uchun")
+// kod tomonidan BAJARILMAYOTGAN edi. Agar `selectedId` `inventoryItems`da
+// bo'lmasa (ombor so'rovi 500 qaytardi yoki mahsulot o'chirilgan), brauzer
+// `sel.value`ni jimgina `''` qilardi; keyin "Saqlash" `inventory_item_id: null`
+// yuborib bog'lanishni HAQIQATAN uzardi — admin faqat taom NOMINI tuzatmoqchi
+// bo'lgan bo'lsa ham qoldiq kuzatuvi to'xtardi va hech qanday ogohlantirish
+// bo'lmasdi. Endi bunday holatda sun'iy `<option>` qo'shib, tanlangan holda
+// qoldiramiz — saqlashda bog'lanish o'z joyida qoladi.
 function renderInventorySelect(selectedId) {
   const sel = document.getElementById('itemInventory');
   const options = ['<option value="">— Bog\'lanmagan (mavjudlik qo\'lda boshqariladi) —</option>']
     .concat(inventoryItems.map((inv) => `<option value="${inv.id}">${escapeHtml(inv.name)}${inv.volume ? ` (${escapeHtml(inv.volume)})` : ''} — ${inv.quantity} ${escapeHtml(inv.unit)}</option>`));
+
+  const selId = selectedId != null && selectedId !== '' ? Number(selectedId) : null;
+  const isMissing = selId != null && !inventoryItems.some((inv) => Number(inv.id) === selId);
+  if (isMissing) {
+    // Taom ro'yxatidagi qator ombor nomini ham olib keladi (inventory_name) —
+    // shundan foydalanamiz, bo'lmasa id bilan ko'rsatamiz.
+    const item = editingItemId ? items.find((it) => it.id === editingItemId) : null;
+    const label = item && item.inventory_name
+      ? `${item.inventory_name}${item.inventory_volume ? ` (${item.inventory_volume})` : ''}`
+      : `#${selId}`;
+    options.push(`<option value="${selId}">📦 ${escapeHtml(label)} — ro'yxat yuklanmadi, bog'lanish saqlanadi</option>`);
+  }
+
   sel.innerHTML = options.join('');
-  sel.value = selectedId ? String(selectedId) : '';
+  sel.value = selId != null ? String(selId) : '';
   applyInventoryPriceLock();
 }
 
@@ -304,6 +350,16 @@ function applyInventoryPriceLock() {
     costInput.value = inv.cost_price != null ? inv.cost_price : '';
     costInput.readOnly = true;
     costHint.textContent = `Tan narx "${inv.name}" ombor mahsulotidan avtomatik olinadi (o'zgartirish uchun Ombor bo'limiga o'ting).`;
+  } else if (invId) {
+    // Bog'lanish BOR, lekin ombor mahsuloti ro'yxatda topilmadi (ombor so'rovi
+    // yiqilgan — renderInventorySelect()dagi sun'iy option) (2026-09-10).
+    // Narx maydonlarini ochib qo'ysak, admin ularni qo'lda o'zgartirib
+    // saqlashi mumkin edi — server baribir ombor narxini qo'yadi va admin
+    // "narx saqlanmadi" deb o'ylardi. Shu sabab qulflangan holda qoldiramiz.
+    priceInput.readOnly = true;
+    hint.textContent = "Narx ombor mahsulotidan olinadi (ro'yxat hozir yuklanmadi).";
+    costInput.readOnly = true;
+    costHint.textContent = "Tan narx ombor mahsulotidan olinadi (ro'yxat hozir yuklanmadi).";
   } else {
     priceInput.readOnly = false;
     hint.textContent = '';
@@ -329,11 +385,19 @@ document.getElementById('itemCancelBtn').addEventListener('click', closeItemModa
 // Rasm — MAJBURIY EMAS: fayl tanlangan zahoti (Saqlash bosilishidan oldin)
 // alohida (multipart, oddiy JSON api() orqali emas) so'rov bilan yuklanadi,
 // natijada kelgan URL keyin taom saqlanganda yuboriladi.
+//
+// ⚠️ Yuklash davomida "Saqlash" tugmasi BLOKLANADI (2026-09-10). NEGA: bu
+// handler async, "Saqlash" esa `currentImageUrl`ni o'qiydi va yuklash
+// tugashini KUTMAYDI. Rasmni tanlab darhol "Saqlash" bosilsa taom rasmsiz
+// saqlanardi, modal yopilardi, ekranda esa "Yuklanmoqda..." osilib qolardi —
+// admin rasm qo'ygan deb o'ylab qolardi.
 document.getElementById('itemImageFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const statusEl = document.getElementById('itemImageStatus');
+  const saveBtn = document.getElementById('itemSaveBtn');
   statusEl.textContent = 'Yuklanmoqda...';
+  saveBtn.disabled = true;
   try {
     const form = new FormData();
     form.append('image', file);
@@ -347,6 +411,8 @@ document.getElementById('itemImageFile').addEventListener('change', async (e) =>
     statusEl.textContent = '';
     toast(err.message, 'error');
     e.target.value = '';
+  } finally {
+    saveBtn.disabled = false;
   }
 });
 
@@ -357,7 +423,7 @@ document.getElementById('itemImageRemoveBtn').addEventListener('click', () => {
   updateImagePreview();
 });
 
-document.getElementById('itemSaveBtn').addEventListener('click', async () => {
+document.getElementById('itemSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const name = document.getElementById('itemName').value.trim();
   const volume = document.getElementById('itemVolume').value.trim();
   const costPriceRaw = document.getElementById('itemCostPrice').value.trim();
@@ -383,11 +449,19 @@ document.getElementById('itemSaveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
+// ⚠️ Muvaffaqiyatdan keyin XOTIRADAGI `items` massivini ham yangilaymiz
+// (2026-09-10). NEGA: ilgari faqat serverga so'rov ketardi, `items` esa eski
+// qiymat bilan qolardi. Keyingi har qanday render() (masalan "🗑 O'chirilganlar
+// → Ko'rsatish" bosilganda) belgini ESKI holatida qayta chizardi — admin
+// "saqlanmabdi" deb qayta bosardi va taom haqiqatan ham teskari holatga
+// o'tib ketardi, ya'ni foydalanuvchi amali jimgina bekor bo'lardi.
 async function toggleAvailability(id, checked) {
   try {
     await api(`/admin/menu/items/${id}/availability`, { method: 'PATCH', body: { is_available: checked } });
+    const it = items.find((i) => i.id === id);
+    if (it) it.is_available = checked ? 1 : 0;
   } catch (err) {
     toast(err.message, 'error');
     loadAll();
@@ -395,7 +469,10 @@ async function toggleAvailability(id, checked) {
 }
 
 async function delItem(id) {
-  if (!confirm("Taomni o'chirasizmi?")) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10):
+  // loyiha dizayniga mos oyna, va u bloklanmagani uchun setInterval
+  // callbacklari to'planib qolmaydi.
+  if (!(await customConfirm("Taomni o'chirasizmi?"))) return;
   try {
     await api(`/admin/menu/items/${id}`, { method: 'DELETE' });
     toast("O'chirildi");

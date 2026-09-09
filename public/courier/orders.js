@@ -3,10 +3,20 @@
 const STATUS_LABEL = { new: 'Yangi', confirmed: 'Tasdiqlangan', completed: 'Tayyor' };
 const STATUS_BADGE = { new: 'debt', confirmed: 'ok', completed: 'ok' };
 
+// So'rovlar navbati (2026-09-10).
+// NEGA: ro'yxat har 15 soniyada avtomatik yangilanadi, "🚚 Yetkazildi" ham
+// xuddi shu ro'yxatni qayta yuklaydi — javoblarning kelish tartibi
+// kafolatlanmagan. Eski poll javobi kechikib kelsa, allaqachon yetkazilgan
+// buyurtmani yana "Yetkazildi" tugmasi bilan chizib qo'yardi va dastavkachi
+// qayta bosardi (natijada `400 "allaqachon yetkazilgan"` xato toast'i).
+let reqSeq = 0;
+
 async function loadOrders() {
   const box = document.getElementById('deliveryOrders');
+  const my = ++reqSeq;
   try {
     const rows = await api('/courier/orders');
+    if (my !== reqSeq) return; // eskirgan javob — render qilinmaydi
     if (rows.length === 0) {
       box.innerHTML = '<p class="dim">Hozircha yetkazib berish buyurtmasi yo\'q.</p>';
       return;
@@ -53,20 +63,26 @@ async function loadOrders() {
       </div>
     `;
     }).join('');
-    box.querySelectorAll('[data-deliver]').forEach((b) => b.addEventListener('click', () => markDelivered(Number(b.dataset.deliver))));
+    box.querySelectorAll('[data-deliver]').forEach((b) => b.addEventListener('click', () => markDelivered(Number(b.dataset.deliver), b)));
   } catch (err) {
     box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
   }
 }
 
-async function markDelivered(id) {
-  try {
-    await api(`/courier/orders/${id}/deliver`, { method: 'PUT' });
-    toast('Yetkazildi deb belgilandi');
-    loadOrders();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+// withBusy (2026-09-10) — NEGA: dastavkachi telefonda "🚚 Yetkazildi" ni ikki
+// marta bosardi (birinchi bosishga hech qanday javob ko'rinmagani uchun),
+// ikkinchi so'rov esa `400 "allaqachon yetkazilgan"` qaytarardi — ya'ni
+// MUVAFFAQIYATLI amal uchun qizil xato toast'i chiqardi.
+async function markDelivered(id, btn) {
+  await withBusy(btn, async () => {
+    try {
+      await api(`/courier/orders/${id}/deliver`, { method: 'PUT' });
+      toast('Yetkazildi deb belgilandi');
+      loadOrders();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

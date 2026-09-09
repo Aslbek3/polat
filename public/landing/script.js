@@ -38,6 +38,14 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  // Hozirgi vaqt "HH:MM" ko'rinishida — <input type="time"> qiymati bilan
+  // to'g'ridan-to'g'ri (matn sifatida) solishtirish uchun mos.
+  function nowHHMM() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   // ============ Stol bron qilish oynasi (modal) ============
   const backdrop = document.getElementById('bookBackdrop');
   const modalClose = document.getElementById('bookModalClose');
@@ -49,10 +57,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const errorBox = document.getElementById('bkError');
   const submitBtn = document.getElementById('bkSubmit');
   const dateInput = document.getElementById('bkDate');
+  const timeInput = document.getElementById('bkTime');
 
   if (dateInput) dateInput.min = todayISO();
 
+  // NEGA (2026-09-10): `dateInput.min` faqat O'TGAN SANANI to'sardi — bugungi
+  // sana tanlanganda esa allaqachon o'tib ketgan soatni (masalan kechqurun
+  // soat 21:00 da "bugun 09:00") bemalol yuborish mumkin edi. Bunday bron
+  // qabul qilinardi va administrator paneliga "o'tmishdagi" bron sifatida
+  // tushardi. Endi sana bugungi bo'lsa vaqt hozirgi vaqtdan keyin bo'lishi
+  // shart (brauzer o'zi ham `min` orqali to'sadi, lekin yuborishdagi
+  // tekshiruv asosiysi — `min` chetlab o'tilishi mumkin).
+  function syncTimeMin() {
+    if (!dateInput || !timeInput) return;
+    if (dateInput.value === todayISO()) {
+      timeInput.min = nowHHMM();
+      if (timeInput.value && timeInput.value < timeInput.min) timeInput.value = '';
+    } else {
+      timeInput.removeAttribute('min');
+    }
+  }
+  if (dateInput) dateInput.addEventListener('change', syncTimeMin);
+
   function openBookModal() {
+    if (dateInput) dateInput.min = todayISO(); // yarim tunda sahifa ochiq qolgan bo'lishi mumkin
+    syncTimeMin();
     backdrop.classList.add('open');
     document.body.style.overflow = 'hidden';
     formWrap.classList.remove('hidden');
@@ -90,6 +119,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!full_name) return (errorBox.textContent = 'Ismingizni kiriting');
     if (!phone) return (errorBox.textContent = 'Telefon raqamingizni kiriting');
     if (!res_date || !res_time) return (errorBox.textContent = 'Sana va vaqtni tanlang');
+    if (res_date < todayISO()) return (errorBox.textContent = "O'tgan sanaga bron qilib bo'lmaydi");
+    if (res_date === todayISO() && res_time <= nowHHMM()) {
+      return (errorBox.textContent = "Bugungi kun uchun o'tib ketgan vaqtni tanlab bo'lmaydi");
+    }
     if (!Number.isFinite(party_size) || party_size <= 0) {
       return (errorBox.textContent = "Kishilar sonini to'g'ri kiriting");
     }
@@ -110,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
       successBox.classList.remove('hidden');
       form.reset();
       if (dateInput) dateInput.min = todayISO();
+      syncTimeMin();
     } catch (err) {
       errorBox.textContent = err.message || "Xatolik yuz berdi, birozdan so'ng qayta urinib ko'ring";
     } finally {

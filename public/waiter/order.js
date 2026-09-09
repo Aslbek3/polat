@@ -4,6 +4,16 @@ const TABLE_ID = params.get('table');
 let menuCategories = [];
 let activeCategoryId = null;
 
+// So'rovlar navbati (2026-09-10).
+// NEGA: har 8 soniyada `loadOrder()` poll qiladi, foydalanuvchi amali ("+",
+// "−", taom qo'shish, "Oshxonaga yuborish") ham xuddi shu `renderOrder()`ni
+// chaqiradi — javoblarning KELISH TARTIBI kafolatlanmagan. Poll GET yuborilgan,
+// keyin afitsiant "+" bosgan, PATCH javobi kelib ekran 3 bo'lgan, so'ng ESKI
+// poll javobi kelib ekranni yana 2 ga qaytarardi. Afitsiant "o'zgarmadi" deb
+// yana bosardi — miqdor esa noto'g'ri oshib ketardi. Endi har so'rov o'z
+// raqamini oladi; javob kelganda raqam eng oxirgisi bo'lmasa render qilinmaydi.
+let reqSeq = 0;
+
 // escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
 // nusxa birlashtirildi).
 async function loadTableName() {
@@ -14,12 +24,29 @@ async function loadTableName() {
   } catch (e) { /* jim */ }
 }
 
+// NEGA try/catch (2026-09-10): ilgari bu yerda `await api('/waiter/menu')`
+// himoyasiz turardi va `loadMenu()` faqat bir marta (DOMContentLoaded'da)
+// chaqirilardi. Tarmoq bir soniyaga uzilsa (mobil Wi-Fi) menyu ABADIY bo'sh
+// qolardi — hech qanday xato xabari ham yo'q edi, afitsiant taom qo'sha
+// olmasdi va sababini bilmasdi. Endi xato ko'rinadi va "Qayta urinish" bor.
 async function loadMenu() {
-  menuCategories = await api('/waiter/menu');
   const tabs = document.getElementById('catTabs');
+  const box = document.getElementById('menuItems');
+  try {
+    box.innerHTML = '<p class="dim">Menyu yuklanmoqda...</p>';
+    menuCategories = await api('/waiter/menu');
+  } catch (err) {
+    tabs.innerHTML = '';
+    box.innerHTML = `
+      <p class="dim">Menyuni yuklab bo'lmadi: ${escapeHtml(err.message)}</p>
+      <button class="btn small" id="menuRetryBtn">Qayta urinish</button>
+    `;
+    document.getElementById('menuRetryBtn').addEventListener('click', (e) => withBusy(e.currentTarget, loadMenu));
+    return;
+  }
   if (menuCategories.length === 0) {
     tabs.innerHTML = '';
-    document.getElementById('menuItems').innerHTML = '<p class="dim">Menyu hali bo\'sh.</p>';
+    box.innerHTML = '<p class="dim">Menyu hali bo\'sh.</p>';
     return;
   }
   if (!activeCategoryId) activeCategoryId = menuCategories[0].id;
@@ -81,7 +108,10 @@ function renderMenuItems() {
     return html;
   }).join('');
   box.querySelectorAll('[data-add]').forEach((btn) => {
-    btn.addEventListener('click', () => addItem(Number(btn.dataset.add)));
+    // withBusy — tugma so'rov davomida bloklanadi (2026-09-10): ilgari "+"
+    // ni tez ikki marta bosish ikkita POST yuborardi va taom ikki marta
+    // qo'shilardi.
+    btn.addEventListener('click', () => addItem(Number(btn.dataset.add), btn));
   });
   // Taom nomi/narxi ustiga (+ tugmasi emas) bosilsa — tavsifini ko'rsatadi.
   // Tavsifni admin panelida (Menyu > taomni tahrirlash > "Tavsif" maydoni) kiritadi.
@@ -118,28 +148,56 @@ function showItemInfo(menuItemId) {
   showInfoModal(title, body);
 }
 
-async function addItem(menuItemId) {
-  try {
-    const view = await api(`/waiter/tables/${TABLE_ID}/items`, { method: 'POST', body: { menu_item_id: menuItemId, quantity: 1 } });
-    renderOrder(view);
-    toast('Qo\'shildi');
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+async function addItem(menuItemId, btn) {
+  await withBusy(btn, async () => {
+    const my = ++reqSeq;
+    try {
+      const view = await api(`/waiter/tables/${TABLE_ID}/items`, { method: 'POST', body: { menu_item_id: menuItemId, quantity: 1 } });
+      if (my !== reqSeq) return;
+      renderOrder(view);
+      toast('Qo\'shildi');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
 }
 
-async function changeQty(itemId, delta, currentQty) {
+// ⚠️ YO'QOLGAN YANGILANISH (lost update) — 2026-09-10.
+// NEGA bu yerda BLOKLASH shart: tugmalar render paytidagi miqdorni DOM'ga
+// muzlatadi (`data-qty="${it.quantity}"`), so'rov esa ABSOLYUT qiymat
+// (`quantity = currentQty + delta`) yuboradi. Miqdor 2 bo'lsa va afitsiant
+// "+" ni tez ikki marta bossa, IKKALA klik ham eski `data-qty="2"` ni o'qib
+// ikkalasi ham `quantity: 3` yuborardi — 2 marta bosildi, miqdor 3 bo'ldi.
+// Shu sabab so'rov ketayotganda shu qatorning "+" va "−" tugmalari birga
+// bloklanadi, javob kelgach esa DOM serverdan kelgan HAQIQIY qiymat bilan
+// qayta chiziladi. Ikki afitsiant bitta stolda ishlagan holat (B miqdorni 5
+// qildi, A eski ekrandan 3 yubordi) BU YERDA to'liq hal bo'lmaydi — uning
+// yechimi server tomonidagi optimistik qulf, u alohida qilinadi.
+async function changeQty(itemId, delta, currentQty, btn) {
   const nextQty = currentQty + delta;
+  // Bitta qatordagi ikkinchi tugma (+/−) ham bloklanadi — aks holda "+" so'rovi
+  // ketayotganda "−" bosilib xuddi shu eski `data-qty` dan hisoblanardi.
+  const stepper = btn ? btn.closest('.qty-stepper') : null;
+  const others = stepper ? Array.from(stepper.querySelectorAll('button')).filter((b) => b !== btn) : [];
+  others.forEach((b) => { b.disabled = true; });
   try {
-    let view;
-    if (nextQty <= 0) {
-      view = await api(`/waiter/items/${itemId}`, { method: 'DELETE' });
-    } else {
-      view = await api(`/waiter/items/${itemId}`, { method: 'PATCH', body: { quantity: nextQty } });
-    }
-    renderOrder(view);
-  } catch (err) {
-    toast(err.message, 'error');
+    await withBusy(btn, async () => {
+      const my = ++reqSeq;
+      try {
+        let view;
+        if (nextQty <= 0) {
+          view = await api(`/waiter/items/${itemId}`, { method: 'DELETE' });
+        } else {
+          view = await api(`/waiter/items/${itemId}`, { method: 'PATCH', body: { quantity: nextQty } });
+        }
+        if (my !== reqSeq) return;
+        renderOrder(view);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  } finally {
+    others.forEach((b) => { b.disabled = false; });
   }
 }
 
@@ -154,7 +212,12 @@ function renderOrder(view) {
     box.innerHTML = '<p class="dim">Hozircha buyurtma yo\'q — pastdagi menyudan taom tanlang.</p>';
     totalEl.textContent = fmtMoney(0);
     sendBtn.style.display = 'none';
-    closeBtn.style.display = '';
+    // NEGA 'none' (2026-09-10): stol bo'sh bo'lsa "Hisob-kitob" tugmasi
+    // ko'rinib turardi va bosilganda server `404 "Bu stolda ochiq buyurtma
+    // yo'q"` qaytarardi — afitsiant nima noto'g'ri bo'lganini tushunmasdi.
+    // Kassir ekranida (kassir/order.js) xuddi shu holat allaqachon
+    // yashiriladi, endi afitsiantda ham shunday.
+    closeBtn.style.display = 'none';
     cancelOrderBtn.style.display = 'none';
     return;
   }
@@ -191,10 +254,10 @@ function renderOrder(view) {
   totalEl.textContent = fmtMoney(view.total);
 
   box.querySelectorAll('[data-dec]').forEach((btn) => {
-    btn.addEventListener('click', () => changeQty(Number(btn.dataset.dec), -1, Number(btn.dataset.qty)));
+    btn.addEventListener('click', () => changeQty(Number(btn.dataset.dec), -1, Number(btn.dataset.qty), btn));
   });
   box.querySelectorAll('[data-inc]').forEach((btn) => {
-    btn.addEventListener('click', () => changeQty(Number(btn.dataset.inc), 1, Number(btn.dataset.qty)));
+    btn.addEventListener('click', () => changeQty(Number(btn.dataset.inc), 1, Number(btn.dataset.qty), btn));
   });
 
   // Hali oshpazga yuborilmagan (sent_at yo'q) taomlar bo'lsa — "Oshxonaga yuborish"
@@ -208,52 +271,77 @@ function renderOrder(view) {
   }
 }
 
-async function sendToKitchen() {
-  try {
-    const view = await api(`/waiter/tables/${TABLE_ID}/send`, { method: 'POST' });
-    renderOrder(view);
-    toast('Oshxonaga yuborildi');
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+async function sendToKitchen(btn) {
+  await withBusy(btn, async () => {
+    const my = ++reqSeq;
+    try {
+      const view = await api(`/waiter/tables/${TABLE_ID}/send`, { method: 'POST' });
+      if (my !== reqSeq) return;
+      renderOrder(view);
+      toast('Oshxonaga yuborildi');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
 }
 
 async function loadOrder() {
+  const my = ++reqSeq;
   try {
     const view = await api(`/waiter/tables/${TABLE_ID}/order`);
+    // Eskirgan poll javobi — foydalanuvchi amalining yangi natijasini
+    // ustidan yozib yubormasin (2026-09-10).
+    if (my !== reqSeq) return;
     renderOrder(view);
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
-document.getElementById('sendBtn').addEventListener('click', sendToKitchen);
+document.getElementById('sendBtn').addEventListener('click', (e) => sendToKitchen(e.currentTarget));
 
-document.getElementById('closeBtn').addEventListener('click', async () => {
+document.getElementById('closeBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
   const ok = await customConfirm("Stolni yopib, hisob-kitob qilasizmi? Bu amalni ortga qaytarib bo'lmaydi.");
   if (!ok) return;
-  try {
-    // Chek endi shu yerda chop etilmaydi — printer administrator kompyuteriga
-    // ulangan, shu sabab server bu yerda "chop etish kutilmoqda" navbatiga
-    // qo'shadi (print_requests) va admin panelida ko'rinadi.
-    await api(`/waiter/tables/${TABLE_ID}/close`, { method: 'POST' });
-    toast("Hisob-kitob yakunlandi — chek administratorga yuborildi.");
-    setTimeout(() => { window.location.href = 'tables.html'; }, 900);
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+  // withBusy — tasdiqdan keyin tugma bloklanadi (2026-09-10): ikki marta
+  // bosilsa ikkinchi so'rov `404` beradi va MUVAFFAQIYATLI hisob-kitob
+  // uchun qizil xato ko'rinardi.
+  let redirecting = false;
+  await withBusy(btn, async () => {
+    try {
+      // Chek endi shu yerda chop etilmaydi — printer administrator kompyuteriga
+      // ulangan, shu sabab server bu yerda "chop etish kutilmoqda" navbatiga
+      // qo'shadi (print_requests) va admin panelida ko'rinadi.
+      await api(`/waiter/tables/${TABLE_ID}/close`, { method: 'POST' });
+      redirecting = true;
+      toast("Hisob-kitob yakunlandi — chek administratorga yuborildi.");
+      setTimeout(() => { window.location.href = 'tables.html'; }, 900);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  // Muvaffaqiyatli yopilgandan keyin stollarga qaytishgacha ~0.9s bor —
+  // shu oraliqda tugma yana bosilmasin (aks holda `404` xato toast'i).
+  if (redirecting) btn.disabled = true;
 });
 
-document.getElementById('cancelOrderBtn').addEventListener('click', async () => {
+document.getElementById('cancelOrderBtn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
   const ok = await customConfirm('Buyurtmada taom yo\'q. Stolni bo\'shatib, buyurtmani bekor qilasizmi? Chek chiqmaydi.');
   if (!ok) return;
-  try {
-    await api(`/waiter/tables/${TABLE_ID}/cancel-order`, { method: 'POST' });
-    toast('Buyurtma bekor qilindi — stol bo\'shatildi.');
-    setTimeout(() => { window.location.href = 'tables.html'; }, 900);
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+  let redirecting = false;
+  await withBusy(btn, async () => {
+    try {
+      await api(`/waiter/tables/${TABLE_ID}/cancel-order`, { method: 'POST' });
+      redirecting = true;
+      toast('Buyurtma bekor qilindi — stol bo\'shatildi.');
+      setTimeout(() => { window.location.href = 'tables.html'; }, 900);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  if (redirecting) btn.disabled = true;
 });
 
 document.addEventListener('DOMContentLoaded', () => {

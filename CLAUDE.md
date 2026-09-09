@@ -422,3 +422,192 @@ Foydalanuvchi so'rovi: kassir uchun alohida login/parol. Aniqlashtirish savoliga
 - **Tekshirilgan:** barcha yangi/o'zgargan fayl `node -c` xatosiz; butun server moduli qayta yuklanganda `migrateSyncUserRoles()` `users` jadvalini avtomatik qayta qurib `kassir`ni CHECK'ga qo'shgani (`SELECT sql FROM sqlite_master` bilan) va 4 ta mavjud foydalanuvchi/roli o'zgarishsiz qolgani tasdiqlandi; `pm2 restart polat --update-env` xatosiz, jarayon barqaror **online**; **haqiqiy HTTP oqim** vaqtinchalik test foydalanuvchisi (`__test_kassir__`) bilan to'liq sinaldi — login `role:"kassir"` qaytardi, `GET /api/kassir/tables` `200`, `GET /api/waiter/tables` va `GET /api/admin/users` ikkalasi ham `403`, `GET /kassir/tables.html` `200`, `GET /waiter/tables.html` esa `302` bilan `/kassir/tables.html`ga qaytarib yubordi (`homeForRole()` to'g'ri ishlagani tasdiqlandi) — test foydalanuvchisi sinovdan so'ng bazadan butunlay o'chirildi, production ma'lumotlariga iz qoldirilmadi. **Haqiqiy admin panel orqali kassir xodim yaratish va chekni QZ Tray bilan haqiqiy printerga chop etish** hali amalda (real qurilmada) sinalmagan — admin tomonidan tekshirish tavsiya etiladi.
 
 **Tekshirilgan (avvalgi audit sessiyasi):** barcha o'zgargan/yangi 27 ta fayl `node -c` bilan sintaksis xatosiz; `node22 -e "require('./server/index.js')"` orqali butun server moduli (barcha `require()`lar, `server/db.js`dagi barcha migratsiyalar) haqiqiy production bazasiga qarshi xatosiz yuklandi (migratsiya loglari chiqmadi — bu barcha ustun/rol allaqachon mavjudligini, ya'ni "o'lik" deb topilgan 4 ta migratsiya haqiqatan xavfsiz o'chirilganini tasdiqladi); yangi murakkab SQL so'rovlar (`adminReports.js` COGS/revenue UNION, `courierOrders.js` IN-so'rov, `adminMenu.js` dinamik WHERE) alohida `db.prepare()` bilan sinaldi; `node server/migrate.js` xatosiz; `pm2 restart polat --update-env` xatosiz, jarayon 45+ soniya barqaror **online** (restart soni o'zgarmadi — yangi xato yo'q; xato logidagi yagona `acknowledged_at` yozuvi fayl vaqti bilan 2026-08-26'dan qolgan eski/tarixiy holat ekani alohida tasdiqlandi), `GET /api/ping` va `GET /api/public/menu` `200` qaytardi, `pm2 save` bilan saqlandi.
+
+## Holat — 2026-09-10: to'liq audit (2-bosqich) — testlar joriy qilindi va 10 ta xato tuzatildi
+
+Foydalanuvchi so'rovi bilan butun loyiha yana bir bor senior darajada tahlil
+qilindi. Avvalgi (2026-09-09) auditdan farqi: bu safar avval **test
+infratuzilmasi qurildi**, har bir topilma **yiqiladigan test bilan
+isbotlandi**, keyin tuzatildi. Yakunda **111 test, hammasi o'tadi**.
+
+### Test infratuzilmasi (yangi)
+
+- **`server/sqliteDriver.js`** — SQLite drayveri tanlash qatlami.
+  **Muammo:** `better-sqlite3` native modul; yangi Node (v24+) uchun prebuild
+  bo'lmaydi va `npm install` manbadan qurishga urinadi (Windows'da Visual
+  Studio Build Tools, Linux'da build-essential kerak). Natijada loyihaga
+  umuman test yozib bo'lmasdi.
+  **Yechim:** production hamon `better-sqlite3`da qoladi; u yuklanmasa
+  avtomatik ravishda Node 22.5+ o'zida bor `node:sqlite` (DatabaseSync) ga
+  tushadi. Testlar esa **har doim** `node:sqlite`da ishlaydi
+  (`POLAT_SQLITE_DRIVER=node`) — hech qanday native buildsiz, har qanday
+  mashinada. Shim `prepare/exec/pragma/transaction` ni qoplaydi; ichma-ich
+  tranzaksiyalar SAVEPOINT bilan (buni `services/orders.js` talab qiladi —
+  uning tranzaksiyasi ichida `inventory.consume()` o'z tranzaksiyasini ochadi).
+- **`server/db.js`** — `POLAT_DB_PATH` env qo'shildi (testlar `:memory:`).
+- **`test/helpers.js`** — fixture yordamchilari (`createUser`, `createTable`,
+  `createMenuItem`, `createInventoryItem`, `stockOf` va h.k.).
+- **`test/*.test.js`** — `node --test`, tashqi kutubxonasiz. Route testlari
+  kichik Express app + soxta `req.user` + `app.listen(0)` + o'rnatilgan
+  `fetch` bilan ishlaydi (supertest kerak emas).
+- **`npm test`** qo'shildi.
+
+### Tuzatilgan xatolar (10 ta)
+
+**Ombor qoldig'i yeyilishi — 3 xil sabab, hammasi bitta ildizdan:** buyurtma
+holati va uning ombor ta'siri UCH faylda mustaqil yozilgan edi.
+
+1. `services/orders.js` — **bekor qilingan qatorning miqdorini oshirish**
+   ombordan qoldiqni qayta sarflar, lekin qator hamon `cancelled` bo'lgani
+   uchun na hisobga kirar, na uni qayta bekor qilib qoldiqni qaytarib
+   bo'lardi (`cancelOrderItem` faqat `active` qatorni qaytaradi) — qoldiq
+   butunlay yo'qolardi. Endi status guard bor.
+2. `routes/adminCustomerOrders.js` — **holat sikli**:
+   `cancelled -> completed -> cancelled -> completed` har aylanishda qoldiqni
+   yana bir marta yeb ketardi.
+3. `routes/chefKitchen.js` — **oshpaz ombor mantig'ini butunlay chetlab
+   o'tardi** (faqat `UPDATE customer_orders SET status`).
+
+   **Yechim:** yangi **`server/services/customerOrders.js`** — yagona
+   `transition()`. Ombor holati endi O'TISHDAN chamalanmaydi, u bazada
+   saqlanadi: **`customer_orders.stock_state`** = `held` / `released` /
+   `spent`. Shu sabab har o'tish **idempotent**.
+   `spent` — 2026-09-09 auditidagi "tayyorlangan taomdan keyin ombor
+   qaytarilmaydi" qoidasini SAQLAB QOLADI (u ataylab kiritilgan edi), lekin
+   uni sikl takrorlanishiga chidamli qiladi.
+
+4. **Mijoz buyurtmasini o'chirish 500 berardi** (statik tahlilda topilmagan,
+   testlar aniqladi). `inventory_movements.customer_order_item_id` FK'si
+   `ON DELETE` qoidasisiz, `PRAGMA foreign_keys=ON`. `DELETE` avval ombor
+   qaytarib (YANGI movement yozib), keyin `customer_order_items` ni
+   o'chirardi -> `FOREIGN KEY constraint failed`. Ya'ni **omborga bog'langan
+   taomi bor har qanday mijoz buyurtmasini admin o'chira olmasdi**. Endi
+   harakat tarixidagi havola avval `NULL` qilinadi (tarix o'chmaydi).
+
+5. **`orders.status` ga `cancelled` qo'shildi.** Bo'sh buyurtmani bekor
+   qilish uni `closed` qilib qo'yardi -> hisobotda haqiqiy buyurtma bo'lib
+   sanalar, kassir "Hisoblar" ro'yxatida **0 so'mlik soxta chek** bo'lib
+   chiqardi. Migratsiya eski shunday yozuvlarni ko'chiradi.
+
+6. **Tekin taom.** `inventory_items.sale_price` standart qiymati `0`. Sotuv
+   narxini kiritishni unutish -> bog'langan menyu taomi narxi 0 -> mijoz
+   landing sahifasidan **tekinga** buyurtma berardi. Ikki kirish yo'li ham
+   yopildi: yangi bog'lash va mavjud mahsulot narxini 0 ga tushirish
+   (`syncMenuPricing` endi narxga tegmaydi).
+
+7. **Dublikat menyu bandi.** `ensureMenuLink()` mavjud bog'lanishni
+   `AND is_active = 1` bilan qidirardi -> bog'langan taom soft-delete
+   qilingan bo'lsa ikkinchi nusxa yaratardi.
+
+8. **Kassir "Jami" summasi kam ko'rsatardi.** `kassirBilling /bills` da
+   `total_amount` `.slice(0, 300)` dan KEYIN hisoblanardi. Endi ikkala manba
+   bitta `UNION ALL` ga birlashtirildi: ro'yxat 300 ta bilan cheklangan,
+   jami va `count` esa SQL `SUM()`/`COUNT()` bilan hammasi bo'yicha.
+
+9. **Qo'lda cheklar daromadga kirmasdi.** `adminReports /summary` revenue
+   `manual_bills` ni umuman ko'rmasdi — admin "Hisobot" va kassir
+   "Statistika" turli tushum ko'rsatardi.
+
+10. **Hisobot o'tmishga qarab o'zgarardi.** COGS `menu_items.cost_price` dan
+    JONLI o'qilardi. Admin bugun tan narxni o'zgartirsa, allaqachon yopilgan
+    o'tgan oylarning "Sof foyda"si ham qayta hisoblanardi. Endi
+    **`cost_price_snapshot`** (`order_items` va `customer_order_items`) —
+    sotuv paytida to'ldiriladi. Sotuv narxi (`unit_price`) allaqachon nusxa
+    edi, tan narx esa emas — shu nomuvofiqlik yopildi.
+
+### Xavfsizlik tuzatishlari
+
+- **Server toza klonda ko'tarilmasdi (eng kritik).** `routes/adminQz.js`
+  modul yuklanish paytida `private-key.pem` ni o'qirdi, u esa `.gitignore`da
+  -> `npm start` `ENOENT` bilan yiqilardi va chek chop etishga aloqasi yo'q
+  butun ilova ishlamasdi. Endi kalit **lazy** o'qiladi: kalit bo'lmasa faqat
+  `/api/qz` `503` qaytaradi.
+- **Sessiya hech qachon eskirmasdi.** Cookie faqat `user.id` ni imzolardi:
+  o'g'irlangan cookie abadiy ishlardi, parol tiklash uni bekor qilmasdi,
+  yagona chora hisobni butunlay bloklash edi.
+  Endi format `"<userId>.<authStamp>.<issuedAtMs>"`, 30 kunlik muddat
+  **serverda** majburlanadi. `authStamp = HMAC(SESSION_SECRET, password_hash
+  + session_version)` — Django'ning `session_auth_hash` yondashuvi: parol
+  **har qanday yo'l bilan** o'zgarsa (API, qo'lda SQL, kelajakdagi yangi
+  route) sessiya avtomatik o'ladi. Parol xeshi cookie'ga oshkor bo'lmaydi.
+  **Eski formatdagi cookie'lar rad etiladi** — joylashtirilganda hamma bir
+  marta qayta login qiladi (bu ataylab).
+  Yangi ustun: **`users.session_version`** (parol tiklanganda / hisob
+  bloklanganda oshiriladi).
+- **`/api/login` da hech qanday cheklov yo'q edi** (CLAUDE.md "Xavfsizlik —
+  2026-08-26" da ataylab qoldirilgan deb belgilangan). Brute-force'dan
+  tashqari **DoS**: parol tekshiruvi `scrypt` (~50-100 ms) va u SINXRON —
+  o'nlab parallel so'rov butun saytni qotirardi.
+  Endi ikki qatlam, faqat MUVAFFAQIYATSIZ urinish sanaladi
+  (`skipSuccessful`): **hisob bo'yicha 10/15 daq** (IP almashtirish yordam
+  bermaydi — asosiy himoya) va **IP bo'yicha 40/15 daq** (hajmli hujumga
+  qarshi; ataylab yuqoriroq, chunki bitta NAT ortida butun restoran
+  planshetlari bo'lishi mumkin).
+  `createRateLimiter` ga `keyFn` / `skipSuccessful` qo'shildi; xotira
+  tozalash ham vaqt bo'yicha (ilgari faqat 5000 yozuvdan keyin, keyin HAR
+  so'rovda to'liq skan).
+- **`ADMIN_PASSWORD` endi majburiy.** Ilgari `|| 'change-me'` — parolni
+  qo'yishni unutish JIMGINA hammaga ma'lum parolli admin hisobi yaratardi.
+- **`SESSION_SECRET` bo'sh bo'lsa endi ogohlantiradi** (avvalgidek ishlaydi,
+  lekin jim emas — PM2 crash-loop bo'lsa "nega hamma doim chiqib ketyapti?"
+  degan tushunarsiz muammoga aylanardi).
+- **Xavfsizlik sarlavhalari** (hech qanday yo'q edi): CSP,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options`,
+  `Permissions-Policy`. Ataylab `helmet` o'rniga qo'lda — loyihaning mavjud
+  falsafasi shu. CSP ro'yxati haqiqatda ishlatiladigan manbalardan
+  (`cdn.jsdelivr.net` QZ Tray, `fonts.googleapis.com`,
+  `images.unsplash.com`, `www.google.com` xarita iframe, `ws/wss localhost`
+  QZ Tray aloqasi). ATTENTION: `'unsafe-inline'` qoldirildi (login.html
+  inline `<script>` + 90 dan ortiq inline `style=`), shu sabab CSP bu yerda
+  XSS'ga to'liq himoya emas — asosiy himoya hamon `escapeHtml()`.
+- **Oxirgi faol adminni yo'qotib qo'yish mumkin edi** —
+  `PUT /admin/users/:id` orqali admin o'z rolini o'zgartirishi yoki o'zini
+  bloklashi mumkin edi va tizimga kirish imkoni qolmasdi (`DELETE` da himoya
+  bor edi, `PUT` da yo'q).
+- **`userHasActivity()` ga `manual_bills` va `inventory_movements` qo'shildi**
+  — ular yetishmayotgan edi, natijada kassir (chek chiqargan) yoki ombor
+  tuzatishi qilgan xodimni o'chirishga urinilganda
+  `SQLITE_CONSTRAINT_FOREIGNKEY` otar va foydalanuvchi sababi tushunarsiz
+  "Server xatosi" ko'rardi.
+- **QZ `/sign` ga 4 KB uzunlik chegarasi** — ilgari ixtiyoriy uzunlikdagi har
+  qanday satrni server kaliti bilan imzolab berardi.
+
+### Migratsiyalar (hammasi idempotent, haqiqiy eski baza ustida sinalgan)
+
+`migrateAddUserSessionVersion` -> `migrateSyncUserRoles` ->
+`migrateSyncOrderStatus` -> ... -> `migrateAddCustomerOrderStockState` ->
+`migrateAddOrderItemCostSnapshot`
+
+**TARTIB MUHIM:** `session_version` `migrateSyncUserRoles()` dan OLDIN
+qo'shilishi shart — u jadvalni qayta qurayotganda ustunlarni nom bo'yicha
+ko'chiradi, ustun hali bo'lmasa `INSERT...SELECT` "no such column" bilan
+yiqilardi. `migrateSyncOrderStatus()` `orders` jadvalini qayta quradi, shu
+sabab uning 3 ta indeksini QO'LDA tiklaydi (`ensureSchema()` bu
+migratsiyadan oldin ishlagani uchun `CREATE INDEX IF NOT EXISTS` ularni
+qayta yaratmaydi).
+
+**Tekshirilgan:** realistik eski production sxemasi (kassir roli yo'q,
+`cancelled` yo'q, yangi ustunlar yo'q, ma'lumot bilan) yaratilib, unga barcha
+migratsiyalar qo'llandi — CHECK'lar yangilandi, eski soxta-yopilgan buyurtma
+`cancelled`ga, bekor qilingan mijoz buyurtmasi `released`ga ko'chdi, tan narx
+nusxalari to'ldirildi, `order_items` va FK butunligi saqlandi, indekslar
+tiklandi, ikkinchi marta ishga tushirilganda hech narsa qilmadi.
+
+**Haqiqiy HTTP smoke-test:** `/api/ping`, `/login.html`, `/landing/`,
+`/api/public/menu` -> 200; `/api/me`, `/api/qz/certificate` cookiesiz -> 401;
+`/admin/index.html` -> 302; to'liq login oqimi (noto'g'ri parol 401 -> login
+200 -> `/api/me` 200 -> `/api/admin/users` 200 -> parol tiklash 200 -> **eski
+cookie 401** -> yangi parol bilan login 200).
+
+### HALI SINALMAGAN / KEYINGI QADAMLAR
+
+- Brauzerda vizual tekshiruv — **CSP biror narsani buzmaganini tasdiqlash
+  uchun SHART** (landing xaritasi, shriftlar, QZ Tray chek chop etish).
+- QZ Tray bilan haqiqiy printerga chek chop etish.
+- Production'ga deploy (`git pull` + `npm run migrate` + `pm2 restart polat`).
+  Deploy'dan keyin barcha xodimlar bir marta qayta login qilishi kerak —
+  cookie formati o'zgardi.
+- Arxitektura ishlari (hali qilinmagan): versiyalangan migratsiya tizimi
+  (`schema_migrations`), `lib/permissions.js` (URL prefiksiga asoslangan
+  avtorizatsiya o'rniga), qolgan 13 route faylni servis qatlamiga ko'chirish,
+  pagination va N+1 so'rovlar.

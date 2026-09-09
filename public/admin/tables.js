@@ -39,7 +39,9 @@ function closeModal() { document.getElementById('modal').classList.add('hidden')
 
 document.getElementById('addBtn').addEventListener('click', () => openModal(null));
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
-document.getElementById('saveBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10): sekin tarmoqda
+// ikkinchi bosish ikkinchi POST yuborib, dublikat stol yaratardi.
+document.getElementById('saveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const name = document.getElementById('fName').value.trim();
   const sort_order = Number(document.getElementById('fSort').value) || 0;
   if (!name) return toast('Nomini kiriting', 'error');
@@ -55,10 +57,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 async function delTable(id) {
-  if (!confirm("Stolni o'chirasizmi?")) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  if (!(await customConfirm("Stolni o'chirasizmi?"))) return;
   try {
     await api(`/admin/tables/${id}`, { method: 'DELETE' });
     toast("O'chirildi");

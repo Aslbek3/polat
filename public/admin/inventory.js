@@ -116,7 +116,9 @@ function closeInvModal() { document.getElementById('invModal').classList.add('hi
 
 document.getElementById('addItemBtn').addEventListener('click', () => openInvModal(null));
 document.getElementById('invCancelBtn').addEventListener('click', closeInvModal);
-document.getElementById('invSaveBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10). Sekin tarmoqda
+// ikkinchi bosish ikkinchi POST yuborib, omborda dublikat mahsulot yaratardi.
+document.getElementById('invSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const name = document.getElementById('invName').value.trim();
   const volume = document.getElementById('invVolume').value.trim();
   const unit = document.getElementById('invUnit').value.trim() || 'dona';
@@ -148,7 +150,7 @@ document.getElementById('invSaveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 async function delItem(id) {
   const item = inventoryItems.find((i) => i.id === id);
@@ -190,7 +192,11 @@ function openAdjustModal(id, mode) {
 function closeAdjustModal() { document.getElementById('adjustModal').classList.add('hidden'); adjustingInvId = null; }
 
 document.getElementById('adjustCancelBtn').addEventListener('click', closeAdjustModal);
-document.getElementById('adjustSaveBtn').addEventListener('click', async () => {
+// ⚠️ withBusy() bu yerda ENG MUHIM (2026-09-10): bu POST idempotent EMAS.
+// Sekin tarmoqda "Kirim qilish" ikki marta bosilsa omborga miqdor IKKI MARTA
+// qo'shilardi va `inventory_movements`ga ikkita yozuv tushardi — qoldiq
+// haqiqatdan uzilib, sababini keyin topib bo'lmasdi.
+document.getElementById('adjustSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const qty = Number(document.getElementById('adjustDelta').value);
   const note = document.getElementById('adjustNote').value.trim();
   if (!Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
@@ -205,7 +211,7 @@ document.getElementById('adjustSaveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 // ---------------- Tarix (har bir kirim/chiqim harakati) ----------------
 

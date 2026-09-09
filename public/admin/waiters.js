@@ -70,7 +70,10 @@ function closeModal() { document.getElementById('modal').classList.add('hidden')
 
 document.getElementById('addBtn').addEventListener('click', () => openModal(null));
 document.getElementById('cancelBtn').addEventListener('click', closeModal);
-document.getElementById('saveBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10): sekin tarmoqda
+// ikkinchi bosish ikkinchi POST yuborardi va "bu login band" degan yolg'on
+// xato ko'rsatardi (aslida birinchi so'rov muvaffaqiyatli edi).
+document.getElementById('saveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const full_name = document.getElementById('fFullName').value.trim();
   const role = document.getElementById('fRole').value;
   try {
@@ -89,7 +92,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 function openResetModal(id) {
   resettingId = id;
@@ -97,7 +100,8 @@ function openResetModal(id) {
   document.getElementById('resetModal').classList.remove('hidden');
 }
 document.getElementById('resetCancelBtn').addEventListener('click', () => document.getElementById('resetModal').classList.add('hidden'));
-document.getElementById('resetSaveBtn').addEventListener('click', async () => {
+// withBusy() — ikki marta bosishdan himoya (2026-09-10).
+document.getElementById('resetSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
   const password = document.getElementById('rPassword').value;
   if (!password || password.length < 6) return toast('Parol kamida 6 belgi', 'error');
   try {
@@ -107,13 +111,14 @@ document.getElementById('resetSaveBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
-});
+}));
 
 async function delUser(id, hard) {
   const msg = hard
     ? "Bu xodimni butunlay o'chirasizmi? Bu amalni ortga qaytarib bo'lmaydi."
     : "Bu foydalanuvchini faolsizlantirasizmi? U endi tizimga kira olmaydi.";
-  if (!confirm(msg)) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  if (!(await customConfirm(msg))) return;
   try {
     const res = await api(`/admin/users/${id}`, { method: 'DELETE' });
     toast(res && res.hardDeleted ? "O'chirildi" : 'Faolsizlantirildi');

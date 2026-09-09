@@ -31,9 +31,22 @@
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
       const errorEl = document.getElementById('errorMsg');
+      const submitBtn = e.target.querySelector('button');
       errorEl.textContent = '';
+      // Ikki marta bosishdan himoya — `scrypt` sinxron, ikkinchi so'rov
+      // serverni bekorga bloklaydi va rate-limit hisoblagichini ham oshiradi.
+      if (submitBtn) submitBtn.disabled = true;
       try {
-        const data = await api('/login', { method: 'POST', body: { username, password } });
+        // `noAuthRedirect` SHART: aks holda noto'g'ri parol (401) shu
+        // sahifaning O'ZINI qayta yuklab yuboradi va xato xabari ekranda
+        // ko'rinishga ulgurmaydi (2026-09-10, public/app.js api() izohiga
+        // qarang — bu xodimni sababini bilmagan holda 15 daqiqaga
+        // qulflanishiga olib kelardi).
+        const data = await api('/login', {
+          method: 'POST',
+          body: { username, password },
+          noAuthRedirect: true,
+        });
         if (data.role === 'admin') {
           window.location.href = 'admin/index.html';
         } else if (data.role === 'chef') {
@@ -47,6 +60,8 @@
         }
       } catch (err) {
         errorEl.textContent = err.message || "Kirishda xatolik";
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
       }
     });
   </script>

@@ -45,7 +45,8 @@ async function setStatus(id, status) {
 }
 
 async function delReservation(id) {
-  if (!confirm("Bronni o'chirasizmi?")) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  if (!(await customConfirm("Bronni o'chirasizmi?"))) return;
   try {
     await api(`/admin/reservations/${id}`, { method: 'DELETE' });
     toast("O'chirildi");
