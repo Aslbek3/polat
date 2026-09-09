@@ -58,15 +58,24 @@ router.get('/bills', asyncRoute((req, res) => {
   if (from) { manualSql += ' AND date(mb.created_at) >= date(?)'; manualParams.push(from); }
   if (to) { manualSql += ' AND date(mb.created_at) <= date(?)'; manualParams.push(to); }
 
-  const combined = [
-    ...db.prepare(tableSql).all(...tableParams),
-    ...db.prepare(manualSql).all(...manualParams),
-  ]
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
-    .slice(0, 300);
+  // NEGA (2026-09-10): ilgari ikkala manba JS'da birlashtirilib `slice(0, 300)`
+  // bilan qisqartirilar, jami summa va son esa SHU QISQARTIRILGAN ro'yxatdan
+  // hisoblanardi. Natijada oraliqda 300 dan ko'p hisob bo'lsa kassir ekranidagi
+  // "Jami summa" va "Yopilgan hisoblar" jimgina KAM ko'rsatardi (hech qanday
+  // ogohlantirishsiz). Endi ikkala manba bitta UNION ALL so'roviga birlashtirildi
+  // va u ikki marta ishlatiladi: biri — ko'rsatiladigan ro'yxat (avvalgidek eng
+  // yangi 300 tasi), ikkinchisi — oraliqdagi BARCHA hisoblar bo'yicha SUM/COUNT.
+  const unionSql = `${tableSql} UNION ALL ${manualSql}`;
+  const unionParams = [...tableParams, ...manualParams];
 
-  const totalAmount = combined.reduce((sum, r) => sum + (r.total_amount || 0), 0);
-  res.json({ bills: combined, total_amount: totalAmount, count: combined.length });
+  const bills = db
+    .prepare(`SELECT * FROM (${unionSql}) b ORDER BY b.at DESC LIMIT 300`)
+    .all(...unionParams);
+  const totals = db
+    .prepare(`SELECT COALESCE(SUM(b.total_amount), 0) AS total_amount, COUNT(*) AS cnt FROM (${unionSql}) b`)
+    .get(...unionParams);
+
+  res.json({ bills, total_amount: totals.total_amount, count: totals.cnt });
 }));
 
 module.exports = router;

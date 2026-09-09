@@ -22,11 +22,22 @@ router.get('/summary', asyncRoute((req, res) => {
   //  - landing `customer_orders`: status='completed' (buyurtma bajarilgan),
   //    sana sifatida created_at ishlatiladi — bu jadvalda alohida "bajarilgan
   //    vaqt" ustuni yo'q (faqat created_at bor), shu sabab taxminiy sana.
+  //  - kassirning `manual_bills` cheklari (2026-09-10'da QO'SHILDI). NEGA:
+  //    ilgari uchinchi manba butunlay unutilgan edi — kassir "Hisoblash"
+  //    bo'limi orqali chiqargan har bir chek admin hisobotidan yo'qolar,
+  //    natijada admin "Hisobot" sahifasi va kassir "Statistika" sahifasi
+  //    turli tushum ko'rsatardi. Bu jadvalda status yo'q (chek yaratilishining
+  //    o'zi = to'lov qilingan), sana maydoni — created_at. Bu cheklar
+  //    `orders_count`ga ham kiradi: ular ham haqiqiy sotuv hodisasi.
+  //    Eslatma: qo'lda chek qatorlari menyuga bog'lanmagani uchun (`manual_bill_items`
+  //    da `menu_item_id` yo'q) ularning tan narxi (COGS) hisoblanmaydi.
   let revenueSql = `
     SELECT COALESCE(SUM(total_amount), 0) AS revenue, COUNT(*) AS orders_count FROM (
       SELECT total_amount, closed_at AS revenue_date FROM orders WHERE status = 'closed'
       UNION ALL
       SELECT total_amount, created_at AS revenue_date FROM customer_orders WHERE status = 'completed'
+      UNION ALL
+      SELECT total_amount, created_at AS revenue_date FROM manual_bills
     ) combined WHERE 1=1
   `;
   const revenueParams = [];

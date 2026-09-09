@@ -236,6 +236,14 @@ router.post('/items', asyncRoute((req, res) => {
   if (category.require_inventory_link && !invRow) {
     return res.status(400).json({ error: "Bu bo'lim faqat ombor bilan bog'langan taomlarni qabul qiladi" });
   }
+  // Ombor bilan bog'langan taomning narxi ombordan olinadi — lekin o'sha narx 0
+  // bo'lsa taom mijozga TEKINGA tushib qoladi (2026-09-10 auditi, batafsil izoh
+  // server/services/inventory.js'dagi MENU_PRICE_ERROR yonida). Shu sabab
+  // bunday bog'lanish yaratilmaydi: avval ombor mahsulotiga sotuv narxi
+  // kiritilishi kerak.
+  if (invRow && !inventory.hasMenuPrice(invRow)) {
+    return res.status(400).json({ error: inventory.MENU_PRICE_ERROR });
+  }
   const finalPrice = invRow ? invRow.sale_price : Math.round(priceNum);
   // Tan narx ham xuddi shunday — bog'langan bo'lsa ombordan, aks holda admin qo'lda
   // kiritgan (ixtiyoriy, bo'sh qoldirilsa NULL) qiymat.
@@ -308,7 +316,18 @@ router.put('/items/:id', asyncRoute((req, res) => {
   if (category.require_inventory_link && !effectiveInvRow && (categoryChanged || linkChanged)) {
     return res.status(400).json({ error: "Bu bo'lim faqat ombor bilan bog'langan taomlarni qabul qiladi" });
   }
-  const price = effectiveInvRow ? effectiveInvRow.sale_price : priceRaw;
+  // Sotuv narxi 0 bo'lgan ombor mahsuloti menyu narxini 0 ga tushirmaydi
+  // (2026-09-10 auditi — POST'dagi bilan bir xil sabab). Bog'lanish AYNAN shu
+  // so'rovda o'rnatilayotgan bo'lsa (linkChanged) — rad etiladi; avvaldan
+  // mavjud bog'lanishda esa taomning boshqa maydonlarini tahrirlash
+  // bloklanmaydi, faqat narx eski (musbat) qiymatida qoldiriladi —
+  // services/inventory.js'dagi syncMenuPricing() bilan bir xil xulq.
+  if (effectiveInvRow && !inventory.hasMenuPrice(effectiveInvRow) && linkChanged) {
+    return res.status(400).json({ error: inventory.MENU_PRICE_ERROR });
+  }
+  const price = effectiveInvRow
+    ? (inventory.hasMenuPrice(effectiveInvRow) ? effectiveInvRow.sale_price : existing.price)
+    : priceRaw;
   const costPrice = effectiveInvRow ? effectiveInvRow.cost_price : costPriceRaw;
   const isAvailable = effectiveInvRow ? inventory.computeAvailability(effectiveInvRow) : existing.is_available;
 

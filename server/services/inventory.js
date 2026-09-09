@@ -57,6 +57,21 @@ function computeAvailability(item) {
   return item.is_active && item.quantity > 0 ? 1 : 0;
 }
 
+// Menyuga chiqadigan narx hech qachon 0 bo'lmasligi kerak (2026-09-10 auditida
+// topildi). `inventory_items.sale_price` ustunining standart qiymati 0 — ya'ni
+// admin sotuv narxini kiritmasdan mahsulot qo'shsa, u menyuga 0 so'mlik taom
+// bo'lib tushardi va mijoz uni landing sahifasidan TEKINGA buyurtma qila olardi.
+// Shu sabab endi 0 (yoki manfiy) sotuv narxi menyuga umuman o'tkazilmaydi:
+// yangi bog'lash rad etiladi, mavjud taomning narxi esa eski (musbat) qiymatida
+// qoldiriladi.
+const MENU_PRICE_ERROR =
+  "Ombor mahsulotining sotuv narxi kiritilmagan (0) — menyuga bog'lashdan oldin narxni kiriting, aks holda taom mijozga tekinga tushadi";
+
+function hasMenuPrice(item) {
+  const price = Number(item?.sale_price);
+  return Number.isFinite(price) && price > 0;
+}
+
 // Ombor mahsuloti menyuda hali hech qanday taomga bog'lanmagan bo'lsa — shu
 // mahsulot asosida (nomi/hajmi/sotuv narxi) YANGI menyu taomini avtomatik
 // yaratib, darhol bog'laydi. Allaqachon bog'langan bo'lsa (bitta yoki bir nechta
@@ -69,12 +84,24 @@ function ensureMenuLink(inventoryItemId, categoryId) {
   const category = db.prepare('SELECT id FROM menu_categories WHERE id = ?').get(catId);
   if (!category) throw new InventoryError("Menyu bo'limi topilmadi", 404);
 
+  // is_active FILTRSIZ qidiriladi (2026-09-10'da tuzatildi) — ilgari faqat
+  // `is_active = 1` bo'yicha qidirilardi, shu sabab admin bog'langan taomni
+  // Menyu bo'limidan o'chirgan (soft-delete: is_active=0, lekin
+  // inventory_item_id hamon o'sha mahsulotga ishora qiladi) bo'lsa, bu yer
+  // "bog'lanmagan" deb hisoblab, xuddi shu mahsulot uchun DUBLIKAT menyu taomi
+  // yaratardi. O'chirilgan taomni qaytarish Menyu bo'limidagi "♻️ Tiklash"
+  // orqali bo'ladi — bu yer uni jim tiklab yubormaydi.
   const alreadyLinked = db
-    .prepare('SELECT 1 FROM menu_items WHERE inventory_item_id = ? AND is_active = 1 LIMIT 1')
+    .prepare('SELECT 1 FROM menu_items WHERE inventory_item_id = ? LIMIT 1')
     .get(inventoryItemId);
   if (alreadyLinked) return;
 
   const item = getItemRow(inventoryItemId);
+  // Sotuv narxi kiritilmagan bo'lsa — menyuga umuman chiqarmaymiz (izoh
+  // MENU_PRICE_ERROR yonida, 2026-09-10). Mahsulotning o'zi saqlanib qoladi,
+  // chaqiruvchi (createItem/updateItem) buni faqat ogohlantirish sifatida
+  // ko'rsatadi, admin narxni kiritib qayta saqlaganda bog'lanish yaratiladi.
+  if (!hasMenuPrice(item)) throw new InventoryError(MENU_PRICE_ERROR);
   const ts = nowIso();
   const isAvailable = computeAvailability(item);
   // cost_price ham shu yerda darhol o'tkaziladi (2026-09-09'da tuzatildi —
@@ -229,9 +256,22 @@ function syncMenuPricing(inventoryItemId) {
   // cost_price ham price bilan BIRGA yangilanadi (2026-09-09'da tuzatildi —
   // ilgari faqat price/sale_price yangilanardi, tan narx o'zgarganda menyudagi
   // "foyda" ko'rsatkichi/hisobotdagi COGS eskirgan qiymat bilan qolib ketardi).
-  db.prepare('UPDATE menu_items SET price = ?, cost_price = ?, updated_at = ? WHERE inventory_item_id = ?').run(
-    item.sale_price, item.cost_price, nowIso(), inventoryItemId
-  );
+  //
+  // Sotuv narxi 0 (yoki manfiy) bo'lsa — menyu narxi TEGILMAYDI (2026-09-10'da
+  // tuzatildi). Ilgari qiymat ko'r-ko'rona ko'chirilardi: admin ombor
+  // mahsulotining sotuv narxini 0 ga tushirishi (yoki bo'sh qoldirishi) bilan
+  // menyudagi taom 0 so'mga aylanib, mijoz uni landing sahifasidan tekinga
+  // buyurtma qila olardi. Tan narx (cost_price) esa 0 bo'lishi mumkin — u
+  // faqat foyda hisobiga ta'sir qiladi, shuning uchun har doim yangilanadi.
+  if (hasMenuPrice(item)) {
+    db.prepare('UPDATE menu_items SET price = ?, cost_price = ?, updated_at = ? WHERE inventory_item_id = ?').run(
+      item.sale_price, item.cost_price, nowIso(), inventoryItemId
+    );
+  } else {
+    db.prepare('UPDATE menu_items SET cost_price = ?, updated_at = ? WHERE inventory_item_id = ?').run(
+      item.cost_price, nowIso(), inventoryItemId
+    );
+  }
 }
 
 // Admin qo'lda kirim/chiqim qiladi (masalan yangi partiya suv keldi, yoki
@@ -317,6 +357,10 @@ function listMovements(inventoryItemId, limit = 50) {
 
 module.exports = {
   InventoryError,
+  // adminMenu.js ham taomni omborga bog'lashda xuddi shu tekshiruvni ishlatadi —
+  // qoida ikki joyda qayta yozilmasin uchun shu yerdan eksport qilinadi.
+  MENU_PRICE_ERROR,
+  hasMenuPrice,
   listItems,
   getItemRow,
   createItem,
