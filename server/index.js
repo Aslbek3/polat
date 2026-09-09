@@ -60,7 +60,18 @@ app.use('/api/admin/reports', auth.requireRole('admin'), require('./routes/admin
 app.use('/api/admin/reservations', auth.requireRole('admin'), require('./routes/adminReservations'));
 app.use('/api/admin/customer-orders', auth.requireRole('admin'), require('./routes/adminCustomerOrders'));
 app.use('/api/admin/print-requests', auth.requireRole('admin'), require('./routes/adminPrintRequests'));
-app.use('/api/admin/qz', auth.requireRole('admin'), require('./routes/adminQz'));
+// '/api/admin/qz' EMAS, '/api/qz' — 2026-09-09'da topilgan bug: kassir
+// sahifasi (public/kassir/*) chek chop etishda public/app.js'dagi UMUMIY
+// printReceiptView()/setupQzSecurity() orqali shu yerga murojaat qiladi, lekin
+// kassir 'admin' emas. requireRole(['admin','kassir']) yetarli emas edi —
+// auth.js'dagi requireAuth() O'ZI, bu router'ga yetib kelishdan OLDIN, HAR
+// QANDAY '/api/admin/*' yo'lni faqat 'admin' roliga yopib qo'yadi (areaRole
+// tekshiruvi, URL prefiksiga qarab). Shu sabab yo'l butunlay '/api/admin/'
+// prefiksidan tashqariga ('/api/qz') ko'chirildi — endi faqat pastdagi
+// requireRole(['admin','kassir']) ishlaydi. Bu endpointlar faqat ochiq
+// sertifikat + imzolash (yozish/o'qish huquqi bermaydi, faqat printer
+// ulanishini tasdiqlaydi) — kassirga ham ochish xavfsiz.
+app.use('/api/qz', auth.requireRole(['admin', 'kassir']), require('./routes/adminQz'));
 
 app.use('/api/waiter', require('./routes/waiterTables'));
 app.use('/api/waiter', require('./routes/waiterMenu'));
@@ -73,6 +84,7 @@ app.use('/api/courier', auth.requireRole(['admin', 'courier']), require('./route
 
 app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirTables'));
 app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirBilling'));
+app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirMenu'));
 
 app.use('/api/delivery-alerts', auth.requireRole(['admin', 'chef', 'courier']), require('./routes/deliveryAlerts'));
 

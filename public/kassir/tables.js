@@ -23,6 +23,7 @@ async function loadTables() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initNav('tables');
   loadTables();
   setInterval(loadTables, 10000);
 });

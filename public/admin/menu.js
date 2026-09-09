@@ -4,6 +4,10 @@ let inventoryItems = []; // Ombor mahsulotlari (taom modalidagi bog'lash select'
 let editingCatId = null;
 let editingItemId = null;
 let itemModalCategoryId = null;
+// itemModalParentId — "+ Turi qo'shish" bilan ochilganda ota taom id'si
+// (2026-09-09). Yangi ASOSIY taom qo'shilayotganda yoki mavjud taom
+// tahrirlanayotganda null/mos qiymatga o'rnatiladi (openItemModal()ga qarang).
+let itemModalParentId = null;
 let currentImageUrl = null; // taom modalida hozir tanlangan rasm URL'i (ixtiyoriy, null bo'lishi mumkin)
 // O'chirilgan (is_active=0) kategoriya/taomlar bo'limi ochiq/yopiqligi —
 // standart holatda yopiq (2026-09-09'da qo'shildi, pastdagi izohga qarang).
@@ -44,6 +48,35 @@ async function loadAll() {
   }
 }
 
+// Bitta taom qatorini chizadi — asosiy taom UCHUN HAM, "turi" (variant) UCHUN
+// HAM bir xil ko'rinish (variant biroz kichikroq/chekinib chiqadi,
+// isVariant=true bo'lganda). 2026-09-09'da "turi" funksiyasi qo'shilganda
+// avvalgi inline shablon shu funksiyaga chiqarildi (nested render uchun).
+function renderItemRow(it, c, isVariant) {
+  return `
+    <div class="menu-item-row${isVariant ? ' menu-item-variant' : ''}">
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); flex-shrink:0;">` : ''}
+        <div>
+          <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="dim" style="font-weight:400;">(${escapeHtml(it.volume)})</span>` : ''}</div>
+          <div class="mi-price">${fmtMoney(it.price)}${it.cost_price != null ? ` <span class="dim" style="font-size:12px; font-weight:400;">(tan narxi ${fmtMoney(it.cost_price)}, foyda ${fmtMoney(it.price - it.cost_price)})</span>` : ''}</div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        ${it.inventory_item_id
+          ? `<span class="badge ${it.inventory_quantity > 0 ? 'ok' : 'low'}">📦 ${escapeHtml(it.inventory_name || '')}${it.inventory_volume ? ` (${escapeHtml(it.inventory_volume)})` : ''}: ${it.inventory_quantity} ${escapeHtml(it.inventory_unit || '')}</span>`
+          : c.require_inventory_link
+            ? `<span class="badge low" title="Bu bo'lim faqat ombor bilan bog'langan taomlarni ko'rsatadi — bog'lanmaguncha mijoz/afitsiant menyusida yashirin">🚫 Yashirin (ombor yo'q)</span>`
+            : `<label style="display:flex; align-items:center; gap:4px; font-size:12px;">
+                 <input type="checkbox" data-avail="${it.id}" ${it.is_available ? 'checked' : ''}> mavjud
+               </label>`}
+        <button class="btn small" data-edit-item="${it.id}">✎</button>
+        <button class="btn small danger" data-del-item="${it.id}">🗑</button>
+      </div>
+    </div>
+  `;
+}
+
 function render() {
   const box = document.getElementById('categoryList');
   const activeCategories = categories.filter((c) => c.is_active);
@@ -54,7 +87,10 @@ function render() {
   const catsHtml = activeCategories.length === 0
     ? '<p class="dim">Hali faol kategoriya yo\'q.</p>'
     : activeCategories.map((c) => {
-    const catItems = items.filter((it) => it.category_id === c.id && it.is_active);
+    // Faqat ASOSIY taomlar (parent_item_id yo'q) shu bo'limda to'g'ridan-to'g'ri
+    // ko'rsatiladi — har birining "turi" (variant) 2026-09-09'da qo'shilgan
+    // pastdagi ichma-ich ro'yxatda, "+ Turi qo'shish" tugmasi bilan chiqadi.
+    const catItems = items.filter((it) => it.category_id === c.id && it.is_active && !it.parent_item_id);
     return `
       <div class="card">
         <div class="card-row">
@@ -65,28 +101,15 @@ function render() {
           </div>
         </div>
         <div class="mt-8">
-          ${catItems.length === 0 ? '<p class="dim" style="font-size:13px;">Taom yo\'q</p>' : catItems.map((it) => `
-            <div class="menu-item-row">
-              <div style="display:flex; align-items:center; gap:10px;">
-                ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); flex-shrink:0;">` : ''}
-                <div>
-                  <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="dim" style="font-weight:400;">(${escapeHtml(it.volume)})</span>` : ''}</div>
-                  <div class="mi-price">${fmtMoney(it.price)}${it.cost_price != null ? ` <span class="dim" style="font-size:12px; font-weight:400;">(tan narxi ${fmtMoney(it.cost_price)}, foyda ${fmtMoney(it.price - it.cost_price)})</span>` : ''}</div>
-                </div>
+          ${catItems.length === 0 ? '<p class="dim" style="font-size:13px;">Taom yo\'q</p>' : catItems.map((it) => {
+            const variants = items.filter((v) => v.parent_item_id === it.id && v.is_active);
+            return renderItemRow(it, c, false) + `
+              <div class="menu-item-variants">
+                ${variants.map((v) => renderItemRow(v, c, true)).join('')}
+                <button class="btn small" data-add-variant="${it.id}">+ Turi qo'shish</button>
               </div>
-              <div style="display:flex; align-items:center; gap:6px;">
-                ${it.inventory_item_id
-                  ? `<span class="badge ${it.inventory_quantity > 0 ? 'ok' : 'low'}">📦 ${escapeHtml(it.inventory_name || '')}${it.inventory_volume ? ` (${escapeHtml(it.inventory_volume)})` : ''}: ${it.inventory_quantity} ${escapeHtml(it.inventory_unit || '')}</span>`
-                  : c.require_inventory_link
-                    ? `<span class="badge low" title="Bu bo'lim faqat ombor bilan bog'langan taomlarni ko'rsatadi — bog'lanmaguncha mijoz/afitsiant menyusida yashirin">🚫 Yashirin (ombor yo'q)</span>`
-                    : `<label style="display:flex; align-items:center; gap:4px; font-size:12px;">
-                         <input type="checkbox" data-avail="${it.id}" ${it.is_available ? 'checked' : ''}> mavjud
-                       </label>`}
-                <button class="btn small" data-edit-item="${it.id}">✎</button>
-                <button class="btn small danger" data-del-item="${it.id}">🗑</button>
-              </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
           <button class="btn small mt-8" data-add-item-cat="${c.id}">+ ${escapeHtml(singularizeCategoryName(c.name))} qo'shish</button>
         </div>
       </div>
@@ -101,6 +124,7 @@ function render() {
   box.querySelectorAll('[data-edit-item]').forEach((b) => b.addEventListener('click', () => openItemModal(null, Number(b.dataset.editItem))));
   box.querySelectorAll('[data-del-item]').forEach((b) => b.addEventListener('click', () => delItem(Number(b.dataset.delItem))));
   box.querySelectorAll('[data-add-item-cat]').forEach((b) => b.addEventListener('click', () => openItemModal(Number(b.dataset.addItemCat), null)));
+  box.querySelectorAll('[data-add-variant]').forEach((b) => b.addEventListener('click', () => openItemModal(null, null, Number(b.dataset.addVariant))));
   const toggleBtn = document.getElementById('toggleInactiveBtn');
   if (toggleBtn) toggleBtn.addEventListener('click', () => { showInactive = !showInactive; render(); });
   box.querySelectorAll('[data-restore-cat]').forEach((b) => b.addEventListener('click', () => restoreCategory(Number(b.dataset.restoreCat))));
@@ -209,15 +233,31 @@ async function delCategory(id) {
 
 // ---------------- Taom modal ----------------
 
-function openItemModal(categoryId, itemId) {
+// parentId — "+ Turi qo'shish" tugmasi bosilganda beriladi (2026-09-09):
+// itemId=null, parentId=<ota taom id'si> bo'lsa yangi VARIANT qo'shiladi
+// (kategoriya avtomatik ota taomnikidan olinadi, foydalanuvchi tanlamaydi).
+// Mavjud taom tahrirlanayotganda (itemId berilgan) uning parent_item_id'si
+// o'zgarishsiz saqlanadi — bu modal orqali variant boshqa taomga "ko'chirilmaydi".
+function openItemModal(categoryId, itemId, parentId) {
   editingItemId = itemId;
   const item = itemId ? items.find((it) => it.id === itemId) : null;
-  itemModalCategoryId = item ? item.category_id : categoryId;
+  const parentItem = (!item && parentId) ? items.find((it) => it.id === parentId) : null;
+  itemModalParentId = item ? (item.parent_item_id || null) : (parentItem ? parentItem.id : null);
+  itemModalCategoryId = item ? item.category_id : (parentItem ? parentItem.category_id : categoryId);
   // Sarlavha ham "+ Ichimlik qo'shish" tugmasi bilan bir xil mantiqda —
   // kategoriya nomiga moslab chiqadi ("Yangi Ichimlik", "Ichimlikni tahrirlash").
   const cat = categories.find((c) => c.id === itemModalCategoryId);
   const catLabel = cat ? singularizeCategoryName(cat.name) : 'Taom';
-  document.getElementById('itemModalTitle').textContent = item ? `${catLabel}ni tahrirlash` : `Yangi ${catLabel}`;
+  const parentHintEl = document.getElementById('itemParentHint');
+  if (parentItem) {
+    document.getElementById('itemModalTitle').textContent = `"${parentItem.name}" uchun yangi tur`;
+    parentHintEl.textContent = `Bu — "${parentItem.name}" taomining bir turi. Mijoz/afitsiant uni "${parentItem.name}" ustidagi "Turlari" tugmasi bosilganda ko'radi.`;
+    parentHintEl.classList.remove('hidden');
+  } else {
+    document.getElementById('itemModalTitle').textContent = item ? `${catLabel}ni tahrirlash` : `Yangi ${catLabel}`;
+    parentHintEl.classList.add('hidden');
+    parentHintEl.textContent = '';
+  }
   document.getElementById('itemName').value = item ? item.name : '';
   document.getElementById('itemVolume').value = item ? (item.volume || '') : '';
   document.getElementById('itemCostPrice').value = item && item.cost_price != null ? item.cost_price : '';
@@ -231,7 +271,7 @@ function openItemModal(categoryId, itemId) {
   updateImagePreview();
   document.getElementById('itemModal').classList.remove('hidden');
 }
-function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; itemModalParentId = null; }
 
 // Taom modalidagi "Ombor mahsuloti bilan bog'lash" select'ini har safar ochilganda
 // joriy ombor ro'yxati bilan to'ldiradi (faol mahsulotlar + hozir tanlangan bo'lsa
@@ -335,7 +375,7 @@ document.getElementById('itemSaveBtn').addEventListener('click', async () => {
     if (editingItemId) {
       await api(`/admin/menu/items/${editingItemId}`, { method: 'PUT', body: { name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id } });
     } else {
-      await api('/admin/menu/items', { method: 'POST', body: { category_id: itemModalCategoryId, name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id } });
+      await api('/admin/menu/items', { method: 'POST', body: { category_id: itemModalCategoryId, name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id, parent_item_id: itemModalParentId } });
     }
     closeItemModal();
     toast('Saqlandi');

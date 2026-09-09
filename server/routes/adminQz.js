@@ -3,8 +3,10 @@
 // olingan ochiq sertifikat bilan tekshiradi va shu server imzolagan
 // (server/qz-keys/private-key.pem) imzo bilan tasdiqlaydi. Sertifikat ochiq
 // matn (maxfiy emas), lekin faqat shu server chop etish uchun kimga tegishli
-// ekanini isbotlay olishi kerak, shu sabab imzolash endpoint'i admin roli
-// bilan cheklangan (server/index.js).
+// ekanini isbotlay olishi kerak, shu sabab imzolash endpoint'i chek chop
+// etadigan rollar (admin, kassir) bilan cheklangan, '/api/qz' ostida —
+// '/api/admin/*' EMAS (server/index.js'dagi izohga qarang: requireAuth()
+// har qanday '/api/admin/*'ni avtomatik faqat 'admin'ga yopib qo'yardi).
 //
 // Bu ishlashi uchun admin kompyuteridagi QZ Tray'ga
 // server/qz-keys/digital-certificate.txt matni "override.crt" nomi bilan QZ

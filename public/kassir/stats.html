@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Statistika — Kassa — Ziyo Famliy</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <nav class="bottom-nav" id="bottomNav">
+      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
+      <a href="stats.html" data-page="stats"><span class="ic">📈</span>Statistika</a>
+      <a href="manual.html" data-page="manual"><span class="ic">🧮</span>Hisoblash</a>
+    </nav>
+    <div style="flex:1;">
+      <div class="topbar">
+        <h1>Statistika</h1>
+        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+      </div>
+      <main>
+        <div class="card">
+          <div class="form-grid" style="flex-direction:row; gap:8px; align-items:flex-end;">
+            <div class="field"><label>Dan</label><input id="filterFrom" type="date"></div>
+            <div class="field"><label>Gacha</label><input id="filterTo" type="date"></div>
+            <button class="btn" id="filterBtn">Filtrlash</button>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-tile"><div class="label">Yopilgan hisoblar</div><div class="value" id="statCount">—</div></div>
+          <div class="stat-tile"><div class="label">Jami summa</div><div class="value" id="statTotal">—</div></div>
+        </div>
+
+        <div class="card-title mt-16">Ro'yxat</div>
+        <div id="billList" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
+      </main>
+    </div>
+  </div>
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="stats.js"></script>
+</body>
+</html>

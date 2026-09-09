@@ -198,11 +198,11 @@ function setupQzSecurity() {
   if (qzSecuritySetUp) return;
   qzSecuritySetUp = true;
   qz.security.setCertificatePromise((resolve, reject) => {
-    api('/admin/qz/certificate').then((data) => resolve(data.certificate)).catch(reject);
+    api('/qz/certificate').then((data) => resolve(data.certificate)).catch(reject);
   });
   qz.security.setSignatureAlgorithm('SHA512');
   qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
-    api('/admin/qz/sign', { method: 'POST', body: { request: toSign } })
+    api('/qz/sign', { method: 'POST', body: { request: toSign } })
       .then((data) => resolve(data.signature))
       .catch(reject);
   });

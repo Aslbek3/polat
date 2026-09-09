@@ -221,20 +221,41 @@ ul { list-style: none; margin: 0; padding: 0; }
   padding: 2px 8px; vertical-align: middle; margin-left: 4px;
 }
 
-.menu-qty { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+.menu-qty {
+  display: flex; align-items: center; gap: 14px; flex: 0 0 auto;
+  align-self: flex-end; margin-top: 8px;
+}
 .menu-qty button {
-  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--cream-2);
-  background: #fff; color: var(--text-dark); font-size: 17px; font-weight: 700; line-height: 1;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--cream-2);
+  background: #fff; color: var(--text-dark); font-size: 21px; font-weight: 700; line-height: 1;
   cursor: pointer; transition: border-color .15s var(--ease), color .15s var(--ease), background .15s var(--ease);
 }
 .menu-qty button:hover { border-color: var(--terracotta); color: var(--terracotta); }
 .menu-qty button.qty-inc { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
 .menu-qty button.qty-inc:hover { background: var(--terracotta-dark); }
-.menu-qty .qty-val { min-width: 18px; text-align: center; font-weight: 700; font-size: 15px; }
+.menu-qty .qty-val { min-width: 22px; text-align: center; font-weight: 700; font-size: 17px; }
 
 @media (max-width: 640px) {
   .menu-row { padding: 14px 16px; gap: 10px; }
   .menu-row-main h4 { font-size: 15px; }
+  .menu-qty { gap: 10px; }
+  .menu-qty button { width: 36px; height: 36px; font-size: 19px; }
+}
+
+/* Taom "turi" (variant, 2026-09-09) — asosiy taom pastida "Turlari (N)"
+   tugmasi chiqadi, bosilganda o'sha turlar (o'z narxi/rasmi bilan, alohida
+   savatga qo'shiladigan to'liq taom sifatida) shu tugma ostida ochiladi. */
+.menu-variants-toggle {
+  display: block; margin: 4px 22px 14px; padding: 10px 20px;
+  border: 1.5px solid var(--terracotta); border-radius: 999px; background: #fff; cursor: pointer;
+  color: var(--terracotta); font-family: var(--sans); font-weight: 700; font-size: 15px;
+  transition: background .2s var(--ease), color .2s var(--ease);
+}
+.menu-variants-toggle:hover { background: var(--terracotta); color: #fff; }
+.menu-row-variant { background: var(--cream); padding-left: 38px; }
+@media (max-width: 640px) {
+  .menu-variants-toggle { margin-left: 16px; margin-right: 16px; }
+  .menu-row-variant { padding-left: 16px; }
 }
 
 /* ---- Savat paneli (pastda suzuvchi) ---- */

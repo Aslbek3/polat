@@ -166,6 +166,38 @@ function getInventoryRow(id) {
   return db.prepare('SELECT id, quantity, is_active, sale_price, cost_price FROM inventory_items WHERE id = ? AND is_active = 1').get(id);
 }
 
+// ---------------- "Turi" (variant) — parent_item_id (2026-09-09) ----------------
+// Admin menyuda taom qo'shganda/tahrirlaganda "+ Turi qo'shish" tugmasi bilan
+// shu taomga o'xshash turlar (masalan "Osh" -> "Qovurma osh", "To'y oshi")
+// qo'shilishi mumkin. Faqat BITTA daraja chuqurlikka ruxsat beriladi — variant
+// o'zi yana ota bo'la olmaydi (frontend ham buni taqdim qilmaydi, lekin server
+// to'g'ridan-to'g'ri API chaqiruvi bilan chetlab o'tishning oldini oladi).
+// Variant har doim ota taom bilan bir xil kategoriyada bo'ladi — so'rovda
+// yuborilgan category_id shu holatda e'tiborga olinmaydi, ota taomnikiga
+// almashtiriladi (nested render mantiqi — public/admin/menu.js — shuni talab
+// qiladi: variant faqat o'z ota taomi ostida, o'sha kategoriya ichida chiqadi).
+function resolveParentItemId(raw, selfId) {
+  if (raw === undefined) return undefined; // o'zgartirilmagan
+  if (raw === null || raw === '') return null; // ota bilan bog'lanish uzilyapti (oddiy taomga aylanadi)
+  const id = Number(raw);
+  if (!Number.isFinite(id)) throw Object.assign(new Error("Ota taom noto'g'ri"), { status: 400 });
+  if (selfId !== undefined && id === Number(selfId)) {
+    throw Object.assign(new Error("Taom o'zini o'ziga tur qilib bog'lay olmaydi"), { status: 400 });
+  }
+  const parent = db.prepare('SELECT id, category_id, parent_item_id, is_active FROM menu_items WHERE id = ?').get(id);
+  if (!parent || !parent.is_active) throw Object.assign(new Error('Ota taom topilmadi'), { status: 404 });
+  if (parent.parent_item_id) {
+    throw Object.assign(new Error("Bu taom o'zi biror taomning turi — unga yana tur qo'shib bo'lmaydi"), { status: 400 });
+  }
+  return parent;
+}
+
+// Taom o'zi (kamida bitta faol) turga ega bo'lsa — uni boshqa taomning turiga
+// aylantirib bo'lmaydi (ikki darajali ichma-ichlikning oldini olish uchun).
+function hasActiveChildren(id) {
+  return !!db.prepare('SELECT 1 FROM menu_items WHERE parent_item_id = ? AND is_active = 1 LIMIT 1').get(id);
+}
+
 // Tan narx (cost_price) — IXTIYORIY: admin har doim ham bilmasligi mumkin, shu sabab
 // bo'sh/berilmagan qoldirilsa NULL bo'lib qoladi (narx kabi majburiy emas). Ombor bilan
 // bog'langan taomda esa (narx kabi) yagona manba — qo'lda yuborilgan qiymatga ishonilmaydi,
@@ -180,12 +212,15 @@ function parseOptionalCostPrice(raw) {
 // image_url — IXTIYORIY (majburiy emas): bo'sh/berilmagan qoldirilsa NULL
 // bo'lib qoladi, frontend rasmsiz (faqat nom/narx) ko'rsatadi.
 router.post('/items', asyncRoute((req, res) => {
-  const { category_id, name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id } = req.body || {};
-  const categoryId = Number(category_id);
+  const { category_id, name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id, parent_item_id } = req.body || {};
   const priceNum = Number(price);
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nom kiritilishi shart' });
-  if (!Number.isFinite(categoryId)) return res.status(400).json({ error: 'Kategoriya tanlanmagan' });
   if (!Number.isFinite(priceNum) || priceNum < 0) return res.status(400).json({ error: "Narx noto'g'ri" });
+  // Tur (variant) qo'shilayotgan bo'lsa — kategoriya ota taomnikidan olinadi
+  // (yuborilgan category_id e'tiborga olinmaydi, izoh yuqorida).
+  const parentRow = resolveParentItemId(parent_item_id, undefined);
+  const categoryId = parentRow ? parentRow.category_id : Number(category_id);
+  if (!Number.isFinite(categoryId)) return res.status(400).json({ error: 'Kategoriya tanlanmagan' });
   const category = db.prepare('SELECT id, require_inventory_link FROM menu_categories WHERE id = ?').get(categoryId);
   if (!category) return res.status(404).json({ error: 'Kategoriya topilmadi' });
   // Ombor bilan bog'langan bo'lsa — narx VA mavjudlik ombordan olinadi (mijoz/admin
@@ -209,8 +244,8 @@ router.post('/items', asyncRoute((req, res) => {
   const ts = nowIso();
   const info = db
     .prepare(
-      `INSERT INTO menu_items (category_id, name, price, cost_price, is_available, is_active, sort_order, description, image_url, volume, inventory_item_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO menu_items (category_id, name, price, cost_price, is_available, is_active, sort_order, description, image_url, volume, inventory_item_id, parent_item_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       categoryId, String(name).trim(), finalPrice, finalCostPrice, isAvailable, Number(sort_order) || 0,
@@ -218,6 +253,7 @@ router.post('/items', asyncRoute((req, res) => {
       image_url ? String(image_url).trim() : null,
       volume ? String(volume).trim() : null,
       invRow ? invRow.id : null,
+      parentRow ? parentRow.id : null,
       ts, ts
     );
   res.json(db.prepare(`${ITEMS_SELECT} WHERE m.id = ?`).get(info.lastInsertRowid));
@@ -228,7 +264,19 @@ router.put('/items/:id', asyncRoute((req, res) => {
   if (!existing) return res.status(404).json({ error: 'Taom topilmadi' });
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : existing.name;
   const priceRaw = req.body?.price !== undefined ? Math.round(Number(req.body.price)) : existing.price;
-  const categoryId = req.body?.category_id !== undefined ? Number(req.body.category_id) : existing.category_id;
+  // Ota taom (parent_item_id) o'zgartirilayotgan bo'lsa — bog'lanish qoidalari
+  // POST'dagi bilan bir xil (resolveParentItemId), qo'shimcha: taomning o'zi
+  // hozir kamida bitta faol turga ega bo'lsa, uni boshqa taomning turiga
+  // aylantirib bo'lmaydi (ikki darajali ichma-ichlik oldini olinadi).
+  const parentRowChange = resolveParentItemId(req.body?.parent_item_id, req.params.id);
+  if (parentRowChange && hasActiveChildren(existing.id)) {
+    return res.status(400).json({ error: "Bu taomning o'zi turlarga ega — uni boshqa taomning turiga aylantirib bo'lmaydi" });
+  }
+  const parentItemId = parentRowChange === undefined ? existing.parent_item_id : (parentRowChange ? parentRowChange.id : null);
+  // Tur (variant) bo'lsa — kategoriya har doim ota taomnikiga tenglashtiriladi.
+  const categoryId = parentRowChange
+    ? parentRowChange.category_id
+    : (req.body?.category_id !== undefined ? Number(req.body.category_id) : existing.category_id);
   const sortOrder = req.body?.sort_order !== undefined ? Number(req.body.sort_order) : existing.sort_order;
   const isActive = req.body?.is_active !== undefined ? (req.body.is_active ? 1 : 0) : existing.is_active;
   const description = req.body?.description !== undefined ? (String(req.body.description).trim() || null) : existing.description;
@@ -255,7 +303,7 @@ router.put('/items/:id', asyncRoute((req, res) => {
   // deleteItem()'ga qarang) bog'lanmagan taomni oddiy tahrirlash (masalan
   // nomini o'zgartirish yoki ♻️ Tiklash bilan is_active qaytarish) ham
   // bloklanib qolar edi — bu haqiqiy yangi buzilish emas, faqat mavjud holat.
-  const categoryChanged = req.body?.category_id !== undefined && categoryId !== existing.category_id;
+  const categoryChanged = categoryId !== existing.category_id;
   const linkChanged = req.body?.inventory_item_id !== undefined;
   if (category.require_inventory_link && !effectiveInvRow && (categoryChanged || linkChanged)) {
     return res.status(400).json({ error: "Bu bo'lim faqat ombor bilan bog'langan taomlarni qabul qiladi" });
@@ -265,8 +313,8 @@ router.put('/items/:id', asyncRoute((req, res) => {
   const isAvailable = effectiveInvRow ? inventory.computeAvailability(effectiveInvRow) : existing.is_available;
 
   db.prepare(
-    'UPDATE menu_items SET name = ?, price = ?, cost_price = ?, category_id = ?, sort_order = ?, is_active = ?, description = ?, image_url = ?, volume = ?, inventory_item_id = ?, is_available = ?, updated_at = ? WHERE id = ?'
-  ).run(name, price, costPrice, categoryId, sortOrder, isActive, description, imageUrl, volume, inventoryItemId, isAvailable, nowIso(), req.params.id);
+    'UPDATE menu_items SET name = ?, price = ?, cost_price = ?, category_id = ?, sort_order = ?, is_active = ?, description = ?, image_url = ?, volume = ?, inventory_item_id = ?, parent_item_id = ?, is_available = ?, updated_at = ? WHERE id = ?'
+  ).run(name, price, costPrice, categoryId, sortOrder, isActive, description, imageUrl, volume, inventoryItemId, parentItemId, isAvailable, nowIso(), req.params.id);
   // Rasm almashtirilgan/olib tashlangan bo'lsa — eski faylni diskdan tozalaymiz
   // (bo'sh joy to'planib qolmasin uchun).
   if (existing.image_url && existing.image_url !== imageUrl) deleteOldImageIfLocal(existing.image_url);
@@ -296,6 +344,13 @@ router.patch('/items/:id/availability', asyncRoute((req, res) => {
 router.delete('/items/:id', asyncRoute((req, res) => {
   const existing = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Taom topilmadi' });
+  // Bu taomning (kamida bitta faol) turi bo'lsa — avval o'shalarni o'chirish
+  // kerak, aks holda ular "yetim" (mavjud bo'lmagan ota taomga bog'langan)
+  // bo'lib qolib, hech qayerda (mijoz/afitsiant menyusida ham) ko'rinmay
+  // qoladi (izoh yuqorida, resolveParentItemId/hasActiveChildren).
+  if (hasActiveChildren(existing.id)) {
+    return res.status(400).json({ error: "Avval bu taomning turlarini o'chiring" });
+  }
   const usedInOrders =
     db.prepare('SELECT 1 FROM order_items WHERE menu_item_id = ? LIMIT 1').get(req.params.id) ||
     db.prepare('SELECT 1 FROM customer_order_items WHERE menu_item_id = ? LIMIT 1').get(req.params.id);

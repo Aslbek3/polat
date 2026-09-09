@@ -193,6 +193,15 @@ function migrateAddCustomerOrderLocation() {
   addColumnIfMissing('customer_orders', 'location_lng', 'location_lng REAL');
 }
 
+// 'parent_item_id' — taom "turi" (variant) funksiyasi uchun (2026-09-09,
+// schema.sql'dagi izohga qarang). NULL = oddiy/asosiy taom, qiymat bo'lsa —
+// shu taom ko'rsatilgan ota taomning bir turi. Idempotent, oddiy ALTER ADD
+// COLUMN (nullable, FK emas — boshqa migratsiyalar bilan bir xil naqsh).
+function migrateAddMenuItemParent() {
+  addColumnIfMissing('menu_items', 'parent_item_id', 'parent_item_id INTEGER');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_menu_items_parent ON menu_items(parent_item_id)');
+}
+
 // ESKATMA (2026-09-09): bu yerda ilgari 4 ta qo'shimcha migratsiya funksiyasi
 // bor edi — migrateAddInventoryPricing/migrateAddInventoryVolume/
 // migrateAddCategoryInventoryRequirement/migrateAddMenuItemCostPrice.
@@ -219,6 +228,7 @@ migrateAddMenuItemDescription();
 migrateAddMenuItemImage();
 migrateAddMenuItemVolume();
 migrateAddMenuItemInventoryLink();
+migrateAddMenuItemParent();
 migrateAddCustomerOrderLocation();
 migrateAddCustomerOrderDeliveredAt();
 migrateAddNotificationCustomerOrderId();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Stollar — Kassa — Ziyo Famliy</title>
+<title>Hisoblash — Kassa — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="../icon.svg">
@@ -17,15 +17,28 @@
     </nav>
     <div style="flex:1;">
       <div class="topbar">
-        <h1>Stollar (kassa)</h1>
+        <h1>Qo'lda hisoblash</h1>
         <button class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
-        <div id="tableGrid" class="table-grid"><p class="dim">Yuklanmoqda...</p></div>
+        <div class="card">
+          <div class="card-title mt-8">Taomlar</div>
+          <div id="itemRows"></div>
+          <div class="form-grid" style="flex-direction:row; gap:8px;">
+            <button class="btn mt-8" type="button" id="menuBtn" style="flex:1;">📋 Menyu</button>
+            <button class="btn mt-8" type="button" id="addRowBtn" style="flex:1;">+ Qator qo'shish</button>
+          </div>
+        </div>
       </main>
+
+      <div class="order-total-bar">
+        <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
+        <button class="btn" id="clearBtn" style="background:#fff;color:#c0392b;">Tozalash</button>
+        <button class="btn" id="createBtn" style="background:#fff;color:var(--primary);">💳 Chek chiqarish</button>
+      </div>
     </div>
   </div>
   <script src="../app.js" data-api-base="../"></script>
-  <script src="tables.js"></script>
+  <script src="manual.js"></script>
 </body>
 </html>

@@ -124,41 +124,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const itemsById = {}; // menu_item_id -> DB'dan kelgan taom obyekti
   const cart = {}; // menu_item_id -> { item, qty }
+  let lastMenuCategories = null; // qayta so'rovsiz qayta chizish uchun (Turlari tugmasi)
+  let activeCatId = null;
+  // Taom "turi" (variant, 2026-09-09) — asosiy taom har doim ko'rinadi, agar
+  // unga bog'liq turlari bo'lsa pastida "Turlari (N)" tugmasi chiqadi;
+  // bosilsa o'sha turlar ham (o'z narxi bilan, alohida savatga qo'shiladigan
+  // to'liq taom sifatida) shu tugma ostida ochiladi.
+  const expandedLandingItems = new Set();
+
+  function renderMenuRow(it, isVariant) {
+    return `
+      <div class="menu-row${it.is_available ? '' : ' menu-row-unavailable'}${isVariant ? ' menu-row-variant' : ''}">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="menu-row-image" alt="">` : ''}
+        <div class="menu-row-main">
+          <h4>${escapeHtml(it.name)}${it.volume ? ` <span class="menu-row-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="menu-row-badge">Tugadi</span>'}</h4>
+          ${it.description ? `<p class="menu-row-desc">${escapeHtml(it.description)}</p>` : ''}
+          <div class="menu-row-price">${fmtSom(it.price)}</div>
+        </div>
+        ${it.is_available ? `
+          <div class="menu-qty" data-id="${it.id}">
+            <button type="button" class="qty-dec" aria-label="Kamaytirish">&minus;</button>
+            <span class="qty-val">${cart[it.id] ? cart[it.id].qty : 0}</span>
+            <button type="button" class="qty-inc" aria-label="Qo'shish">+</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
 
   function renderMenu(categories) {
+    if (categories) lastMenuCategories = categories;
+    categories = lastMenuCategories;
     if (!categories || categories.length === 0) {
       menuTabsEl.innerHTML = '';
       menuPanelsEl.innerHTML = '<p class="dim center">Hozircha menyu qo\'shilmagan. Tez orada yangilanadi.</p>';
       return;
     }
+    if (!activeCatId || !categories.some((c) => c.id === activeCatId)) activeCatId = categories[0].id;
 
-    categories.forEach((cat) => cat.items.forEach((it) => { itemsById[it.id] = it; }));
+    categories.forEach((cat) => cat.items.forEach((it) => {
+      itemsById[it.id] = it;
+      if (it.variants) it.variants.forEach((v) => { itemsById[v.id] = v; });
+    }));
 
     menuTabsEl.innerHTML = categories
-      .map((cat, i) => `<button class="menu-tab${i === 0 ? ' active' : ''}" data-cat="${cat.id}">${escapeHtml(cat.name)}</button>`)
+      .map((cat) => `<button class="menu-tab${cat.id === activeCatId ? ' active' : ''}" data-cat="${cat.id}">${escapeHtml(cat.name)}</button>`)
       .join('');
 
     menuPanelsEl.innerHTML = categories
-      .map((cat, i) => `
-        <div class="menu-panel${i === 0 ? ' active' : ''}" data-panel="${cat.id}">
+      .map((cat) => `
+        <div class="menu-panel${cat.id === activeCatId ? ' active' : ''}" data-panel="${cat.id}">
           <div class="menu-list">
-            ${cat.items.map((it) => `
-              <div class="menu-row${it.is_available ? '' : ' menu-row-unavailable'}">
-                ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="menu-row-image" alt="">` : ''}
-                <div class="menu-row-main">
-                  <h4>${escapeHtml(it.name)}${it.volume ? ` <span class="menu-row-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="menu-row-badge">Tugadi</span>'}</h4>
-                  ${it.description ? `<p class="menu-row-desc">${escapeHtml(it.description)}</p>` : ''}
-                  <div class="menu-row-price">${fmtSom(it.price)}</div>
-                </div>
-                ${it.is_available ? `
-                  <div class="menu-qty" data-id="${it.id}">
-                    <button type="button" class="qty-dec" aria-label="Kamaytirish">&minus;</button>
-                    <span class="qty-val">${cart[it.id] ? cart[it.id].qty : 0}</span>
-                    <button type="button" class="qty-inc" aria-label="Qo'shish">+</button>
-                  </div>
-                ` : ''}
-              </div>
-            `).join('')}
+            ${cat.items.map((it) => {
+              const hasVariants = it.variants && it.variants.length > 0;
+              const expanded = expandedLandingItems.has(it.id);
+              let rowHtml = renderMenuRow(it, false);
+              if (hasVariants) {
+                rowHtml += `<button type="button" class="menu-variants-toggle" data-toggle-variants="${it.id}">${expanded ? 'Turlarini yashirish' : `Turlari (${it.variants.length})`}</button>`;
+                if (expanded) rowHtml += it.variants.map((v) => renderMenuRow(v, true)).join('');
+              }
+              return rowHtml;
+            }).join('')}
           </div>
         </div>
       `).join('');
@@ -167,9 +193,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const panels = menuPanelsEl.querySelectorAll('.menu-panel');
     tabs.forEach((tab) => {
       tab.addEventListener('click', () => {
-        const cat = tab.dataset.cat;
+        activeCatId = Number(tab.dataset.cat);
         tabs.forEach((t) => t.classList.toggle('active', t === tab));
-        panels.forEach((p) => p.classList.toggle('active', p.dataset.panel === cat));
+        panels.forEach((p) => p.classList.toggle('active', Number(p.dataset.panel) === activeCatId));
+      });
+    });
+    menuPanelsEl.querySelectorAll('[data-toggle-variants]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.toggleVariants);
+        if (expandedLandingItems.has(id)) expandedLandingItems.delete(id); else expandedLandingItems.add(id);
+        renderMenu();
       });
     });
   }

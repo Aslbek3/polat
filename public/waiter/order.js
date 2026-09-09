@@ -42,14 +42,14 @@ function renderTabs() {
   });
 }
 
-function renderMenuItems() {
-  const cat = menuCategories.find((c) => c.id === activeCategoryId);
-  const box = document.getElementById('menuItems');
-  if (!cat || cat.items.length === 0) {
-    box.innerHTML = '<p class="dim">Bu bo\'limda taom yo\'q.</p>';
-    return;
-  }
-  box.innerHTML = cat.items.map((it) => `
+// Taom "turi" (variant, 2026-09-09) — asosiy taom har doim ko'rinadi, agar
+// unga bog'liq turlari (masalan "Osh" -> "Qovurma osh", "To'y oshi") bo'lsa
+// pastida "Turlari (N)" tugmasi chiqadi; bosilsa o'sha turlar ham (o'z narxi
+// bilan, alohida buyurtma qilinadigan taom sifatida) ochiladi.
+let expandedVariantIds = new Set();
+
+function renderMenuItemRow(it) {
+  return `
     <div class="menu-item-row${it.is_available ? '' : ' unavailable'}">
       <div class="mi-info" data-info="${it.id}">
         ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mi-image">` : ''}
@@ -58,7 +58,28 @@ function renderMenuItems() {
       </div>
       ${it.is_available ? `<button class="btn add" data-add="${it.id}">+</button>` : `<button class="btn add" disabled>—</button>`}
     </div>
-  `).join('');
+  `;
+}
+
+function renderMenuItems() {
+  const cat = menuCategories.find((c) => c.id === activeCategoryId);
+  const box = document.getElementById('menuItems');
+  if (!cat || cat.items.length === 0) {
+    box.innerHTML = '<p class="dim">Bu bo\'limda taom yo\'q.</p>';
+    return;
+  }
+  box.innerHTML = cat.items.map((it) => {
+    const hasVariants = it.variants && it.variants.length > 0;
+    const expanded = expandedVariantIds.has(it.id);
+    let html = renderMenuItemRow(it);
+    if (hasVariants) {
+      html += `<button class="btn small menu-variants-toggle" data-toggle-variants="${it.id}">${expanded ? 'Turlarini yashirish' : `Turlari (${it.variants.length})`}</button>`;
+      if (expanded) {
+        html += `<div class="menu-item-variants-wrap">${it.variants.map((v) => renderMenuItemRow(v)).join('')}</div>`;
+      }
+    }
+    return html;
+  }).join('');
   box.querySelectorAll('[data-add]').forEach((btn) => {
     btn.addEventListener('click', () => addItem(Number(btn.dataset.add)));
   });
@@ -67,11 +88,28 @@ function renderMenuItems() {
   box.querySelectorAll('[data-info]').forEach((el) => {
     el.addEventListener('click', () => showItemInfo(Number(el.dataset.info)));
   });
+  box.querySelectorAll('[data-toggle-variants]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.toggleVariants);
+      if (expandedVariantIds.has(id)) expandedVariantIds.delete(id); else expandedVariantIds.add(id);
+      renderMenuItems();
+    });
+  });
+}
+
+function findMenuItem(menuItemId) {
+  const cat = menuCategories.find((c) => c.id === activeCategoryId);
+  if (!cat) return null;
+  for (const it of cat.items) {
+    if (it.id === menuItemId) return it;
+    const v = it.variants && it.variants.find((x) => x.id === menuItemId);
+    if (v) return v;
+  }
+  return null;
 }
 
 function showItemInfo(menuItemId) {
-  const cat = menuCategories.find((c) => c.id === activeCategoryId);
-  const item = cat && cat.items.find((it) => it.id === menuItemId);
+  const item = findMenuItem(menuItemId);
   if (!item) return;
   const body = (item.description && item.description.trim())
     ? item.description.trim()

@@ -57,10 +57,27 @@ CREATE TABLE IF NOT EXISTS menu_items (
   is_available INTEGER NOT NULL DEFAULT 1, -- tezkor "tugadi" belgisi
   is_active INTEGER NOT NULL DEFAULT 1, -- soft-delete
   sort_order INTEGER NOT NULL DEFAULT 0,
+  -- parent_item_id (2026-09-09) — "turi" (variant) funksiyasi: shu taom boshqa
+  -- (parent_item_id=NULL) taomning bir turi/o'xshashi bo'lsa shu yerga ota taom
+  -- id'si yoziladi. NULL = oddiy/asosiy taom. Faqat BITTA daraja chuqurlikka
+  -- ruxsat (variant o'zi ota bo'la olmaydi — server/routes/adminMenu.js
+  -- tekshiradi). Mijoz/afitsiant menyusida (publicMenu.js/waiterMenu.js/
+  -- kassirMenu.js) faqat ota (parent_item_id IS NULL) taomlar asosiy ro'yxatda
+  -- chiqadi, turlar shu taomning "variants" massivida ichma-ich qaytariladi va
+  -- frontendda "Turlari (N)" tugmasi bosilgandagina ko'rinadi (2026-09-09,
+  -- public/admin/menu.js "+ Turi qo'shish" tugmasi orqali qo'shiladi). FK emas
+  -- (SQLite ALTER bilan FK qo'shib bo'lmaydi) — ilova darajasida bog'lanish.
+  parent_item_id INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category_id);
+-- idx_menu_items_parent SHU YERDA EMAS — server/db.js'dagi migrateAddMenuItemParent()
+-- ichida yaratiladi. Sabab xuddi pastdagi idx_notifications_ack izohidagidek: eski
+-- (parent_item_id ustuni qo'shilishidan oldingi) bazalarda CREATE TABLE IF NOT EXISTS
+-- mavjud jadvalga tegmaydi, shu sabab bu yerda turgan CREATE INDEX ustun hali ALTER
+-- bilan qo'shilmasdan turib ishga tushib, "no such column" xatosi bilan butun
+-- serverni yiqitadi (2026-09-09'da xuddi shu naqsh bilan sinab ko'rilganda topilgan).
 
 -- Bitta stolda bir vaqtning o'zida faqat bitta 'open' buyurtma bo'lishi mumkin —
 -- pastdagi qisman unikal indeks buni DB darajasida kafolatlaydi.

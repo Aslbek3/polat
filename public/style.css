@@ -379,6 +379,25 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
 .menu-item-row.unavailable .btn.add { cursor: not-allowed; }
 .menu-item-row .mi-name .badge { margin-left: 6px; vertical-align: middle; }
 
+/* Admin: taom "turi" (variant, 2026-09-09) — "+ Turi qo'shish" tugmasi bilan
+   qo'shilgan taomlar asosiy taom ostida chekinib, chapdan ingichka chiziq
+   bilan ajratilib chiqadi. */
+.menu-item-variants {
+  margin: 0 0 10px 20px; padding-left: 12px; border-left: 2px solid var(--border);
+}
+.menu-item-variants .menu-item-row { padding: 8px 4px; }
+
+/* Afitsiant menyusida (#menuItems, 2-ustunli grid) "Turlari (N)" tugmasi va
+   ochilgan variant ro'yxati butun eni bo'ylab (grid-column: 1/-1) chiqadi,
+   variantlarning o'zi ham 2 ustunda (asosiy taomlar bilan bir xil ko'rinish). */
+#menuItems .menu-variants-toggle {
+  grid-column: 1 / -1; margin: -2px 0 4px; width: auto; align-self: flex-start;
+  font-size: 15px; font-weight: 700; border-color: var(--gold-dark); color: var(--gold-2);
+}
+#menuItems .menu-item-variants-wrap {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px;
+}
+
 /* Afitsiant menyusi (waiter/order.html #menuItems) — taomlar 2 ustunda, kichik
    kartochka ko'rinishida chiqadi (admin panelning menyu ro'yxatiga tegmaydi,
    u alohida .card ichida bir ustunda qolaveradi). */

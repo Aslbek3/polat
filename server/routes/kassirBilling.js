@@ -48,7 +48,7 @@ router.get('/bills', asyncRoute((req, res) => {
   if (to) { tableSql += ' AND date(o.closed_at) <= date(?)'; tableParams.push(to); }
 
   let manualSql = `
-    SELECT mb.id AS id, 'manual' AS kind, "Qo'lda hisoblash" AS label, mb.total_amount AS total_amount,
+    SELECT mb.id AS id, 'manual' AS kind, 'Qo''lda hisoblash' AS label, mb.total_amount AS total_amount,
            mb.created_at AS at, COALESCE(u.full_name, u.username) AS by_name
     FROM manual_bills mb
     JOIN users u ON u.id = mb.created_by
