@@ -17,6 +17,7 @@ const express = require('express');
 const { db, nowIso } = require('../db');
 const { listTablesOverview, buildOrderView } = require('../services/orders');
 const { asyncRoute } = require('../routeUtils');
+const customerOrders = require('../services/customerOrders');
 
 const router = express.Router();
 
@@ -68,16 +69,20 @@ router.put('/items/:id/ready', asyncRoute((req, res) => {
   res.json({ ok: true, ready });
 }));
 
+// 2026-09-10: ilgari bu handler to'g'ridan-to'g'ri
+// `UPDATE customer_orders SET status = ?` qilardi va ombor mantig'ini
+// BUTUNLAY chetlab o'tardi — bekor qilingan (qoldig'i qaytarilgan)
+// buyurtmani oshpaz qayta faollashtirsa, mahsulot ombordan qayta
+// ayirilmasdi. Endi admin route'i bilan bir xil holat mashinasidan
+// o'tadi; oshpaz uchun ruxsat etilgan holatlar `allowed` bilan cheklanadi.
 router.put('/orders/:id/status', asyncRoute((req, res) => {
-  const existing = db.prepare('SELECT * FROM customer_orders WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Buyurtma topilmadi' });
-  const status = req.body?.status;
-  // Oshpaz faqat "tasdiqlash"/"tayyor" qila oladi — bekor qilish/o'chirish admin ixtiyorida.
-  if (!['confirmed', 'completed'].includes(status)) {
-    return res.status(400).json({ error: "Faqat 'tasdiqlash' yoki 'tayyor' holatiga o'tkazish mumkin" });
-  }
-  db.prepare('UPDATE customer_orders SET status = ? WHERE id = ?').run(status, req.params.id);
-  res.json(db.prepare('SELECT * FROM customer_orders WHERE id = ?').get(req.params.id));
+  const updated = customerOrders.transition(req.params.id, req.body?.status, {
+    // Oshpaz faqat "tasdiqlash"/"tayyor" qila oladi — bekor qilish/o'chirish
+    // admin ixtiyorida.
+    allowed: ['confirmed', 'completed'],
+    notAllowedMessage: "Faqat 'tasdiqlash' yoki 'tayyor' holatiga o'tkazish mumkin",
+  });
+  res.json(updated);
 }));
 
 module.exports = router;

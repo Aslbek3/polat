@@ -181,6 +181,19 @@ CREATE TABLE IF NOT EXISTS customer_orders (
   note TEXT,
   total_amount INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'confirmed', 'completed', 'cancelled')),
+  -- stock_state (2026-09-10) — bu buyurtma ombor qoldig'iga NISBATAN qaysi
+  -- holatda ekani. Ilgari bu holat hech qayerda saqlanmasdi, u har safar
+  -- status O'TISHIDAN chamalanardi ("cancelled'ga o'tyaptimi? unda qaytar") —
+  -- shu sababli `cancelled -> completed -> cancelled -> completed` sikli
+  -- har aylanishda qoldiqni yana bir marta yeb ketardi.
+  --   'held'     — qoldiq shu buyurtma uchun ushlab turilibdi (qaytarilishi mumkin)
+  --   'released' — qoldiq omborga qaytarilgan (buyurtma bekor qilingan)
+  --   'spent'    — qoldiq HAQIQATDA sarflangan (taom tayyorlangandan keyin
+  --                bekor qilingan) — na qaytariladi, na qayta sarflanadi.
+  -- Bu 2026-09-09 auditidagi "tayyorlangan taomdan keyin ombor qaytarilmaydi"
+  -- qoidasini SAQLAB QOLADI, lekin uni takrorlanishga chidamli qiladi.
+  -- To'liq mantiq: server/services/customerOrders.js
+  stock_state TEXT NOT NULL DEFAULT 'held',
   -- Dastavkachi (courier roli, 2026-09-08) "🚚 Yetkazildi" bosgan vaqt.
   -- `status`dan ATAYLAB alohida — 'status' allaqachon oshpaz tomonidan
   -- "tayyor" ma'nosida ('completed') ishlatiladi (server/routes/chefKitchen.js),

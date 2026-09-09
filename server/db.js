@@ -94,6 +94,24 @@ function migrateSyncUserRoles() {
   }
 }
 
+// 'customer_orders.stock_state' (2026-09-10) — buyurtmaning ombor qoldig'iga
+// nisbatan holati ('held'/'released'/'spent'). Batafsil izoh schema.sql'da,
+// mantiq server/services/customerOrders.js'da.
+//
+// Mavjud yozuvlar to'ldiriladi: bekor qilinganlar 'released' (ular uchun
+// qoldiq allaqachon qaytarilgan), qolganlari standart 'held'.
+function migrateAddCustomerOrderStockState() {
+  const cols = db.prepare('PRAGMA table_info(customer_orders)').all();
+  if (cols.some((c) => c.name === 'stock_state')) return;
+  addColumnIfMissing('customer_orders', 'stock_state', "stock_state TEXT NOT NULL DEFAULT 'held'");
+  const moved = db
+    .prepare("UPDATE customer_orders SET stock_state = 'released' WHERE status = 'cancelled'")
+    .run();
+  if (moved.changes > 0) {
+    console.log(`Migratsiya: ${moved.changes} ta bekor qilingan buyurtma 'released' deb belgilandi.`);
+  }
+}
+
 // 'users.session_version' (2026-09-10) — imzolangan sessiya cookie'sini
 // bekor qilish imkoni. Parol tiklanganda yoki hisob bloklanganda oshiriladi,
 // shundan keyin eski cookie darhol ishlamay qoladi (server/auth.js).
@@ -315,6 +333,7 @@ migrateAddMenuItemParent();
 migrateAddCustomerOrderLocation();
 migrateAddCustomerOrderDeliveredAt();
 migrateAddNotificationCustomerOrderId();
+migrateAddCustomerOrderStockState();
 
 function nowIso() {
   return new Date().toISOString();
