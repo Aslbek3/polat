@@ -611,3 +611,182 @@ cookie 401** -> yangi parol bilan login 200).
   (`schema_migrations`), `lib/permissions.js` (URL prefiksiga asoslangan
   avtorizatsiya o'rniga), qolgan 13 route faylni servis qatlamiga ko'chirish,
   pagination va N+1 so'rovlar.
+
+## Holat — 2026-09-10 (2): chuqur qayta tahlil — yana 24 ta xato topildi va tuzatildi
+
+Birinchi bosqichdan keyin (10 ta xato) loyiha yana bir bor, boshqa burchaklardan
+tahlil qilindi: admin frontendi, rol sahifalari frontendi, `adminMenu.js` uchun
+testlar, server ichki mantig'i va xavfsizlik — beshta mustaqil yo'nalish.
+Yakunda **160 test, hammasi o'tadi** (5 marta ketma-ket tekshirildi).
+
+### KRITIK — rol avtorizatsiyasini harf registri bilan chetlab o'tish
+
+Express'da `case sensitive routing` **standart holatda o'chiq**:
+`app.use('/api/waiter', ...)` `/api/WAITER/...` ni ham qabul qiladi.
+`server/auth.js` dagi rol-hudud tekshiruvi esa `req.path.startsWith(
+'/api/waiter/')` — **harfga sezgir**. Natijada prefiks harfini o'zgartirish
+butun avtorizatsiya modelini chetlab o'tardi. Haqiqiy so'rovlar bilan
+tasdiqlangan edi:
+
+```
+dastavkachi sessiyasi:
+  POST /api/waiter/tables/1/close  -> 403  (to'g'ri)
+  POST /api/WAITER/tables/1/close  -> 200  <- stol YOPILDI, chek navbatga tushdi
+  POST /api/WAITER/tables/1/send   -> 200  <- oshxonaga yuborildi
+```
+
+Ya'ni loyiha ataylab qurgan rol chegarasi (kassir taom qo'sha olmaydi, kuryer
+stollarga tegmaydi) amalda mavjud emas edi — hujum uchun oddiy xodim sessiyasi
+va brauzer konsolidan bitta `fetch()` yetarli.
+
+**NEGA AYNAN `/api/waiter`:** qolgan HAMMA guruhda aniq `requireRole()` bor edi,
+faqat shu 4 ta mount uni tashlab, butunlay `requireAuth()` dagi prefiks
+tekshiruviga tayanardi.
+
+Ikki qatlamli tuzatish: `app.set('case sensitive routing', true)` va
+`/api/waiter` ga ham aniq `requireRole(['admin','waiter'])`.
+
+### KRITIK — login xatosi HECH QACHON ko'rinmasdi
+
+`public/app.js` `api()` HAR QANDAY 401 ni "sessiya tugadi" deb `login.html` ga
+yo'naltirardi — **login sahifasining o'zida ham** (u yerda `API_BASE` bo'sh,
+ya'ni o'sha sahifa qayta yuklanardi). Noto'g'ri parol kiritilganda xato xabari
+ekranda ko'rinishga ulgurmasdan forma tozalanardi.
+
+Xodim "tugma ishlamayapti" deb o'ylab qayta-qayta urar, **10-urinishda shu
+auditda qo'shilgan hisob-limitiga urilib 15 daqiqaga qulflanardi** va nega
+ekanini bilmasdi. Ya'ni rate-limit qo'shilishi bu xatoni battar qilgan edi.
+Endi `api(path, { noAuthRedirect: true })` bor.
+
+### Server: chegaralar va bo'shliqlar
+
+- **Raqamlarda yuqori chegara yo'q edi** (yangi `server/validation.js`).
+  `{"quantity": 9007199254740991}` -> `orders.total_amount` ~9.0e19; yopilgan
+  buyurtmani tuzatish/o'chirish uchun ilovada yo'l yo'q, ya'ni hisobot
+  **abadiy** buzilardi. `{"unit_price": 1e308}` -> `subtotal` `Infinity` ->
+  `SUM()` `Infinity` -> `JSON.stringify` `null` -> `/summary` doimo
+  `revenue: null`.
+- **Ochiq endpointlarda matn chegarasi yo'q edi** — bitta IP 5 so'rov/daqiqa
+  x ~1 MB `note` = **~7 GB/kun** baza o'sishi.
+- **Rate-limiter o'zi DoS vositasi edi** — kalit `user:<username>` Map kaliti
+  sifatida 15 daqiqa xotirada turadi, uzunligi tekshirilmasdi: bitta IP'dan
+  40 MB. PM2 FORK rejimida butun ilova o'lardi. Endi 64 belgi chegarasi.
+- **Holat mashinasidagi bo'shliq** — `'spent'` belgisi `'completed'` dan
+  CHIQISH paytida qo'yilardi, ya'ni bazadagi faktga emas, o'tish yo'liga
+  bog'liq edi. Chetlab o'tish (probe bilan tasdiqlangan):
+  `new -> completed -> confirmed -> cancelled` = **ombor qaytarildi**, garchi
+  taom tayyorlangan bo'lsa ham. Endi `'spent'` `'completed'` ga KIRISHDA
+  qo'yiladi va terminal.
+- **Mijoz PII si oshpazga kelardi** — `chefKitchen.js` dagi `SELECT *` mijozning
+  telefoni, uy manzili va GPS koordinatasini yuborardi (UI chizmasa ham).
+  Oshxona planshetidan DevTools orqali har 15 soniyada yig'ib olish mumkin edi.
+- **N+1 va cheklanmagan so'rovlar** — `adminCustomerOrders GET /` 1 yildan
+  keyin **har 15 soniyada 11 001 ta sinxron SQLite so'rovi** qilardi (butun
+  server bloklanadi). `courierOrders` esa `IN (...)` ning 32766 parametr
+  chegarasiga urilib **32767-buyurtmadan boshlab butunlay 500** berardi.
+- **`inventory.release()`** mavjudlik tekshirmasdi -> FK xatosi -> 500 va
+  BUTUN tranzaksiya rollback (afitsiant taomni bekor qila olmasdi).
+- **`chefKitchen` "tayyor"** idempotent emas edi -> ikki marta bosish IKKITA
+  bildirishnoma yaratardi.
+- **`adminExpenses`** sana formatini tekshirmasdi -> xarajat sanali filtrga
+  tushmay, lekin filtrsiz jamiga kirib, "Hisobot" filtr bilan va filtrsiz
+  **turli sof foyda** ko'rsatardi.
+- **`routeUtils`** ataylab qo'yilgan 5xx xabarlarni yutardi (QZ 503 "kalit
+  topilmadi" jumladan) — lazy-load o'zgarishining maqsadi yo'qqa chiqardi.
+
+### Menyu (`adminMenu.js`) — 4 ta xato (yangi `test/menu.test.js`, 49 test)
+
+- Ota taom bo'limga ko'chirilsa **variantlari eski bo'limda qolardi**.
+- Variantning kategoriyasini otasidan mustaqil o'zgartirish mumkin edi.
+- `PUT /categories/:id` va `PUT /items/:id` **bo'sh nomni qabul qilardi**
+  (`POST` rad etardi) -> menyuda nomsiz bo'lim/taom, chekda bo'sh nom.
+- Turlari **soft-delete** qilingan ota taom **hard-delete** bo'lardi va turlar
+  yo'q otaga ishora qilib qolardi — tiklangandan keyin ham hech qayerda
+  ko'rinmasdi.
+
+### Chek (ESC/POS) — 6 ta xato
+
+- Chek chiqmasdan turib "chop etilgan" deb belgilanardi: chop etish yiqilsa
+  so'rov **butunlay yo'qolardi**.
+- "JAMI" qatori ikki barobar kenglik rejimida 42 belgiga tekislanardi = **84
+  ustun** -> 42 ustunli printerda summa keyingi qatorga tushib ketardi.
+- Printerga **kod sahifasi hech qachon aytilmagan** (CP866 e'lon qilingan,
+  lekin `ESC t` yo'q; `ESC @` init zavod standartiga qaytaradi).
+- `fmtMoney` **U+00A0** (no-break space) qaytarardi -> CP866 da `0xFF` bayti
+  -> chekda `1■234■567`.
+- `showReceiptModal` har chaqirilganda **listener qo'shardi**: ikki chek ketma-ket
+  ochilsa ikkala `onPrint` ham ishlab 2 ta chek chiqarardi.
+- `padReceiptLine` off-by-one: aynan sig'adigan qatordan oxirgi belgi kesilardi.
+
+Uchala `buildEscPos*` va uchala `render*ReceiptBox` birlashtirildi — aynan
+takrorlanish tufayli bu xatolarni 3 joyda tuzatish kerak edi.
+
+### Frontend poyga holatlari va UX
+
+- **`changeQty` yo'qolgan yangilanish** — tez ikki marta bosish miqdorni 2 emas,
+  1 ga oshirardi (ikkala klik ham eski `data-qty` o'qiydi).
+- **Poll javobi yangi javobning ustidan yozardi** — `PATCH` javobi 3 ko'rsatar,
+  keyin eski poll javobi 2 ga qaytarardi. Endi `reqSeq` bilan eskirgan javob
+  render qilinmaydi (waiter/kassir/chef/courier).
+- **`loadMenu()` da `try/catch` yo'q edi** — tarmoq bir soniyaga uzilsa menyu
+  **abadiy bo'sh** qolardi, hech qanday xabarsiz.
+- **`toggleAvailability`** xotiradagi ro'yxatni yangilamasdi -> admin amali
+  jimgina teskarisiga o'girilardi.
+- **Ombor so'rovi yiqilsa tahrirlashda bog'lanish jimgina uzilardi** — admin
+  taom nomini tuzatsa taom ombordan uzilib ketardi.
+- **15 s poll foydalanuvchi amaliga xalaqit berardi** — `mousedown`/`mouseup`
+  orasida tushsa `click` umuman otilmasdi; poll xatosi butun ro'yxatni o'chirardi.
+- **8 ta tugmada ikki marta bosish himoyasi yo'q edi** — eng og'iri ombor
+  "Kirim qilish" (idempotent emas, miqdor **ikki marta** qo'shilardi).
+- Bekor qilingan buyurtma chekda "Ochiq" deb yolg'on ko'rsatilardi; bo'sh stolda
+  "Hisob-kitob" tugmasi ko'rinardi; kassir hisob-kitobdan keyin 8 soniyagacha
+  eski ekranda qolardi; landing bronida bugungi sanaga o'tgan vaqt yuborish
+  mumkin edi.
+
+### Tekshirilgan, LEKIN xato EMAS (soxta signal bermaslik uchun)
+
+- **XSS topilmadi.** Ishonchsiz yo'l oxirigacha kuzatildi (anonim
+  `/api/public/*` dan admin/kuryer/oshpaz ekranlarigacha) — har bir qo'yilish
+  nuqtasi `escapeHtml()` dan o'tadi, barcha atributlar qo'shtirnoq ichida.
+  `landing/script.js` ning alohida nusxasi ham to'liq.
+- **CSRF-token kerak emas.** 33 ta `router.get` handlerning birortasi ham
+  holat o'zgartirmaydi; barcha mutatsiyalar POST/PUT/PATCH/DELETE va
+  `express.json()` faqat `application/json` ni parse qiladi -> `SameSite=Lax`
+  yetarli.
+- **IDOR — bu ilovada zaiflik emas.** Bitta restoran, umumiy stollar; afitsiant
+  boshqa afitsiant ochgan stolni yopa olishi *kerak*. Egalik tekshiruvi
+  QO'SHILMADI — mavjud ish oqimini buzardi.
+- **Fayl yuklashda ishlaydigan hujum yo'q** — SVG rad etiladi, fayl nomi
+  `originalname` dan olinmaydi, `nosniff` qo'shilgan.
+- **`sqliteDriver.js` SAVEPOINT shimi to'g'ri** — ichma-ich tranzaksiya
+  rollback semantikasi probe bilan tasdiqlandi.
+- **`listUnread(whereExtra)` va `addColumnIfMissing`** — SQL satr birlashtirish
+  bor, lekin barcha chaqiruvchilar kompilyatsiya vaqtidagi literal beradi.
+  In'ektsiya yo'li yo'q.
+
+### ⚠️ Nginx bog'liqligi (tekshirilishi kerak)
+
+`req.ip` `TRUST_PROXY=1` bilan `X-Forwarded-For` ning **eng oxirgi** qiymatini
+oladi. Agar polatuz nginx bloki `proxy_set_header X-Forwarded-For
+$proxy_add_x_forwarded_for;` ni qo'ymasa, mijoz o'z `X-Forwarded-For` ini
+yuborib **IP-limitlarni butunlay aylanib o'tadi**. Nginx konfiguratsiyasi repoda
+yo'q — VPS'da tekshirib, `docs/nginx.conf.example` sifatida qo'shish kerak.
+(Hisob bo'yicha login cheklovi IP'ga bog'liq emas, ya'ni asosiy brute-force
+himoyasi baribir ishlaydi.)
+
+### Hali qilinmagan arxitektura ishlari
+
+Bular **ataylab qoldirildi** — ular xato tuzatish emas, katta hajmli refaktor:
+
+1. Versiyalangan migratsiya tizimi (`schema_migrations` jadvali + `migrations/`
+   fayllari). Hozir `db.js` da 18 ta qo'lda yozilgan `migrateAddX()` har server
+   ko'tarilganda ishlaydi; ular idempotent va sinalgan, lekin ro'yxat o'sib
+   boradi va production qaysi versiyada ekanini bilish yo'li yo'q.
+2. `lib/permissions.js` — URL prefiksiga asoslangan avtorizatsiya o'rniga
+   imkoniyat (capability) asosidagi tekshiruv. **Xavfsizlik jihati yopildi**
+   (aniq `requireRole` + case-sensitive routing), qolgani toza kod masalasi.
+3. Qolgan 13 route faylni servis qatlamiga ko'chirish (hozir ular `db.prepare()`
+   ni bevosita chaqiradi).
+4. Frontend uchun umumiy render qatlami (`renderList()` yordamchisi) — hozir
+   "yukla -> template -> innerHTML -> listener ulash" naqshi ~12 marta
+   nusxalangan.
