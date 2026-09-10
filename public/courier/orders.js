@@ -9,19 +9,20 @@ const STATUS_BADGE = { new: 'debt', confirmed: 'ok', completed: 'ok' };
 // kafolatlanmagan. Eski poll javobi kechikib kelsa, allaqachon yetkazilgan
 // buyurtmani yana "Yetkazildi" tugmasi bilan chizib qo'yardi va dastavkachi
 // qayta bosardi (natijada `400 "allaqachon yetkazilgan"` xato toast'i).
-let reqSeq = 0;
-
-async function loadOrders() {
-  const box = document.getElementById('deliveryOrders');
-  const my = ++reqSeq;
-  try {
-    const rows = await api('/courier/orders');
-    if (my !== reqSeq) return; // eskirgan javob — render qilinmaydi
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Hozircha yetkazib berish buyurtmasi yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = rows.map((o) => {
+//
+// Navbat qo'lda `reqSeq` hisoblagichi bilan yozilgan edi — 2026-09-10 da
+// ../app.js'dagi umumiy renderList()ga o'tkazildi. Yordamchi yana ikkita
+// himoyani beradi: fon xatosida ro'yxat O'CHIRILMAYDI (dastavkachi mobil
+// internetda ishlaydi, uzilish odatiy hol) va ma'lumot o'zgarmagan bo'lsa
+// DOM'ga tegilmaydi — poll "🚚 Yetkazildi" bosilayotgan payt tugmani
+// DOM'dan olib tashlab, bosishni yutib qo'ymaydi.
+async function loadOrders(isPoll) {
+  await renderList({
+    box: 'deliveryOrders',
+    isPoll,
+    load: () => api('/courier/orders'),
+    empty: "Hozircha yetkazib berish buyurtmasi yo'q.",
+    render: (rows) => rows.map((o) => {
       const delivered = !!o.delivered_at;
       const mapsLink = (o.location_lat != null && o.location_lng != null)
         ? `<a class="btn small light block" href="https://www.google.com/maps?q=${o.location_lat},${o.location_lng}" target="_blank" rel="noopener">🗺 Xaritada ko'rish</a>`
@@ -62,11 +63,11 @@ async function loadOrders() {
         ${bottomRow}
       </div>
     `;
-    }).join('');
-    box.querySelectorAll('[data-deliver]').forEach((b) => b.addEventListener('click', () => markDelivered(Number(b.dataset.deliver), b)));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    }).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-deliver]').forEach((b) => b.addEventListener('click', () => markDelivered(Number(b.dataset.deliver), b)));
+    },
+  });
 }
 
 // withBusy (2026-09-10) — NEGA: dastavkachi telefonda "🚚 Yetkazildi" ni ikki
@@ -87,5 +88,6 @@ async function markDelivered(id, btn) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadOrders();
-  setInterval(loadOrders, 15000); // 15 soniyada avtomatik yangilanadi
+  // isPoll=true — fon xatosida ro'yxat o'chirilmasin (renderList() izohiga qarang).
+  setInterval(() => loadOrders(true), 15000); // 15 soniyada avtomatik yangilanadi
 });

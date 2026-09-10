@@ -790,3 +790,123 @@ Bular **ataylab qoldirildi** — ular xato tuzatish emas, katta hajmli refaktor:
 4. Frontend uchun umumiy render qatlami (`renderList()` yordamchisi) — hozir
    "yukla -> template -> innerHTML -> listener ulash" naqshi ~12 marta
    nusxalangan.
+
+## Holat — 2026-09-10 (3): arxitektura refaktori
+
+Auditning uchinchi bosqichi. Bu safar xato tuzatish emas — **tuzilmani**
+loyihaning o'z e'lon qilingan qoidalariga qaytarish. Har bir qadamdan keyin
+160 test qayta ishga tushirildi va **hech qachon buzilmadi**.
+
+### 1. Versiyalangan migratsiya (`schema_migrations`)
+
+**Muammo:** 18 ta migratsiya funksiyasi shunchaki ketma-ket chaqirilardi.
+Ular idempotent edi, ya'ni ishlardi — lekin server har ko'tarilganda 18 marta
+PRAGMA/SELECT tekshiruvi bajarilardi, va **production bazasi qaysi holatda
+ekanini bilishning yo'li yo'q edi**. `schema.sql` esa allaqachon haqiqatdan
+ajrab ketgan (masalan `users.role` CHECK'ida `kassir` yo'q — uni migratsiya
+qo'shadi).
+
+**Yechim:** `schema_migrations` jadvali har birining qo'llangan vaqtini
+yozadi; qo'llanganlari qayta ishlamaydi. Yangi migratsiya qo'shish —
+`MIGRATIONS` massivi oxiriga bitta `{ id, up }`. Migratsiya yiqilsa server
+**ko'tarilmaydi** (yarim qo'llangan sxema bilan ishlash ma'lumotni buzadi).
+
+Mavjud 18 tasi **ataylab idempotent bo'lib qoladi** — shu sabab o'tish
+xavfsiz. Tekshirildi: toza bazada 18 tasi qo'llandi; eski production
+sxemasida ham 18 tasi qo'llandi, ma'lumot va FK butunligi saqlandi;
+**ikkinchi ko'tarilishda hech narsa ishlamadi**.
+
+### 2. Imkoniyat (capability) asosidagi ruxsat — `server/permissions.js`
+
+**Muammo:** ruxsat ikki xil, bir-biriga bog'liq bo'lmagan mexanizm bilan
+boshqarilardi — `auth.js` dagi URL-prefiks tekshiruvi va `index.js` dagi
+qo'lda yozilgan `requireRole([...])`. Birinchisi mo'rt ekani **ikki marta**
+isbotlangan: `/api/admin/qz` → `/api/qz` shoshilinch ko'chirilishi, va
+2026-09-10 dagi registr bo'shlig'i. Ikkinchisi ishonchli, lekin rol
+nomlariga qattiq bog'langan.
+
+**Yechim:** ruxsat endi imkoniyatga bog'lanadi. "Kim chek chop eta oladi?"
+degan savolga javob **bitta jadvalda**. Yangi rol qo'shilganda `index.js`
+o'zgarmaydi. Ishga tushishda `roles.js` dagi har bir rol uchun yozuv
+borligi tekshiriladi (unutilsa jimgina "hech narsaga ruxsati yo'q" roliga
+aylanardi).
+
+⚠️ Xulq **aynan saqlandi**. Bir joyda ehtiyot bo'lindi: `RECEIPT_PRINT`
+afitsiantga ataylab berilmadi — `/api/qz` ilgari `['admin','kassir']` edi va
+afitsiantning faol oqimida chek chop etish yo'q (`public/waiter/receipt.js`
+QZ'ni chaqiradi, lekin `receipt.html` ga butun loyihada birorta havola
+yo'q — u o'lik sahifa).
+
+Tekshirildi: 7 endpoint × 5 rol = **35/35 katak** kutilgandek.
+
+### 3. Structured logging — `server/logger.js`
+
+**Muammo:** yagona xato logi `console.error(err)` edi. PM2 logida bu
+shunchaki stack-trace bo'lardi: qaysi so'rov, kim, qaysi yo'l — hech biri
+ko'rinmasdi; bir vaqtda kelgan so'rovlarning loglari aralashib ketardi.
+
+**Yechim:** har yozuv bitta qatorli JSON.
+```
+pm2 logs polat --raw | jq 'select(.level=="error")'
+pm2 logs polat --raw | jq 'select(.reqId=="a3f2c1")'
+```
+Har so'rovga qisqa id beriladi, `X-Request-Id` sarlavhasida qaytadi va 500
+javobida `request_id` sifatida ko'rsatiladi — xodim shu kodni aytsa, logdan
+aynan o'sha so'rovni topish mumkin.
+
+**Maxfiylik:** parol/token/kalit ko'rinishidagi maydonlar avtomatik
+`[REDACTED]` (qismiy moslik — `password_hash`, `session_secret`, `newToken`
+ham qamraladi).
+
+### 4. Route → servis qatlami (`db.prepare` = 0)
+
+Loyihaning o'z qoidasi — "route fayllari bazaga bevosita murojaat qilmaydi" —
+**15 ta faylda buzilgan** edi. Endi har bir route faylida `db.prepare` va
+`require('../db')` — **0 ta**.
+
+Yangi servislar: `menu.js`, `menuQuery.js`, `tables.js`, `reservations.js`,
+`users.js`, `expenses.js`, `reports.js`, `kitchen.js`, `delivery.js`,
+`printRequests.js`. Mavjudlari kengaytirildi (`customerOrders.createFromPublic`,
+`notifications.listUnreadOfKind`).
+
+Route fayllari qisqardi:
+
+| Fayl | Oldin | Hozir |
+|---|---|---|
+| `adminMenu.js` | 438 | 113 |
+| `adminReports.js` | 129 | 27 |
+| `adminUsers.js` | 145 | 39 |
+| `chefKitchen.js` | 113 | 52 |
+| `courierOrders.js` | 75 | 25 |
+| `adminExpenses.js` | 68 | 29 |
+| `waiterMenu.js` / `kassirMenu.js` / `publicMenu.js` | 49/55/54 | ~20 har biri |
+
+**Menyu takrori birlashtirildi:** uchala menyu endpointi bitta
+`buildMenuTree({ fields, stripInternal, categoryShape })` ni chaqiradi.
+`require_inventory_link` filtri, variant yig'ish va bo'sh kategoriyani
+yashirish endi bitta joyda.
+
+**Xulq o'zgarmadi** — bu sof refaktor. Barcha HTTP status kodlari, xato
+xabarlari, tekshiruvlar TARTIBI va JSON javob shakllari aynan avvalgidek.
+Menyu endpointlari uchun eski (git HEAD dagi) mantiq qayta ishga tushirilib,
+natija `JSON.stringify` bo'yicha **kalitlar tartibi bilan birga**
+solishtirildi — aynan bir xil.
+
+Ikki ataylab qilingan qaror:
+- **Multer (rasm yuklash) route'da qoldi** — u fayl tizimi ishi, DB emas.
+  Servis `{ item, removedImageUrl }` qaytaradi, faylni route o'chiradi.
+- **`validation.js` helperlari `menu`/`tables`/`reservations` da ataylab
+  ishlatilmadi**: `parseText()` u yerda xulqni o'zgartirardi (yangi 400
+  holati va falsy qiymatlarga boshqacha munosabat). Chegaralar qo'shish —
+  alohida, ataylab qilinadigan o'zgarish, sof refaktor emas.
+
+### 5. Frontend `renderList()` qatlami
+
+18 ta faylda bir xil "so'rov → `innerHTML` → listener ulash → `catch` da
+`innerHTML`" naqshi nusxalangan edi. Har bir nusxa bilan birga 2026-09-10
+auditida topilgan uchta xato ham nusxalangan:
+fon yangilanishi xatosi butun ro'yxatni o'chirishi, poll'ning `mousedown`
+va `mouseup` orasida tugmani DOM'dan olib tashlashi, eskirgan javobning
+yangisini bosib ketishi. Ular avval faqat `admin/customer-orders.js` da
+qo'lda tuzatilgan edi — endi umumiy yordamchiga chiqarilib barcha
+ro'yxatlarga tarqatildi.

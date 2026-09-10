@@ -7,21 +7,20 @@
 // javoblarning kelish tartibi kafolatlanmagan. Eski poll javobi kechikib
 // kelsa, u yangi holatning ustidan yozib, taomni yana "tayyor emas" qilib
 // ko'rsatardi; oshpaz "bosilmadi shekilli" deb qayta bosardi.
-let tablesSeq = 0;
-let onlineSeq = 0;
-
-async function loadTables() {
-  const box = document.getElementById('tableOrders');
-  const my = ++tablesSeq;
-  try {
-    const rows = await api('/chef/tables');
-    if (my !== tablesSeq) return; // eskirgan javob — render qilinmaydi
-    const occupied = rows.filter((t) => t.occupied);
-    if (occupied.length === 0) {
-      box.innerHTML = '<p class="dim">Hozircha band stol yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = occupied.map((t) => `
+//
+// Bu navbat qo'lda `tablesSeq`/`onlineSeq` hisoblagichlari bilan yozilgan edi —
+// 2026-09-10 da ../app.js'dagi umumiy renderList()ga o'tkazildi (u har bir
+// `box` uchun o'z navbatini yuritadi). Yordamchi qo'shimcha ikkita himoyani
+// ham beradi: fon xatosida ro'yxat O'CHIRILMAYDI (faqat toast) va ma'lumot
+// o'zgarmagan bo'lsa DOM'ga tegilmaydi — ya'ni poll aynan "🏁 Tayyor"
+// bosilayotgan payt tugmani DOM'dan olib tashlab, bosishni yutib qo'ymaydi.
+async function loadTables(isPoll) {
+  await renderList({
+    box: 'tableOrders',
+    isPoll,
+    load: async () => (await api('/chef/tables')).filter((t) => t.occupied),
+    empty: "Hozircha band stol yo'q.",
+    render: (occupied) => occupied.map((t) => `
       <div class="card">
         <div class="card-title">${escapeHtml(t.name)}</div>
         <div class="mt-8">
@@ -40,14 +39,14 @@ async function loadTables() {
             : '<div class="card-sub">Hali oshxonaga yuborilmagan</div>'}
         </div>
       </div>
-    `).join('');
+    `).join(''),
     // withBusy (2026-09-10) — so'rov davomida tugma bloklanadi: ikki marta
     // bosilsa ikkinchi so'rov keraksiz va oshpaz holatni "orqaga" qaytarib
     // yuborishi mumkin edi.
-    box.querySelectorAll('[data-ready]').forEach((b) => b.addEventListener('click', () => toggleItemReady(Number(b.dataset.ready), b.dataset.val === '1', b)));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    bind: (box) => {
+      box.querySelectorAll('[data-ready]').forEach((b) => b.addEventListener('click', () => toggleItemReady(Number(b.dataset.ready), b.dataset.val === '1', b)));
+    },
+  });
 }
 
 async function toggleItemReady(id, ready, btn) {
@@ -68,17 +67,13 @@ const STATUS_LABEL = { new: 'Yangi', confirmed: 'Tasdiqlangan' };
 // oshpaz yetkazib berish buyurtmasini olib ketishdan farqlay olmasdi).
 const FULFILLMENT_LABEL = { pickup: "Olib ketish", delivery: 'Yetkazib berish' };
 
-async function loadOnlineOrders() {
-  const box = document.getElementById('onlineOrders');
-  const my = ++onlineSeq;
-  try {
-    const rows = await api('/chef/orders');
-    if (my !== onlineSeq) return; // eskirgan javob — render qilinmaydi
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Hozircha onlayn buyurtma yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = rows.map((o) => `
+async function loadOnlineOrders(isPoll) {
+  await renderList({
+    box: 'onlineOrders',
+    isPoll,
+    load: () => api('/chef/orders'),
+    empty: "Hozircha onlayn buyurtma yo'q.",
+    render: (rows) => rows.map((o) => `
       <div class="card">
         <div class="card-row">
           <div class="card-title">${escapeHtml(o.full_name)} <span class="badge ${o.fulfillment === 'delivery' ? 'debt' : 'ok'}">${FULFILLMENT_LABEL[o.fulfillment] || o.fulfillment}</span> <span class="badge ${o.status === 'confirmed' ? 'ok' : 'debt'}">${STATUS_LABEL[o.status] || o.status}</span></div>
@@ -92,11 +87,11 @@ async function loadOnlineOrders() {
           <button class="btn small primary" data-act="completed" data-id="${o.id}">🏁 Tayyor</button>
         </div>
       </div>
-    `).join('');
-    box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act, b)));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act, b)));
+    },
+  });
 }
 
 // withBusy (2026-09-10) — "✅ Tasdiqlash"/"🏁 Tayyor" so'rov davomida
@@ -114,12 +109,13 @@ async function setStatus(id, status, btn) {
   });
 }
 
-function loadAll() {
-  loadTables();
-  loadOnlineOrders();
+function loadAll(isPoll) {
+  loadTables(isPoll);
+  loadOnlineOrders(isPoll);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   loadAll();
-  setInterval(loadAll, 15000); // 15 soniyada avtomatik yangilanadi
+  // isPoll=true — fon xatosida ro'yxatlar o'chirilmasin (renderList() izohiga qarang).
+  setInterval(() => loadAll(true), 15000); // 15 soniyada avtomatik yangilanadi
 });

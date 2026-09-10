@@ -10,9 +10,22 @@ let activeCategoryId = null;
 // chaqiradi — javoblarning KELISH TARTIBI kafolatlanmagan. Poll GET yuborilgan,
 // keyin afitsiant "+" bosgan, PATCH javobi kelib ekran 3 bo'lgan, so'ng ESKI
 // poll javobi kelib ekranni yana 2 ga qaytarardi. Afitsiant "o'zgarmadi" deb
-// yana bosardi — miqdor esa noto'g'ri oshib ketardi. Endi har so'rov o'z
-// raqamini oladi; javob kelganda raqam eng oxirgisi bo'lmasa render qilinmaydi.
-let reqSeq = 0;
+// yana bosardi — miqdor esa noto'g'ri oshib ketardi.
+//
+// Bu navbat qo'lda `reqSeq` bilan yozilgan edi — 2026-09-10 da ../app.js'dagi
+// umumiy renderList()ga o'tkazildi: u `orderLines` uchun o'z navbatini
+// yuritadi, ya'ni har bir chizish (poll javobi HAM, POST/PATCH javobi HAM)
+// navbatni oldinga suradi va undan oldin yo'lda qolgan javob TASHLANADI.
+// Farq (yaxshi tomonga): ilgari navbat raqami so'rov YUBORILISHIDAN oldin
+// olinardi, shu sabab "+" bosilgandan keyin tushgan poll PATCH javobini
+// bekor qilardi — ya'ni yozuv natijasi o'rniga eskiroq GET ko'rinardi.
+// Endi yozuv javobi (server tasdiqlagan ENG YANGI holat) ustun turadi va
+// yo'ldagi poll tashlanadi.
+//
+// Yordamchi ustiga ikkita himoya qo'shadi: ma'lumot o'zgarmagan bo'lsa DOM'ga
+// UMUMAN tegilmaydi (poll aynan `mousedown`/`mouseup` orasida "+" tugmasini
+// DOM'dan olib tashlab, bosishni yutib qo'ymaydi) va poll xatosi ekrandagi
+// buyurtmani o'chirmaydi.
 
 // escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
 // nusxa birlashtirildi).
@@ -150,10 +163,8 @@ function showItemInfo(menuItemId) {
 
 async function addItem(menuItemId, btn) {
   await withBusy(btn, async () => {
-    const my = ++reqSeq;
     try {
       const view = await api(`/waiter/tables/${TABLE_ID}/items`, { method: 'POST', body: { menu_item_id: menuItemId, quantity: 1 } });
-      if (my !== reqSeq) return;
       renderOrder(view);
       toast('Qo\'shildi');
     } catch (err) {
@@ -182,7 +193,6 @@ async function changeQty(itemId, delta, currentQty, btn) {
   others.forEach((b) => { b.disabled = true; });
   try {
     await withBusy(btn, async () => {
-      const my = ++reqSeq;
       try {
         let view;
         if (nextQty <= 0) {
@@ -190,7 +200,6 @@ async function changeQty(itemId, delta, currentQty, btn) {
         } else {
           view = await api(`/waiter/items/${itemId}`, { method: 'PATCH', body: { quantity: nextQty } });
         }
-        if (my !== reqSeq) return;
         renderOrder(view);
       } catch (err) {
         toast(err.message, 'error');
@@ -201,43 +210,23 @@ async function changeQty(itemId, delta, currentQty, btn) {
   }
 }
 
-function renderOrder(view) {
-  const box = document.getElementById('orderLines');
-  const totalEl = document.getElementById('totalAmount');
-  const sendBtn = document.getElementById('sendBtn');
-  const closeBtn = document.getElementById('closeBtn');
-  const cancelOrderBtn = document.getElementById('cancelOrderBtn');
-
+// Buyurtma qatorlari #orderLines ichida, lekin jami summa va uchta tugma
+// undan TASHQARIDA — shu sabab renderList()ning ikki qo'li ishlatiladi:
+// `render` faqat quti ichini beradi, quti tashqarisidagi boshqaruvlar esa
+// `onData` da yangilanadi (ma'lumot o'zgarmagan, ya'ni quti qayta
+// chizilmagan holatda ham bir xil qiymatga qo'yiladi — bu zararsiz).
+function orderLinesHtml(view) {
   if (!view) {
-    box.innerHTML = '<p class="dim">Hozircha buyurtma yo\'q — pastdagi menyudan taom tanlang.</p>';
-    totalEl.textContent = fmtMoney(0);
-    sendBtn.style.display = 'none';
-    // NEGA 'none' (2026-09-10): stol bo'sh bo'lsa "Hisob-kitob" tugmasi
-    // ko'rinib turardi va bosilganda server `404 "Bu stolda ochiq buyurtma
-    // yo'q"` qaytarardi — afitsiant nima noto'g'ri bo'lganini tushunmasdi.
-    // Kassir ekranida (kassir/order.js) xuddi shu holat allaqachon
-    // yashiriladi, endi afitsiantda ham shunday.
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = 'none';
-    return;
+    return '<p class="dim">Hozircha buyurtma yo\'q — pastdagi menyudan taom tanlang.</p>';
   }
-
   if (view.items.length === 0) {
     // Buyurtma ochiq turibdi, lekin qo'shilgan taomlarning hammasi bekor qilingan.
     // closeTable() bunday holatda kamida bitta faol taom talab qilib rad etadi
     // (bo'sh chek chiqmasin uchun) — shu sabab stolni bo'shatishning yagona yo'li
     // "Bekor qilish" (cancel-order) bo'ladi, "Hisob-kitob" bu holatda yashiriladi.
-    box.innerHTML = '<p class="dim">Barcha taomlar bekor qilindi. Stolni bo\'shatish uchun "Bekor qilish" tugmasini bosing.</p>';
-    totalEl.textContent = fmtMoney(0);
-    sendBtn.style.display = 'none';
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = '';
-    return;
+    return '<p class="dim">Barcha taomlar bekor qilindi. Stolni bo\'shatish uchun "Bekor qilish" tugmasini bosing.</p>';
   }
-
-  closeBtn.style.display = '';
-  cancelOrderBtn.style.display = 'none';
-  box.innerHTML = view.items.map((it) => `
+  return view.items.map((it) => `
     <div class="order-line">
       <div>
         <div class="ol-name">${escapeHtml(it.name_snapshot)} ${it.sent_at ? '' : '<span class="badge debt">Kutilmoqda</span>'}</div>
@@ -251,14 +240,40 @@ function renderOrder(view) {
       <div class="ol-subtotal">${fmtMoney(it.subtotal)}</div>
     </div>
   `).join('');
-  totalEl.textContent = fmtMoney(view.total);
+}
 
-  box.querySelectorAll('[data-dec]').forEach((btn) => {
-    btn.addEventListener('click', () => changeQty(Number(btn.dataset.dec), -1, Number(btn.dataset.qty), btn));
-  });
-  box.querySelectorAll('[data-inc]').forEach((btn) => {
-    btn.addEventListener('click', () => changeQty(Number(btn.dataset.inc), 1, Number(btn.dataset.qty), btn));
-  });
+// Quti TASHQARISIDAGI boshqaruvlar: jami summa, "Oshxonaga yuborish",
+// "Hisob-kitob", "Bekor qilish".
+function applyOrderControls(view) {
+  const totalEl = document.getElementById('totalAmount');
+  const sendBtn = document.getElementById('sendBtn');
+  const closeBtn = document.getElementById('closeBtn');
+  const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+
+  if (!view) {
+    totalEl.textContent = fmtMoney(0);
+    sendBtn.style.display = 'none';
+    // NEGA 'none' (2026-09-10): stol bo'sh bo'lsa "Hisob-kitob" tugmasi
+    // ko'rinib turardi va bosilganda server `404 "Bu stolda ochiq buyurtma
+    // yo'q"` qaytarardi — afitsiant nima noto'g'ri bo'lganini tushunmasdi.
+    // Kassir ekranida (kassir/order.js) xuddi shu holat allaqachon
+    // yashiriladi, endi afitsiantda ham shunday.
+    closeBtn.style.display = 'none';
+    cancelOrderBtn.style.display = 'none';
+    return;
+  }
+
+  if (view.items.length === 0) {
+    totalEl.textContent = fmtMoney(0);
+    sendBtn.style.display = 'none';
+    closeBtn.style.display = 'none';
+    cancelOrderBtn.style.display = '';
+    return;
+  }
+
+  closeBtn.style.display = '';
+  cancelOrderBtn.style.display = 'none';
+  totalEl.textContent = fmtMoney(view.total);
 
   // Hali oshpazga yuborilmagan (sent_at yo'q) taomlar bo'lsa — "Oshxonaga yuborish"
   // tugmasi shular sonini ko'rsatib chiqadi, aks holda yashiriladi.
@@ -271,12 +286,39 @@ function renderOrder(view) {
   }
 }
 
+function bindOrderLines(box) {
+  box.querySelectorAll('[data-dec]').forEach((btn) => {
+    btn.addEventListener('click', () => changeQty(Number(btn.dataset.dec), -1, Number(btn.dataset.qty), btn));
+  });
+  box.querySelectorAll('[data-inc]').forEach((btn) => {
+    btn.addEventListener('click', () => changeQty(Number(btn.dataset.inc), 1, Number(btn.dataset.qty), btn));
+  });
+}
+
+// `isEmpty: () => false` — bo'sh holatlar (buyurtma yo'q / hamma taom bekor
+// qilingan) har biri O'Z matni va O'Z tugma holatiga ega, shu sabab
+// renderList()ning standart "bo'sh ro'yxat" tarmog'i ishlatilmaydi.
+function orderRenderOptions(extra) {
+  return Object.assign({
+    box: 'orderLines',
+    isEmpty: () => false,
+    onData: applyOrderControls,
+    render: orderLinesHtml,
+    bind: bindOrderLines,
+  }, extra);
+}
+
+// Allaqachon olingan ko'rinishni (POST/PATCH javobi) so'rovsiz chizadi.
+// renderList() `load` bo'lmasa `await` qilmaydi — ya'ni DOM shu yerda
+// SINXRON yangilanadi, avvalgi renderOrder() kabi.
+function renderOrder(view) {
+  renderList(orderRenderOptions({ data: view }));
+}
+
 async function sendToKitchen(btn) {
   await withBusy(btn, async () => {
-    const my = ++reqSeq;
     try {
       const view = await api(`/waiter/tables/${TABLE_ID}/send`, { method: 'POST' });
-      if (my !== reqSeq) return;
       renderOrder(view);
       toast('Oshxonaga yuborildi');
     } catch (err) {
@@ -285,17 +327,14 @@ async function sendToKitchen(btn) {
   });
 }
 
+// `isPoll: true` — bu ekranda xato HAR DOIM faqat toast bo'lgan (buyurtma
+// qatorlari o'rniga xato matni CHIQMAGAN), shu xulq saqlab qolindi; ustiga
+// endi bir xil xato har 8 soniyada qayta toast qilinmaydi.
 async function loadOrder() {
-  const my = ++reqSeq;
-  try {
-    const view = await api(`/waiter/tables/${TABLE_ID}/order`);
-    // Eskirgan poll javobi — foydalanuvchi amalining yangi natijasini
-    // ustidan yozib yubormasin (2026-09-10).
-    if (my !== reqSeq) return;
-    renderOrder(view);
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+  await renderList(orderRenderOptions({
+    isPoll: true,
+    load: () => api(`/waiter/tables/${TABLE_ID}/order`),
+  }));
 }
 
 document.getElementById('sendBtn').addEventListener('click', (e) => sendToKitchen(e.currentTarget));
