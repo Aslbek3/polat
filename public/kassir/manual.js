@@ -9,13 +9,24 @@
 // ../app.js'dan global.
 const itemRowsEl = document.getElementById('itemRows');
 
+// D-H2 (2026-09-10): yorliqlar inputga bog'lanmagan edi (`<label>` inputni
+// o'ramaydi, `for` yo'q) — ekran o'qiruvchi uchala maydonni nomsiz o'qirdi,
+// yorliqqa bosish fokus bermasdi. Qatorlar dinamik, shuning uchun har
+// qatorga noyob raqam (manualRowSeq) — id'lar takrorlanmasin. Bu id'lar
+// setFieldError()ga ham kerak (`<id>-error` xato matni shu bilan bog'lanadi).
+let manualRowSeq = 0;
+
 function rowTemplate() {
+  const n = ++manualRowSeq;
   const row = document.createElement('div');
   row.className = 'item-row';
+  // D-F3: tuzilma (nom .field, .field.price, .field.qty, .remove-item)
+  // style.css'dagi ≤640px qoidasiga mos — nom to'liq qatorda, ostida
+  // narx + miqdor + "×".
   row.innerHTML = `
-    <div class="field"><label>Nomi</label><input type="text" class="rowName" placeholder="Masalan: Osh"></div>
-    <div class="field price"><label>Narx</label><input type="number" class="rowPrice" min="0" inputmode="numeric" placeholder="0"></div>
-    <div class="field qty"><label>Miqdor</label><input type="number" class="rowQty" min="1" step="1" value="1" inputmode="numeric"></div>
+    <div class="field"><label for="rowName${n}">Nomi</label><input type="text" id="rowName${n}" class="rowName" placeholder="Masalan: Osh"></div>
+    <div class="field price"><label for="rowPrice${n}">Narx</label><input type="number" id="rowPrice${n}" class="rowPrice" min="0" inputmode="numeric" placeholder="0"></div>
+    <div class="field qty"><label for="rowQty${n}">Miqdor</label><input type="number" id="rowQty${n}" class="rowQty" min="1" step="1" value="1" inputmode="numeric"></div>
     <button type="button" class="remove-item" aria-label="Qatorni o'chirish">×</button>
   `;
   return row;
@@ -58,9 +69,16 @@ function isValidQty(quantity) {
   return Number.isSafeInteger(quantity) && quantity > 0;
 }
 
-function markInput(input, bad) {
-  if (!input) return;
-  input.style.borderColor = bad ? 'var(--danger)' : '';
+// 2026-09-10: inline `style.borderColor` (markInput) o'rniga app.js'dagi
+// setFieldError() — qizil ramka + maydon OSTIDA sababi yozilgan matn +
+// aria-invalid. Ilgari faqat ramka qizarardi, sababi esa 3–6 soniyalik
+// toast'da edi: uzun ro'yxatda kassir qaysi qator va nima noto'g'ri ekanini
+// toast yo'qolguncha topishga ulgurmasdi.
+const PRICE_ERROR = "Narx 0 dan katta bo'lsin";
+function qtyErrorText(quantity) {
+  return Number.isFinite(quantity) && !Number.isInteger(quantity)
+    ? "Butun son bo'lsin"
+    : "1 yoki undan katta bo'lsin";
 }
 
 function recalcTotal() {
@@ -69,8 +87,11 @@ function recalcTotal() {
     const qtyInput = it.row.querySelector('.rowQty');
     // Yozib turgan paytda bo'sh maydon "xato" deb belgilanmaydi — faqat
     // to'ldirilgan, lekin qoidaga to'g'ri kelmaydigan qiymat belgilanadi.
-    markInput(priceInput, priceInput.value !== '' && !isValidPrice(it.unit_price));
-    markInput(qtyInput, qtyInput.value !== '' && !isValidQty(it.quantity));
+    // `focus: false` — yozib turgan kassirning fokusini tortib olmaslik uchun.
+    const priceBad = priceInput.value !== '' && !isValidPrice(it.unit_price);
+    const qtyBad = qtyInput.value !== '' && !isValidQty(it.quantity);
+    setFieldError(priceInput, priceBad ? PRICE_ERROR : '', { focus: false });
+    setFieldError(qtyInput, qtyBad ? qtyErrorText(it.quantity) : '', { focus: false });
     if (!it.name || !isValidPrice(it.unit_price) || !isValidQty(it.quantity)) return sum;
     return sum + it.unit_price * it.quantity;
   }, 0);
@@ -111,7 +132,7 @@ function ensureMenuModal() {
         <div class="tabs" id="menuPickTabs"></div>
         <div id="menuPickItems" style="max-height:50vh; overflow-y:auto;"><p class="dim">Yuklanmoqda...</p></div>
         <div class="modal-actions">
-          <button class="btn primary" id="menuPickClose">Yopish</button>
+          <button type="button" class="btn primary" id="menuPickClose">Yopish</button>
         </div>
       </div>
     `;
@@ -142,15 +163,20 @@ function renderMenuPickTabs() {
 // o'sha turlar ham (o'z narxi bilan, alohida tanlanadigan) ochiladi.
 let expandedKassirItems = new Set();
 
+// D-H4 / D-H9 (2026-09-10): "+" tugmasida taom nomi (aria-label), rasm
+// bezak (alt="" — nomi yonida matn bilan turibdi).
 function renderMenuPickItemRow(it) {
+  const label = escapeHtml(it.volume ? `${it.name} (${it.volume})` : it.name);
   return `
     <div class="menu-item-row${it.is_available ? '' : ' unavailable'}">
       <div class="mi-info">
-        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:32px; height:32px; object-fit:cover; border-radius:var(--radius-sm); margin-right:8px;">` : ''}
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:32px; height:32px; object-fit:cover; border-radius:var(--radius-sm); margin-right:8px;">` : ''}
         <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="mi-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="badge low">Tugadi</span>'}</div>
         <div class="mi-price">${fmtMoney(it.price)}</div>
       </div>
-      ${it.is_available ? `<button type="button" class="btn add" data-pick="${it.id}">+</button>` : `<button type="button" class="btn add" disabled>—</button>`}
+      ${it.is_available
+        ? `<button type="button" class="btn add" data-pick="${it.id}" aria-label="«${label}» qo'shish">+</button>`
+        : `<button type="button" class="btn add" disabled aria-label="«${label}» tugagan">—</button>`}
     </div>
   `;
 }
@@ -219,7 +245,10 @@ function pickMenuItem(menuItemId) {
 
 async function openMenuPicker() {
   const el = ensureMenuModal();
-  el.classList.remove('hidden');
+  // D-H6 (2026-09-10): openDialog() (app.js) — role="dialog", Escape, fokus
+  // tuzog'i va yopilganda fokus "📋 Menyu" tugmasiga qaytadi. Mavjud
+  // `finish()` (classList.add('hidden')) bilan yopish ham to'g'ri ishlaydi.
+  openDialog(el);
   if (menuCategories.length === 0) {
     try {
       menuCategories = await api('/kassir/menu');
@@ -249,28 +278,33 @@ document.getElementById('createBtn').addEventListener('click', async () => {
   // Bo'sh (nomi yo'q) qatorlarni tashlab, faqat to'ldirilganlarini yuboramiz —
   // odatda oxirgi qator bo'sh qoladi (kassir "+ Qator qo'shish"ni ehtiyot
   // uchun bosib qo'ygan bo'lishi mumkin).
-  const entries = readRowEntries().filter((it) => it.name);
-  if (entries.length === 0) {
-    toast("Kamida bitta taom kiriting", 'error');
+  // 2026-09-10: xatolar setFieldError() bilan har bir aybdor MAYDON ostida
+  // (hammasi birdaniga, faqat birinchisi emas); fokus va scroll birinchi
+  // xato maydonga — app.js o'zi qiladi.
+  clearFieldErrors(itemRowsEl);
+  const all = readRowEntries();
+  // Nomi yo'q, lekin narxi yozilgan qator — ilgari JIMGINA tashlab
+  // yuborilardi va chek undan kam summaga chiqardi (kassir nomni yozishni
+  // unutgan). Endi bu xato sifatida ko'rsatiladi.
+  const nameless = all.filter((it) => !it.name && it.row.querySelector('.rowPrice').value !== '');
+  nameless.forEach((it) => setFieldError(it.row.querySelector('.rowName'), 'Taom nomini kiriting'));
+  const entries = all.filter((it) => it.name);
+  if (entries.length === 0 && nameless.length === 0) {
+    setFieldError(all[0].row.querySelector('.rowName'), 'Kamida bitta taom kiriting');
     return;
   }
-  const invalid = entries.find((it) => !isValidPrice(it.unit_price) || !isValidQty(it.quantity));
-  if (invalid) {
-    // Aybdor qatorni ko'rsatamiz — ilgari faqat toast chiqardi va uzun
-    // ro'yxatda qaysi qator ekanini topish qiyin edi (2026-09-10).
-    const priceBad = !isValidPrice(invalid.unit_price);
-    markInput(invalid.row.querySelector('.rowPrice'), priceBad);
-    markInput(invalid.row.querySelector('.rowQty'), !isValidQty(invalid.quantity));
-    invalid.row.scrollIntoView({ block: 'center' });
-    const badInput = invalid.row.querySelector(priceBad ? '.rowPrice' : '.rowQty');
-    badInput.focus();
-    let reason;
-    if (priceBad) reason = "narx noto'g'ri";
-    else if (Number.isFinite(invalid.quantity) && !Number.isInteger(invalid.quantity)) reason = "miqdor butun son bo'lishi kerak";
-    else reason = "miqdor noto'g'ri";
-    toast(`"${invalid.name}" uchun ${reason}`, 'error');
-    return;
-  }
+  let hasError = nameless.length > 0;
+  entries.forEach((it) => {
+    if (!isValidPrice(it.unit_price)) {
+      setFieldError(it.row.querySelector('.rowPrice'), PRICE_ERROR);
+      hasError = true;
+    }
+    if (!isValidQty(it.quantity)) {
+      setFieldError(it.row.querySelector('.rowQty'), qtyErrorText(it.quantity));
+      hasError = true;
+    }
+  });
+  if (hasError) return;
   const items = entries.map(({ name, unit_price, quantity }) => ({ name, unit_price, quantity }));
 
   const btn = document.getElementById('createBtn');

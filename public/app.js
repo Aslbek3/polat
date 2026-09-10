@@ -969,6 +969,25 @@ function attachSearch(inputOrId, { onFilter, delay = 150 } = {}) {
   };
 }
 
+// onActivate(el, fn) — `role="button"` bo'lgan <div> uchun click + Enter/Space
+// (D-H10, 2026-09-10). Haqiqiy <button> buni o'zi qiladi; bu yordamchi faqat
+// bosiladigan karta/qatorlar uchun. Ichidagi boshqa tugma/havola bosilganda
+// fn chaqirilmaydi; klaviaturada faqat elementning O'ZI fokusda bo'lsa.
+function onActivate(el, fn) {
+  el.addEventListener('click', (e) => {
+    const control = e.target.closest('button, a, input, select, textarea');
+    if (control && control !== el && el.contains(control)) return;
+    fn(e);
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.target !== el) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fn(e);
+    }
+  });
+}
+
 // Sahifaga qaytilganda yangilash (X-24, 2026-09-10).
 // NEGA: planshet uxlab qolsa yoki xodim boshqa ilovaga o'tib qaytsa,
 // setInterval'lar to'xtab turgan bo'ladi va ekranda daqiqalab eski

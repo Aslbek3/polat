@@ -28,4 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Boshqa afitsiant shu stolga buyurtma qo'shsa ham ko'rinishi uchun tez-tez yangilanadi.
   // isPoll=true — xato bo'lsa setka o'chirilmasin (renderList() izohiga qarang).
   setInterval(() => loadTables(true), 10000);
+  // X-24 (2026-09-10): ekranga qaytilganda (telefon qulfdan ochilganda,
+  // buyurtma sahifasidan "orqaga" bilan bfcache'dan qaytilganda) stollar va
+  // "Tayyor" xabarlari darhol yangilanadi — eski band/bo'sh holat ko'rinmasin.
+  onVisible(() => {
+    loadTables(true);
+    pollWaiterNotifications();
+  });
 });

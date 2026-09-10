@@ -2,7 +2,10 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Statistika — Kassa — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -22,10 +25,17 @@
       </div>
       <main>
         <div class="card">
-          <div class="form-grid" style="flex-direction:row; gap:8px; align-items:flex-end;">
-            <div class="field"><label>Dan</label><input id="filterFrom" type="date"></div>
-            <div class="field"><label>Gacha</label><input id="filterTo" type="date"></div>
-            <button class="btn" id="filterBtn">Filtrlash</button>
+          <!-- 2026-09-10: tayyor davrlar (Bugun/Kecha/7 kun/Bu oy/O'tgan oy) —
+               stats.js datePresets() shu yerga chiplarni qo'yadi. -->
+          <div id="billPresets"></div>
+          <!-- D-H2 (2026-09-10): yorliqlar `for` bilan inputga bog'landi.
+               flex-wrap (2026-09-10): ikki sana maydoni + "Filtrlash" 390px'da
+               ~450px talab qilib butun sahifani gorizontal siljitardi — endi
+               sig'maganda tugma keyingi qatorga o'tadi. -->
+          <div class="form-grid" style="flex-direction:row; flex-wrap:wrap; gap:8px; align-items:flex-end;">
+            <div class="field"><label for="filterFrom">Dan</label><input id="filterFrom" type="date"></div>
+            <div class="field"><label for="filterTo">Gacha</label><input id="filterTo" type="date"></div>
+            <button type="button" class="btn" id="filterBtn">Filtrlash</button>
           </div>
         </div>
 
@@ -35,6 +45,8 @@
         </div>
 
         <div class="card-title mt-16">Ro'yxat</div>
+        <!-- Ro'yxat serverda 300 ta bilan cheklangan — oshsa shu yerda aytiladi. -->
+        <p id="billLimitNote" class="dim mt-8 hidden" role="status"></p>
         <div id="billList" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>

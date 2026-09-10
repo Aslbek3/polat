@@ -2,35 +2,50 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Buyurtma — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="../icon.svg">
 </head>
-<body class="app-body">
+<body class="app-body no-nav">
   <div class="topbar">
-    <h1><a href="tables.html" style="text-decoration:none;">←</a> <span id="tableTitle">Stol</span></h1>
+    <!-- X-18 / D-H3 (2026-09-10): "←" ~20px oddiy havola edi, ekran o'qiruvchi
+         uni "chapga strelka" deb o'qirdi. Endi 44×44 .btn.icon + aria-label.
+         (inline text-decoration — a.btn uchun CSS qoidasi qo'shilguncha.) -->
+    <h1><a class="btn icon" href="tables.html" aria-label="Stollarga qaytish"><span aria-hidden="true">←</span></a> <span id="tableTitle">Stol</span></h1>
     <button class="logout-btn" id="logoutBtn">Chiqish</button>
   </div>
   <main>
     <div class="card">
-      <div class="card-row" style="justify-content:space-between; align-items:center;">
-        <div class="card-title mt-8">Joriy buyurtma</div>
-        <button class="btn small primary" id="sendBtn" style="display:none;"></button>
-      </div>
+      <div class="card-title mt-8">Joriy buyurtma</div>
       <div id="orderLines"><p class="dim">Yuklanmoqda...</p></div>
     </div>
 
     <div class="card-title">Menyu</div>
+    <!-- X-22 (2026-09-10): menyuda qidiruv — barcha bo'limlar bo'ylab. -->
+    <label for="menuSearch" class="sr-only">Menyudan taom qidirish</label>
+    <input type="search" id="menuSearch" class="search-box mt-8" placeholder="Taom qidirish…">
     <div class="tabs" id="catTabs"></div>
-    <div id="menuItems"></div>
+    <!-- #menuItems (2 ustunli grid) ichkarida chiziladi — bo'sh/xato holati
+         gridning bitta katagiga emas, butun enga chiqsin. -->
+    <div id="menuBox"><p class="dim">Menyu yuklanmoqda...</p></div>
   </main>
 
+  <!-- X-14 (2026-09-10): "🍽️ Oshxonaga yuborish" tepada ("Joriy buyurtma"
+       sarlavhasi yonida) edi, "Hisob-kitob" esa barmoq zonasida — eng ko'p
+       ishlatiladigan amal eng uzoqda edi. Endi uchala amal shu panelda, lekin
+       BIR VAQTDA FAQAT BITTASI ko'rinadi (order.js applyOrderControls()).
+       D-A2 / D-B1: inline #c0392b va oltin-ustida-oltin (2.42:1) o'rniga
+       .btn.danger-solid / .btn.light. -->
   <div class="order-total-bar">
     <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
-    <button class="btn" id="cancelOrderBtn" style="display:none;background:#fff;color:#c0392b;">Bekor qilish</button>
-    <button class="btn" id="closeBtn" style="background:#fff;color:var(--primary);">Hisob-kitob</button>
+    <button class="btn danger-solid hidden" id="cancelOrderBtn">Bekor qilish</button>
+    <button class="btn light hidden" id="sendBtn"></button>
+    <button class="btn light hidden" id="closeBtn">Hisob-kitob</button>
   </div>
 
   <script src="../app.js" data-api-base="../"></script>

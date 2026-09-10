@@ -95,8 +95,8 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
     }
 
     // X-06 (2026-09-10): BIR XIL YUBORILMAGAN TAOM BIRLASHTIRILADI.
-    // ⚠️ Bu xulq ATAYLAB o'zgartirildi — ilgari (va CLAUDE.md'dagi "Asosiy
-    // oqimlar"da hamon) "har bosilgan '+' alohida order_items qatori" edi.
+    // ⚠️ Bu xulq ATAYLAB o'zgartirildi — ilgari "har bosilgan '+' alohida
+    // order_items qatori" edi (CLAUDE.md "Asosiy oqimlar" ham yangilangan).
     // NEGA: afitsiant "Osh"ni 3 marta bossa "Osh ×1", "Osh ×1", "Osh ×1"
     // chiqardi — u "Osh ×3" kutadi; oshpaz ekranida uchta qator va uchta
     // "Tayyor" tugmasi, chekda ham uchta qator bo'lardi.

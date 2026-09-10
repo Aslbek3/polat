@@ -37,48 +37,72 @@ async function loadTableName() {
   } catch (e) { /* jim */ }
 }
 
-// NEGA try/catch (2026-09-10): ilgari bu yerda `await api('/waiter/menu')`
-// himoyasiz turardi va `loadMenu()` faqat bir marta (DOMContentLoaded'da)
-// chaqirilardi. Tarmoq bir soniyaga uzilsa (mobil Wi-Fi) menyu ABADIY bo'sh
-// qolardi — hech qanday xato xabari ham yo'q edi, afitsiant taom qo'sha
-// olmasdi va sababini bilmasdi. Endi xato ko'rinadi va "Qayta urinish" bor.
-async function loadMenu() {
-  const tabs = document.getElementById('catTabs');
-  const box = document.getElementById('menuItems');
-  try {
-    box.innerHTML = '<p class="dim">Menyu yuklanmoqda...</p>';
-    menuCategories = await api('/waiter/menu');
-  } catch (err) {
-    tabs.innerHTML = '';
-    box.innerHTML = `
-      <p class="dim">Menyuni yuklab bo'lmadi: ${escapeHtml(err.message)}</p>
-      <button class="btn small" id="menuRetryBtn">Qayta urinish</button>
-    `;
-    document.getElementById('menuRetryBtn').addEventListener('click', (e) => withBusy(e.currentTarget, loadMenu));
-    return;
-  }
-  if (menuCategories.length === 0) {
-    tabs.innerHTML = '';
-    box.innerHTML = '<p class="dim">Menyu hali bo\'sh.</p>';
-    return;
-  }
-  if (!activeCategoryId) activeCategoryId = menuCategories[0].id;
-  tabs.innerHTML = menuCategories.map((c) => `
-    <button data-cat="${c.id}" class="${c.id === activeCategoryId ? 'active' : ''}">${escapeHtml(c.name)}</button>
-  `).join('');
-  tabs.querySelectorAll('button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activeCategoryId = Number(btn.dataset.cat);
-      renderTabs();
-      renderMenuItems();
-    });
+// Menyu yuklash — renderList() orqali (2026-09-10).
+// Tarix: ilgari `await api('/waiter/menu')` himoyasiz turardi va bir marta
+// chaqirilardi — tarmoq bir soniyaga uzilsa menyu ABADIY bo'sh qolardi.
+// Endi xato holati va "Qayta urinish" renderList()dan keladi.
+//
+// X-19 (2026-09-10): menyu davriy (MENU_REFRESH_MS) yangilanadi. NEGA: 19:00
+// da ochilgan ekran 21:00 da ham osh "bor" deb ko'rsatardi — admin uni
+// "Tugadi" qilgan bo'lsa ham afitsiant mijozga "bor" derdi. renderList
+// ma'lumot o'zgarmasa DOM'ga TEGMAYDI, ya'ni har daqiqalik so'rov scroll'ni
+// ham, aynan shu payt bosilayotgan "+"ni ham buzmaydi; o'zgargan bo'lsa esa
+// joriy bo'lim / qidiruv / ochilgan "Turlari" holati bilan qayta chiziladi.
+const MENU_REFRESH_MS = 60000;
+let menuSearchQuery = ''; // normalizeSearchText() qilingan (app.js)
+let menuSearchCtl = null;
+let menuTabsSig = null;
+
+async function loadMenu(isPoll) {
+  await renderList({
+    box: 'menuBox',
+    isPoll,
+    load: () => api('/waiter/menu'),
+    onData: (cats) => {
+      menuCategories = Array.isArray(cats) ? cats : [];
+      if (!menuCategories.some((c) => c.id === activeCategoryId)) {
+        activeCategoryId = menuCategories.length ? menuCategories[0].id : null;
+      }
+      renderCatTabs();
+    },
+    empty: "Menyu hali bo'sh.",
+    emptyHint: "Administrator admin panelda (Menyu) taom qo'shishi kerak.",
+    render: menuItemsHtml,
+    bind: bindMenuItems,
   });
-  renderMenuItems();
 }
 
-function renderTabs() {
-  document.querySelectorAll('#catTabs button').forEach((btn) => {
-    btn.classList.toggle('active', Number(btn.dataset.cat) === activeCategoryId);
+// Bo'lim tablari. Ro'yxat (id + nom) o'zgarmagan bo'lsa tugmalar QAYTA
+// YARATILMAYDI — faqat `.active` almashadi (onData har poll'da chaqiriladi;
+// tabni bosayotgan barmoq ostidan tugma olib tashlanmasin).
+function renderCatTabs() {
+  const tabs = document.getElementById('catTabs');
+  const sig = JSON.stringify(menuCategories.map((c) => [c.id, c.name]));
+  if (sig !== menuTabsSig) {
+    menuTabsSig = sig;
+    tabs.innerHTML = menuCategories.map((c) => `
+      <button type="button" data-cat="${c.id}">${escapeHtml(c.name)}</button>
+    `).join('');
+    tabs.querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeCategoryId = Number(btn.dataset.cat);
+        // Qidiruv paytida tab bosilsa — qidiruv tozalanadi va shu bo'lim
+        // ochiladi (onFilter qayta chizadi).
+        if (menuSearchQuery && menuSearchCtl) {
+          menuSearchCtl.clear();
+          return;
+        }
+        renderCatTabs();
+        renderMenuItems();
+      });
+    });
+  }
+  // X-22: qidiruv paytida bironta bo'lim "tanlangan" ko'rinmaydi — natija
+  // BARCHA bo'limlardan.
+  tabs.querySelectorAll('button').forEach((btn) => {
+    const on = !menuSearchQuery && Number(btn.dataset.cat) === activeCategoryId;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
 }
 
@@ -88,38 +112,73 @@ function renderTabs() {
 // bilan, alohida buyurtma qilinadigan taom sifatida) ochiladi.
 let expandedVariantIds = new Set();
 
+// D-H4 (2026-09-10): 30 ta bir xil "+" tugmasi ekran o'qiruvchida "plus,
+// tugma" deb o'qilardi — qaysi taomga tegishli ekani aytilmasdi.
+// D-H10: taom nomi/narxi (.mi-info) bosiladigan <div> edi — klaviatura bilan
+// ochib bo'lmasdi; endi role="button" + tabindex, Enter/Space (bindMenuItems).
+// D-H9: rasm bezak — nomi yonida matn bilan turibdi, shuning uchun alt="".
 function renderMenuItemRow(it) {
+  const label = escapeHtml(it.volume ? `${it.name} (${it.volume})` : it.name);
   return `
     <div class="menu-item-row${it.is_available ? '' : ' unavailable'}">
-      <div class="mi-info" data-info="${it.id}">
-        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mi-image">` : ''}
+      <div class="mi-info" data-info="${it.id}" role="button" tabindex="0" aria-haspopup="dialog">
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mi-image" alt="">` : ''}
         <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="mi-volume">(${escapeHtml(it.volume)})</span>` : ''}${it.is_available ? '' : ' <span class="badge low">Tugadi</span>'}</div>
         <div class="mi-price">${fmtMoney(it.price)}</div>
       </div>
-      ${it.is_available ? `<button class="btn add" data-add="${it.id}">+</button>` : `<button class="btn add" disabled>—</button>`}
+      ${it.is_available
+        ? `<button type="button" class="btn add" data-add="${it.id}" aria-label="«${label}» qo'shish">+</button>`
+        : `<button type="button" class="btn add" disabled aria-label="«${label}» tugagan">—</button>`}
     </div>
   `;
 }
 
-function renderMenuItems() {
-  const cat = menuCategories.find((c) => c.id === activeCategoryId);
-  const box = document.getElementById('menuItems');
-  if (!cat || cat.items.length === 0) {
-    box.innerHTML = '<p class="dim">Bu bo\'limda taom yo\'q.</p>';
-    return;
+// Menyu qutisining ichi (renderList `render`i va bo'lim/qidiruv/"Turlari"
+// o'zgarganda to'g'ridan-to'g'ri chizish uchun — ikkalasi ham shu yerdan).
+// #menuItems (2 ustunli grid, style.css) shu yerda yaratiladi: bo'sh holat
+// esa uning TASHQARISIDA — gridning bitta katagiga siqilib qolmasin.
+function menuItemsHtml() {
+  if (menuSearchQuery) {
+    // X-22 (2026-09-10): qidiruv BARCHA bo'limlar va turlar (variant) bo'ylab,
+    // apostrofga befarq ("lagmon" -> "Lag'mon", app.js matchesSearch()).
+    const hits = [];
+    menuCategories.forEach((c) => c.items.forEach((it) => {
+      [it].concat(it.variants || []).forEach((x) => {
+        if (matchesSearch(`${x.name} ${x.volume || ''}`, menuSearchQuery)) hits.push(x);
+      });
+    }));
+    if (hits.length === 0) {
+      const raw = document.getElementById('menuSearch').value.trim();
+      return `<div class="empty-state"><div>«${escapeHtml(raw)}» bo'yicha taom topilmadi.</div>
+        <div class="empty-hint">Boshqacha yozib ko'ring yoki qidiruvni tozalab bo'limdan tanlang.</div></div>`;
+    }
+    return `<div id="menuItems">${hits.map((x) => renderMenuItemRow(x)).join('')}</div>`;
   }
-  box.innerHTML = cat.items.map((it) => {
+  const cat = menuCategories.find((c) => c.id === activeCategoryId);
+  if (!cat || cat.items.length === 0) {
+    return '<div class="empty-state"><div>Bu bo\'limda taom yo\'q.</div></div>';
+  }
+  return `<div id="menuItems">${cat.items.map((it) => {
     const hasVariants = it.variants && it.variants.length > 0;
     const expanded = expandedVariantIds.has(it.id);
     let html = renderMenuItemRow(it);
     if (hasVariants) {
-      html += `<button class="btn small menu-variants-toggle" data-toggle-variants="${it.id}">${expanded ? 'Turlarini yashirish' : `Turlari (${it.variants.length})`}</button>`;
+      html += `<button type="button" class="btn small menu-variants-toggle" data-toggle-variants="${it.id}" aria-expanded="${expanded ? 'true' : 'false'}">${expanded ? 'Turlarini yashirish' : `Turlari (${it.variants.length})`}</button>`;
       if (expanded) {
         html += `<div class="menu-item-variants-wrap">${it.variants.map((v) => renderMenuItemRow(v)).join('')}</div>`;
       }
     }
     return html;
-  }).join('');
+  }).join('')}</div>`;
+}
+
+function renderMenuItems() {
+  const box = document.getElementById('menuBox');
+  box.innerHTML = menuItemsHtml();
+  bindMenuItems(box);
+}
+
+function bindMenuItems(box) {
   box.querySelectorAll('[data-add]').forEach((btn) => {
     // withBusy — tugma so'rov davomida bloklanadi (2026-09-10): ilgari "+"
     // ni tez ikki marta bosish ikkita POST yuborardi va taom ikki marta
@@ -129,7 +188,7 @@ function renderMenuItems() {
   // Taom nomi/narxi ustiga (+ tugmasi emas) bosilsa — tavsifini ko'rsatadi.
   // Tavsifni admin panelida (Menyu > taomni tahrirlash > "Tavsif" maydoni) kiritadi.
   box.querySelectorAll('[data-info]').forEach((el) => {
-    el.addEventListener('click', () => showItemInfo(Number(el.dataset.info)));
+    onActivate(el, () => showItemInfo(Number(el.dataset.info)));
   });
   box.querySelectorAll('[data-toggle-variants]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -140,13 +199,15 @@ function renderMenuItems() {
   });
 }
 
+// X-22 (2026-09-10): BARCHA bo'limlardan qidiriladi — qidiruv natijasida
+// boshqa bo'limdagi taom ham chiqadi (ilgari faqat faol bo'lim).
 function findMenuItem(menuItemId) {
-  const cat = menuCategories.find((c) => c.id === activeCategoryId);
-  if (!cat) return null;
-  for (const it of cat.items) {
-    if (it.id === menuItemId) return it;
-    const v = it.variants && it.variants.find((x) => x.id === menuItemId);
-    if (v) return v;
+  for (const cat of menuCategories) {
+    for (const it of cat.items) {
+      if (it.id === menuItemId) return it;
+      const v = it.variants && it.variants.find((x) => x.id === menuItemId);
+      if (v) return v;
+    }
   }
   return null;
 }
@@ -185,9 +246,15 @@ async function addItem(menuItemId, btn) {
 // qildi, A eski ekrandan 3 yubordi) BU YERDA to'liq hal bo'lmaydi — uning
 // yechimi server tomonidagi optimistik qulf, u alohida qilinadi.
 async function changeQty(itemId, delta, currentQty, btn) {
-  const nextQty = currentQty + delta;
-  // Bitta qatordagi ikkinchi tugma (+/−) ham bloklanadi — aks holda "+" so'rovi
-  // ketayotganda "−" bosilib xuddi shu eski `data-qty` dan hisoblanardi.
+  await applyItemQty(itemId, currentQty + delta, btn);
+}
+
+// Qatorning miqdorini ABSOLYUT qiymatga o'rnatadi (0 va undan kam — qator
+// bekor qilinadi). "+"/"−" (changeQty) ham, tez tanlash oynasi (X-05) ham
+// shu yagona yo'l orqali — bloklash qoidasi ikki joyda takrorlanmasin.
+async function applyItemQty(itemId, nextQty, btn) {
+  // Bitta qatordagi boshqa tugmalar (+/−/miqdor) ham bloklanadi — aks holda
+  // "+" so'rovi ketayotganda "−" bosilib xuddi shu eski `data-qty` dan hisoblanardi.
   const stepper = btn ? btn.closest('.qty-stepper') : null;
   const others = stepper ? Array.from(stepper.querySelectorAll('button')).filter((b) => b !== btn) : [];
   others.forEach((b) => { b.disabled = true; });
@@ -210,6 +277,88 @@ async function changeQty(itemId, delta, currentQty, btn) {
   }
 }
 
+// ── X-05 (2026-09-10): miqdorni tez tanlash ───────────────────────────────
+// NEGA: 12 kishilik to'y stoliga "Osh ×12" = 11 marta "+" = 11 ta HTTP so'rovi
+// (sekin Wi-Fi'da ~20 soniya), har bosish oldingisi tugashini kutadi (yuqoridagi
+// bloklash). Endi qatordagi miqdor raqamiga bosilsa kichik oyna: tayyor
+// chiplar yoki istalgan son — BITTA PATCH so'rovi, xuddi shu applyItemQty()
+// orqali (bloklash va renderList navbati o'zgarmaydi).
+const QTY_PRESETS = [1, 2, 3, 5, 10];
+let qtyPickerTarget = null; // { itemId, current, btn }
+
+function ensureQtyPicker() {
+  let el = document.getElementById('qtyPickModal');
+  if (el) return el;
+  el = document.createElement('div');
+  el.id = 'qtyPickModal';
+  el.className = 'modal-backdrop hidden';
+  el.innerHTML = `
+    <div class="modal">
+      <h2 id="qtyPickTitle">Miqdor</h2>
+      <div class="chip-row" id="qtyPickChips" role="group" aria-label="Tayyor miqdorlar">
+        ${QTY_PRESETS.map((n) => `<button type="button" class="chip" data-qty-preset="${n}" aria-pressed="false">${n}</button>`).join('')}
+      </div>
+      <form id="qtyPickForm" class="form-grid" novalidate>
+        <div class="field">
+          <label for="qtyPickInput">Boshqa son</label>
+          <input type="number" id="qtyPickInput" min="1" step="1" inputmode="numeric" enterkeyhint="done">
+        </div>
+      </form>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="qtyPickCancel">Bekor</button>
+        <button type="submit" class="btn primary" form="qtyPickForm">Saqlash</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  el.querySelector('#qtyPickCancel').addEventListener('click', () => closeDialog(el, 'cancel'));
+  el.querySelector('#qtyPickChips').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-qty-preset]');
+    if (chip) submitQtyPick(Number(chip.dataset.qtyPreset));
+  });
+  el.querySelector('#qtyPickForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = el.querySelector('#qtyPickInput');
+    const qty = Number(input.value);
+    // Yuqori chegara (1000) serverda (validation.js MAX_QUANTITY) — o'z
+    // tushunarli xatosini qaytaradi, bu yerda takrorlanmaydi.
+    if (!Number.isSafeInteger(qty) || qty < 1) {
+      setFieldError(input, "1 yoki undan katta butun son kiriting");
+      return;
+    }
+    submitQtyPick(qty);
+  });
+  return el;
+}
+
+function openQtyPicker(btn) {
+  const el = ensureQtyPicker();
+  const current = Number(btn.dataset.qty);
+  qtyPickerTarget = { itemId: Number(btn.dataset.qtyPick), current, btn };
+  el.querySelector('#qtyPickTitle').textContent = `«${btn.dataset.name}» — miqdor`;
+  el.querySelectorAll('[data-qty-preset]').forEach((c) => {
+    const on = Number(c.dataset.qtyPreset) === current;
+    c.classList.toggle('active', on);
+    c.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const input = el.querySelector('#qtyPickInput');
+  clearFieldErrors(el);
+  input.value = String(current);
+  openDialog(el, { onClose: () => { qtyPickerTarget = null; } });
+}
+
+async function submitQtyPick(qty) {
+  const target = qtyPickerTarget;
+  closeDialog('qtyPickModal', 'ok'); // onClose qtyPickerTarget'ni tozalaydi
+  if (!target || qty === target.current) return;
+  // Tugma renderList qayta chizganda DOM'dan tushib qolgan bo'lishi mumkin —
+  // unda shu qatorning hozirgi tugmasi olinadi (bloklash to'g'ri ishlasin).
+  const btn = document.contains(target.btn)
+    ? target.btn
+    : document.querySelector(`[data-qty-pick="${target.itemId}"]`);
+  await applyItemQty(target.itemId, qty, btn);
+}
+
 // Buyurtma qatorlari #orderLines ichida, lekin jami summa va uchta tugma
 // undan TASHQARIDA — shu sabab renderList()ning ikki qo'li ishlatiladi:
 // `render` faqat quti ichini beradi, quti tashqarisidagi boshqaruvlar esa
@@ -226,20 +375,38 @@ function orderLinesHtml(view) {
     // "Bekor qilish" (cancel-order) bo'ladi, "Hisob-kitob" bu holatda yashiriladi.
     return '<p class="dim">Barcha taomlar bekor qilindi. Stolni bo\'shatish uchun "Bekor qilish" tugmasini bosing.</p>';
   }
-  return view.items.map((it) => `
+  return view.items.map((it) => {
+    const name = escapeHtml(it.name_snapshot);
+    return `
     <div class="order-line">
       <div>
-        <div class="ol-name">${escapeHtml(it.name_snapshot)} ${it.sent_at ? '' : '<span class="badge debt">Kutilmoqda</span>'}</div>
+        <div class="ol-name">${name} ${orderLineStatusHtml(it)}</div>
         <div class="ol-meta">${escapeHtml(it.added_by_name)} · ${fmtMoney(it.unit_price)}/dona</div>
       </div>
       <div class="qty-stepper">
-        <button data-dec="${it.id}" data-qty="${it.quantity}">−</button>
-        <span class="qty-val">${it.quantity}</span>
-        <button data-inc="${it.id}" data-qty="${it.quantity}">+</button>
+        <button type="button" data-dec="${it.id}" data-qty="${it.quantity}" aria-label="«${name}» miqdorini kamaytirish">−</button>
+        <button type="button" class="qty-val" data-qty-pick="${it.id}" data-qty="${it.quantity}" data-name="${name}" aria-haspopup="dialog" aria-label="«${name}»: ${it.quantity} ta. Miqdorni tanlash">${it.quantity}</button>
+        <button type="button" data-inc="${it.id}" data-qty="${it.quantity}" aria-label="«${name}» miqdorini oshirish">+</button>
       </div>
       <div class="ol-subtotal">${fmtMoney(it.subtotal)}</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
+}
+
+// X-07 (2026-09-10): qator holati — ilgari faqat "Kutilmoqda" (yuborilmagan)
+// va HECH NARSA edi, ya'ni "oshxonada tayyorlanmoqda" bilan "TAYYOR" bir xil
+// ko'rinardi va afitsiant oshxonaga borib so'rardi (`ready_at` javobda bor
+// edi, ishlatilmasdi). Endi uch holat:
+//   yuborilmagan  — "Yuborilmagan" (sariq; "Kutilmoqda" oshxonani kutish deb
+//                   o'qilardi — tayyorlanayotgan taom bilan adashardi);
+//   oshxonada     — "⏱ 12 daq" (yuborilganidan beri; 15/25 daqiqada rang
+//                   o'zgaradi, matnni refreshElapsed() o'zi yangilaydi);
+//   tayyor        — "✅ Tayyor" (.status-ready).
+function orderLineStatusHtml(it) {
+  if (!it.sent_at) return '<span class="badge debt">Yuborilmagan</span>';
+  if (it.ready_at) return '<span class="status-ready">✅ Tayyor</span>';
+  return `<span class="sr-only">Oshxonada:</span>${waitBadgeHtml(it.sent_at)}`;
 }
 
 // Quti TASHQARISIDAGI boshqaruvlar: jami summa, "Oshxonaga yuborish",
@@ -250,39 +417,49 @@ function applyOrderControls(view) {
   const closeBtn = document.getElementById('closeBtn');
   const cancelOrderBtn = document.getElementById('cancelOrderBtn');
 
+  // Ko'rinish `.hidden` klassi bilan (inline style.display emas — X-28).
+  const show = (btn, on) => btn.classList.toggle('hidden', !on);
+
   if (!view) {
     totalEl.textContent = fmtMoney(0);
-    sendBtn.style.display = 'none';
-    // NEGA 'none' (2026-09-10): stol bo'sh bo'lsa "Hisob-kitob" tugmasi
+    show(sendBtn, false);
+    // NEGA yashirin (2026-09-10): stol bo'sh bo'lsa "Hisob-kitob" tugmasi
     // ko'rinib turardi va bosilganda server `404 "Bu stolda ochiq buyurtma
     // yo'q"` qaytarardi — afitsiant nima noto'g'ri bo'lganini tushunmasdi.
     // Kassir ekranida (kassir/order.js) xuddi shu holat allaqachon
     // yashiriladi, endi afitsiantda ham shunday.
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = 'none';
+    show(closeBtn, false);
+    show(cancelOrderBtn, false);
     return;
   }
 
   if (view.items.length === 0) {
     totalEl.textContent = fmtMoney(0);
-    sendBtn.style.display = 'none';
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = '';
+    show(sendBtn, false);
+    show(closeBtn, false);
+    show(cancelOrderBtn, true);
     return;
   }
 
-  closeBtn.style.display = '';
-  cancelOrderBtn.style.display = 'none';
   totalEl.textContent = fmtMoney(view.total);
+  show(cancelOrderBtn, false);
 
-  // Hali oshpazga yuborilmagan (sent_at yo'q) taomlar bo'lsa — "Oshxonaga yuborish"
-  // tugmasi shular sonini ko'rsatib chiqadi, aks holda yashiriladi.
+  // X-14 (2026-09-10): pastki panelda BIR VAQTDA FAQAT BITTA amal.
+  // Hali oshpazga yuborilmagan (sent_at yo'q) taom bo'lsa — "Oshxonaga
+  // yuborish" (shular soni bilan), "Hisob-kitob" yashirin; hammasi
+  // yuborilgach — faqat "Hisob-kitob". NEGA: "xavfli tugmalar birga
+  // ko'rinmaydi" tamoyili (UI-UX-TAHLIL 3.2) saqlanadi — barmoq zonasidagi
+  // tugma doim "keyingi to'g'ri qadam", stolni yopadigan amal esa oshxonaga
+  // yuborilmagan taom qolganda bosilmaydi (ilgari yuborishni unutib stolni
+  // yopish mumkin edi — o'sha taom hech qachon tayyorlanmasdi).
   const pendingCount = view.items.filter((it) => !it.sent_at).length;
   if (pendingCount > 0) {
     sendBtn.textContent = `🍽️ Oshxonaga yuborish (${pendingCount})`;
-    sendBtn.style.display = '';
+    show(sendBtn, true);
+    show(closeBtn, false);
   } else {
-    sendBtn.style.display = 'none';
+    show(sendBtn, false);
+    show(closeBtn, true);
   }
 }
 
@@ -292,6 +469,9 @@ function bindOrderLines(box) {
   });
   box.querySelectorAll('[data-inc]').forEach((btn) => {
     btn.addEventListener('click', () => changeQty(Number(btn.dataset.inc), 1, Number(btn.dataset.qty), btn));
+  });
+  box.querySelectorAll('[data-qty-pick]').forEach((btn) => {
+    btn.addEventListener('click', () => openQtyPicker(btn));
   });
 }
 
@@ -392,4 +572,21 @@ document.addEventListener('DOMContentLoaded', () => {
   loadMenu();
   loadOrder();
   setInterval(loadOrder, 8000);
+  setInterval(() => loadMenu(true), MENU_REFRESH_MS); // X-19
+  menuSearchCtl = attachSearch('menuSearch', {
+    onFilter: (q) => {
+      menuSearchQuery = q;
+      renderCatTabs();
+      // Menyu hali yuklanmagan / xato holatida qutiga tegilmaydi.
+      if (menuCategories.length) renderMenuItems();
+    },
+  });
+  // X-24 (2026-09-10): telefon qulflanib yoki boshqa ilovadan qaytilganda
+  // setInterval'lar to'xtab turgan bo'ladi — buyurtma, menyu va "Tayyor"
+  // xabarlari darhol yangilanadi (8/60/10 soniya kutmasdan).
+  onVisible(() => {
+    loadOrder();
+    loadMenu(true);
+    pollWaiterNotifications();
+  });
 });

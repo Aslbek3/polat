@@ -2,7 +2,10 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Hisoblash — Kassa — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -31,10 +34,14 @@
         </div>
       </main>
 
+      <!-- D-A2 / D-B1 (2026-09-10): inline #c0392b va oltin panel ustida oltin
+           matn (2.42:1) edi — endi .btn.danger-solid / .btn.light (tokenlar).
+           X-20: 480px'dan tor ekranda style.css "Jami"ni alohida qatorga,
+           ikki tugmani ikkinchi qatorga teng bo'lib chiqaradi. -->
       <div class="order-total-bar">
         <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
-        <button class="btn" id="clearBtn" style="background:#fff;color:#c0392b;">Tozalash</button>
-        <button class="btn" id="createBtn" style="background:#fff;color:var(--primary);">💳 Chek chiqarish</button>
+        <button type="button" class="btn danger-solid" id="clearBtn">Tozalash</button>
+        <button type="button" class="btn light" id="createBtn">💳 Chek chiqarish</button>
       </div>
     </div>
   </div>

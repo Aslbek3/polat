@@ -83,7 +83,7 @@ data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 
 ## Asosiy oqimlar
 
-**Afitsiant (dine-in):** `/waiter/tables.html` (stollar tarmog'i, bo'sh/band) → stolga kirib menyudan taom qo'shadi (`/waiter/order.html`, har bosilgan "+" alohida `order_items` qatori sifatida qo'shiladi, lekin oshpazga DARHOL yubormaydi — "Kutilmoqda" belgisi bilan ro'yxatda turadi) → hammasini yig'ib bo'lgach **"🍽️ Oshxonaga yuborish"** tugmasi (faqat hali yuborilmagan taom bo'lsa ko'rinadi, sonini ko'rsatadi) → shu paytgacha yig'ilgan taomlarning HAMMASI bitta paytda oshpazga ko'rinadigan bo'ladi → keyinroq yana taom qo'shilsa, xuddi shu tsikl takrorlanadi (yana "Kutilmoqda" → yana "Yuborish") → **"Hisob-kitob"** → stol yopiladi, chek chiqadi (`/waiter/receipt.html`, chop etish tugmasi bilan).
+**Afitsiant (dine-in):** `/waiter/tables.html` (stollar tarmog'i, bo'sh/band) → stolga kirib menyudan taom qo'shadi (`/waiter/order.html`; 2026-09-10 X-06'dan beri hali **yuborilmagan** bir xil taom qayta bosilsa yangi qator emas, o'sha qatorning miqdori oshadi — "Osh ×3"; oshxonaga yuborilgandan keyin qo'shilgani esa alohida yangi qator, `services/orders.js` `addItemToTable()` izohiga qarang; oshpazga DARHOL yubormaydi — "Kutilmoqda" belgisi bilan ro'yxatda turadi) → hammasini yig'ib bo'lgach **"🍽️ Oshxonaga yuborish"** tugmasi (faqat hali yuborilmagan taom bo'lsa ko'rinadi, sonini ko'rsatadi) → shu paytgacha yig'ilgan taomlarning HAMMASI bitta paytda oshpazga ko'rinadigan bo'ladi → keyinroq yana taom qo'shilsa, xuddi shu tsikl takrorlanadi (yana "Kutilmoqda" → yana "Yuborish") → **"Hisob-kitob"** → stol yopiladi, chek chiqadi (`/waiter/receipt.html`, chop etish tugmasi bilan).
 
 **Oshpaz:** `/chef/kitchen.html` — band stollar (taom+miqdor, faqat ko'rish) va onlayn buyurtmalar (olib ketish/yetkazib berish belgisi + ✅ Tasdiqlash / 🏁 Tayyor tugmalari bilan) ro'yxati, 15s'da avtomatik yangilanadi.
 
@@ -104,6 +104,7 @@ data/polat.db            — SQLite fayli (gitignored, avtomatik yaratiladi)
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Boshlang'ich admin hisobi (`server/migrate.js` orqali, faqat hali mavjud bo'lmasa yaratiladi). |
 | `PORT` / `HOST` | `3213` / `127.0.0.1`. |
 | `SESSION_SECRET` | Cookie imzolash uchun HMAC kaliti. |
+| `BUSINESS_TZ_OFFSET` | Ixtiyoriy, daqiqalarda (standart `300` = Toshkent UTC+5). Hisobot/dashboard/kassir statistikasi "kun"ni shu siljish bo'yicha ajratadi — `server/businessTime.js`. VPS UTC'da ishlasa ham to'g'ri. |
 | `TRUST_PROXY` | **`1` bo'lishi SHART** — nginx/asosiy proksi orqasida `req.secure`ni to'g'ri aniqlash (Secure cookie) uchun. 2026-08-26'da `0` xato qiymat ekani topilib tuzatildi (pastga qarang). |
 
 ## Xavfsizlik — 2026-08-26'da tekshiruv va tuzatishlar

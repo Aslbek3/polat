@@ -258,6 +258,9 @@ body.no-nav .fab { bottom: calc(16px + var(--safe-bottom)); }
   display: inline-flex; align-items: center; justify-content: flex-start;
   min-width: 44px; min-height: 44px; vertical-align: middle;
 }
+/* `.btn.icon` bo'lib kelgan orqaga tugmasi — "←" 44px quti MARKAZIDA tursin
+   (yuqoridagi `flex-start` oddiy matnli havola uchun). */
+.topbar h1 > a.btn { justify-content: center; }
 .topbar h1 > a:focus-visible { outline-offset: -2px; } /* h1 overflow:hidden kesmasin */
 .topbar .logout-btn {
   background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -489,6 +492,12 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
   line-height: 1.2;
   transition: transform .15s var(--ease), box-shadow .15s var(--ease), filter .15s var(--ease), border-color .15s var(--ease), background-color .15s var(--ease);
 }
+/* Havola ko'rinishidagi tugma (`<a class="btn">`) — tagiga chiziq tushmasin
+   (ilgari har sahifada inline `text-decoration:none` yozilardi). */
+a.btn { text-decoration: none; }
+/* Klaviatura bilan ochiladigan karta (`role="button"`, masalan kassir
+   statistikasi qatori) — sichqonchada ham bosiladigandek ko'rinsin. */
+.card[role="button"] { cursor: pointer; }
 .btn:active { transform: scale(0.98); }
 .btn.primary {
   background: linear-gradient(155deg, var(--gold-2), var(--gold-dark)); border-color: var(--gold-dark); color: #1b1812;

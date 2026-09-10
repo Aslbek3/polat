@@ -2,15 +2,23 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Hisob-kitob — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="../icon.svg">
 </head>
-<body class="app-body">
+<body class="app-body no-nav">
   <div class="topbar">
-    <h1><a href="tables.html" style="text-decoration:none;">←</a> <span id="tableTitle">Stol</span></h1>
+    <!-- X-18 / D-H3 (2026-09-10): 44×44 .btn.icon + aria-label.
+         no-nav: bu sahifada pastki navigatsiya YO'Q (faqat tables/stats/manual'da
+         bor) — ilgari .order-total-bar mavjud bo'lmagan panel ustida 76px
+         bo'shliqda osilib turardi (D-F9; style.css body.no-nav izohi ham
+         kassir/order'ni sanaydi). -->
+    <h1><a class="btn icon" href="tables.html" aria-label="Stollarga qaytish"><span aria-hidden="true">←</span></a> <span id="tableTitle">Stol</span></h1>
     <button class="logout-btn" id="logoutBtn">Chiqish</button>
   </div>
   <main>
@@ -22,8 +30,10 @@
 
   <div class="order-total-bar">
     <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
-    <button class="btn" id="cancelOrderBtn" style="display:none;background:#fff;color:#c0392b;">Bo'shatish</button>
-    <button class="btn" id="closeBtn" style="background:#fff;color:var(--primary);">💳 Hisob-kitob qilish</button>
+    <!-- D-A2 / D-B1 (2026-09-10): inline ranglar o'rniga token klasslar;
+         ko'rinish `.hidden` bilan (order.js applyOrderControls()). -->
+    <button type="button" class="btn danger-solid hidden" id="cancelOrderBtn">Bo'shatish</button>
+    <button type="button" class="btn light hidden" id="closeBtn">💳 Hisob-kitob qilish</button>
   </div>
 
   <script src="../app.js" data-api-base="../"></script>

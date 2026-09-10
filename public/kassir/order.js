@@ -52,23 +52,27 @@ function applyOrderControls(view) {
   const totalEl = document.getElementById('totalAmount');
   const closeBtn = document.getElementById('closeBtn');
   const cancelOrderBtn = document.getElementById('cancelOrderBtn');
+  // 2026-09-10 (X-28): inline style.display o'rniga `.hidden` klassi —
+  // HTML'da ikkala tugma boshlang'ich holatda yashirin (ma'lumot kelmaguncha
+  // "Hisob-kitob" bo'sh stol uchun ko'rinib turmasin).
+  const show = (btn, on) => btn.classList.toggle('hidden', !on);
 
   if (!view) {
     totalEl.textContent = fmtMoney(0);
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = 'none';
+    show(closeBtn, false);
+    show(cancelOrderBtn, false);
     return;
   }
 
   if (view.items.length === 0) {
     totalEl.textContent = fmtMoney(0);
-    closeBtn.style.display = 'none';
-    cancelOrderBtn.style.display = '';
+    show(closeBtn, false);
+    show(cancelOrderBtn, true);
     return;
   }
 
-  closeBtn.style.display = '';
-  cancelOrderBtn.style.display = 'none';
+  show(closeBtn, true);
+  show(cancelOrderBtn, false);
   totalEl.textContent = fmtMoney(view.total);
 }
 
@@ -152,4 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadTableName();
   loadOrder();
   setInterval(loadOrder, 8000);
+  // X-24 (2026-09-10): boshqa oynadan qaytilganda darhol yangilanadi — eski
+  // jami summa bilan hisob-kitob qilinmasin.
+  onVisible(loadOrder);
 });

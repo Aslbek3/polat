@@ -34,11 +34,24 @@ async function loadBills() {
     onData: (data) => {
       document.getElementById('statCount').textContent = String(data.count);
       document.getElementById('statTotal').textContent = fmtMoney(data.total_amount);
+      // 2026-09-10 (A-22 naqshi): server ro'yxatni eng yangi 300 ta bilan
+      // cheklaydi (manualBills.js BILLS_LIMIT), soni/jami esa BUTUN oraliq
+      // bo'yicha. Ilgari "Yopilgan hisoblar: 412" ostida jimgina 300 ta karta
+      // turardi — kassir qolgan 112 tasini ro'yxatdan qidirib topolmasdi.
+      const note = document.getElementById('billLimitNote');
+      const cut = data.count > data.bills.length;
+      note.textContent = cut
+        ? `Oxirgi ${data.bills.length} tasi ko'rsatilmoqda (jami ${data.count}). Qolganlarini ko'rish uchun davrni qisqartiring.`
+        : '';
+      note.classList.toggle('hidden', !cut);
     },
     isEmpty: (data) => data.bills.length === 0,
     empty: 'Bu oraliqda yopilgan hisob topilmadi.',
+    // D-H10 (2026-09-10): bosiladigan <div> — klaviatura bilan ochib
+    // bo'lmasdi. Endi role="button" + tabindex + Enter/Space (bind'da,
+    // app.js onActivate). Kursor — style.css `.card[role="button"]`.
     render: (data) => data.bills.map((b) => `
-      <div class="card card-row" data-kind="${b.kind}" data-id="${b.id}" style="cursor:pointer;">
+      <div class="card card-row" data-kind="${escapeHtml(b.kind)}" data-id="${b.id}" role="button" tabindex="0" aria-haspopup="dialog">
         <div>
           <div class="card-title">${KIND_ICON[b.kind] || ''} ${escapeHtml(b.label)}</div>
           <div class="card-sub">${fmtDateTime(b.at)}${b.by_name ? ' · ' + escapeHtml(b.by_name) : ''}</div>
@@ -48,18 +61,34 @@ async function loadBills() {
     `).join(''),
     bind: (box) => {
       box.querySelectorAll('[data-kind]').forEach((row) => {
-        row.addEventListener('click', () => openBillReceipt(row.dataset.kind, Number(row.dataset.id)));
+        onActivate(row, () => openBillReceipt(row.dataset.kind, Number(row.dataset.id)));
       });
     },
   });
 }
 
+// 2026-09-10 (A-11 naqshi): "Bu oy" hisobotini ochish uchun mobil `date`
+// tanlagichda 6–8 teginish kerak edi — endi bitta chip. Sana qo'lda
+// o'zgartirilsa chip tanlovi olib tashlanadi (ko'rsatilayotgan davr chip
+// nomiga mos kelmay qolmasin).
+let billPresets = null;
+
+function setBillRange({ from, to }) {
+  document.getElementById('filterFrom').value = from;
+  document.getElementById('filterTo').value = to;
+  loadBills();
+}
+
 document.getElementById('filterBtn').addEventListener('click', loadBills);
+['filterFrom', 'filterTo'].forEach((id) => {
+  document.getElementById(id).addEventListener('change', () => { if (billPresets) billPresets.set(null); });
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav('stats');
-  const today = todayStr();
-  document.getElementById('filterFrom').value = today;
-  document.getElementById('filterTo').value = today;
+  billPresets = datePresets('billPresets', { onChange: setBillRange, initial: 'today' });
+  const range = billPresets.get() || { from: todayStr(), to: todayStr() };
+  document.getElementById('filterFrom').value = range.from;
+  document.getElementById('filterTo').value = range.to;
   loadBills();
 });

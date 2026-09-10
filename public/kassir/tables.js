@@ -25,4 +25,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initNav('tables');
   loadTables();
   setInterval(() => loadTables(true), 10000);
+  onVisible(() => loadTables(true)); // X-24 (2026-09-10) — qaytilganda darhol
 });

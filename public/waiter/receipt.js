@@ -55,9 +55,13 @@ async function returnToAdminAfterPrint() {
   }, 900);
 }
 
+// D-J4 (2026-09-10): native alert() o'rniga showInfoModal() (app.js) —
+// printer xatosi "127.0.0.1:3213 says" oynasida chiqardi (ilova dizaynidan
+// tashqari, butun sahifani bloklaydi). Matn textContent + pre-wrap bilan
+// qo'yiladi: qator uzilishi saqlanadi, HTML escape shart emas.
 async function chekChopEtish() {
   if (!lastView) {
-    alert("Chek ma'lumoti hali yuklanmagan.");
+    showInfoModal('Chek', "Chek ma'lumoti hali yuklanmagan.");
     return;
   }
   try {
@@ -65,8 +69,9 @@ async function chekChopEtish() {
     returnToAdminAfterPrint();
   } catch (err) {
     console.error(err);
-    alert(
-      `Printerga chop etib bo'lmadi: ${err.message || err}\n\n` +
+    showInfoModal(
+      "Printerga chop etib bo'lmadi",
+      `${err.message || err}\n\n` +
       `Tekshiring: QZ Tray dasturi ishga tushirilganmi va Windows'da printer aynan "${RECEIPT_PRINTER_NAME}" deb nomlanganmi.`
     );
   }

@@ -2,15 +2,19 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Chek — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
 <link rel="icon" href="../icon.svg">
 </head>
-<body class="app-body">
+<body class="app-body no-nav">
   <div class="topbar no-print">
-    <h1><a href="tables.html" style="text-decoration:none;">←</a> Chek</h1>
+    <!-- X-18 / D-H3 (2026-09-10): 44×44 .btn.icon + aria-label (order.html bilan bir xil). -->
+    <h1><a class="btn icon" href="tables.html" aria-label="Stollarga qaytish"><span aria-hidden="true">←</span></a> Chek</h1>
     <button class="logout-btn" id="logoutBtn">Chiqish</button>
   </div>
   <main>

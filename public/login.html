@@ -2,7 +2,10 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- D-H1 (2026-09-10): maximum-scale=1 olib tashlandi — pinch-zoom bloklangan edi
+     (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
+     qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ziyo Famliy — kirish</title>
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.json">
@@ -16,26 +19,53 @@
         <p><strong>Ziyo Famliy</strong> restorani</p>
         <p class="dim">Tizimga kirish uchun login va parolingizni kiriting</p>
       </div>
-      <div class="login-label">Login</div>
-      <input type="text" id="username" autocomplete="username" required autofocus>
-      <div class="login-label">Parol</div>
-      <input type="password" id="password" autocomplete="current-password" required>
-      <div class="error-msg" id="errorMsg"></div>
-      <button type="submit">Kirish</button>
+      <!-- X-25 / D-H2 (2026-09-10): <div class="login-label"> edi — ekran
+           o'qiruvchi maydonni nomsiz "edit text" deb o'qirdi, yorliqqa bosish
+           esa maydonga fokus bermasdi. -->
+      <label class="login-label" for="username">Login</label>
+      <!-- X-10 (2026-09-10): telefon klaviaturasi birinchi harfni avtomatik
+           kattalashtirardi ("Afitsiant") -> 401 -> xodim qayta urardi va
+           10-urinishda TO'G'RI yozilgan login ham 15 daqiqaga qulflanardi.
+           Server endi harfga befarq, lekin xato bu yerda ham oldini olinadi
+           (avtotuzatish "afitsiant"ni boshqa so'zga almashtirib ham qo'yardi). -->
+      <input type="text" id="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" required autofocus>
+      <label class="login-label" for="password">Parol</label>
+      <!-- X-26: enterkeyhint="go" — klaviaturadagi tugma "Kirish" ma'nosida. -->
+      <input type="password" id="password" autocomplete="current-password" enterkeyhint="go" required>
+      <div class="error-msg" id="errorMsg" role="alert"></div>
+      <button type="submit" id="loginBtn">Kirish</button>
     </form>
   </div>
   <script src="app.js"></script>
   <script>
+    // X-26 (2026-09-10): parolni ko'rsatish tugmasi (app.js) — telefonda
+    // yulduzchalar ostida xato terilgan parol ko'rinmasdi.
+    attachPasswordToggle('password');
+
+    // X-27 (2026-09-10): so'rov davomida tugma matni o'zgaradi — ilgari
+    // faqat bloklanardi (ko'rinmas edi) va sekin internetda xodim "bosilmadi"
+    // deb qayta urinardi.
+    const LOGIN_BTN_TEXT = 'Kirish';
+    const LOGIN_BTN_BUSY_TEXT = 'Kirilmoqda…';
+    function setLoginBusy(busy) {
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = busy;
+      btn.textContent = busy ? LOGIN_BTN_BUSY_TEXT : LOGIN_BTN_TEXT;
+    }
+    // Muvaffaqiyatli kirishdan keyin tugma ataylab "Kirilmoqda…" holatida
+    // qoladi (sahifa almashyapti). "Orqaga" bilan bfcache'dan qaytilsa esa
+    // o'sha holatda qotib qolmasin.
+    window.addEventListener('pageshow', (e) => { if (e.persisted) setLoginBusy(false); });
+
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
       const errorEl = document.getElementById('errorMsg');
-      const submitBtn = e.target.querySelector('button');
       errorEl.textContent = '';
       // Ikki marta bosishdan himoya — `scrypt` sinxron, ikkinchi so'rov
       // serverni bekorga bloklaydi va rate-limit hisoblagichini ham oshiradi.
-      if (submitBtn) submitBtn.disabled = true;
+      setLoginBusy(true);
       try {
         // `noAuthRedirect` SHART: aks holda noto'g'ri parol (401) shu
         // sahifaning O'ZINI qayta yuklab yuboradi va xato xabari ekranda
@@ -60,8 +90,7 @@
         }
       } catch (err) {
         errorEl.textContent = err.message || "Kirishda xatolik";
-      } finally {
-        if (submitBtn) submitBtn.disabled = false;
+        setLoginBusy(false);
       }
     });
   </script>
