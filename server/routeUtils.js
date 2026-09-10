@@ -1,3 +1,5 @@
+const { logger, requestContext } = require('./logger');
+
 // Har bir route handler shu bilan o'raladi — better-sqlite3 sinxron ishlagani
 // uchun oddiy try/catch yetarli (async/await shart emas). Xizmat qatlamidagi
 // xatoliklar (OrderError va shunga o'xshash, `status` maydoni bilan) to'g'ri
@@ -19,12 +21,27 @@ function asyncRoute(fn) {
       // shu edi. `err.status` YO'Q xatolar (kutilmagan qulashlar) esa
       // avvalgidek yashiriladi — ichki tafsilot mijozga chiqmasligi kerak.
       const isDeliberate = Boolean(err.status);
+      if (status >= 500) {
+        // 2026-09-10: structured log — endi xato QAYSI so'rovda, KIM
+        // tomonidan va qaysi yo'lda yuz berganini ko'rsatadi. Ilgari
+        // shunchaki `console.error(err)` edi va PM2 logida bir vaqtda
+        // kelgan so'rovlarning stack-trace'lari aralashib ketardi.
+        logger.error(err.message || 'Kutilmagan xato', {
+          ...requestContext(req),
+          status,
+          stack: err.stack,
+        });
+      }
       if (status >= 500 && !isDeliberate) {
-        console.error(err);
-        res.status(status).json({ error: "Server xatosi, birozdan so'ng qayta urinib ko'ring" });
+        // Ichki tafsilot mijozga chiqmasligi kerak — u faqat logda.
+        // `reqId` esa beriladi: foydalanuvchi shu kodni aytsa, logdan
+        // aynan o'sha so'rovni topish mumkin.
+        res.status(status).json({
+          error: "Server xatosi, birozdan so'ng qayta urinib ko'ring",
+          request_id: req.id,
+        });
         return;
       }
-      if (status >= 500) console.error(err); // ataylab bo'lsa ham logga yozamiz
       res.status(status).json({ error: err.message || 'Xatolik yuz berdi' });
     }
   };

@@ -9,6 +9,7 @@ const crypto = require('crypto');
 
 const { createAuth } = require('./auth');
 const { createRateLimiter } = require('./routeUtils');
+const { requestIdMiddleware } = require('./logger');
 
 const PORT = process.env.PORT || 3213;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -46,6 +47,12 @@ if (TRUST_PROXY) app.set('trust proxy', 1);
 // tasodifiga emas, aniq ro'yxatga tayanadi.
 app.set('case sensitive routing', true);
 app.set('strict routing', false);
+
+// Har bir so'rovga qisqa id beriladi va u `X-Request-Id` sarlavhasida
+// qaytadi (2026-09-10). Xodim "xatolik chiqdi" desa, ekrandagi
+// `request_id` bo'yicha PM2 logidan aynan o'sha so'rovni topish mumkin:
+//   pm2 logs polat --raw | jq 'select(.reqId=="a3f2c1")'
+app.use(requestIdMiddleware);
 app.use(express.json({ limit: '1mb' }));
 
 // Xavfsizlik sarlavhalari (2026-09-10). ATAYLAB `helmet` o'rniga qo'lda —
