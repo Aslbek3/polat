@@ -5,6 +5,7 @@
 // subtotal/jamini o'zi hisoblaydi (mijoz tomonidan yuborilgan jamiga ishonilmaydi).
 const { db, nowIso } = require('../db');
 const { MAX_AMOUNT, MAX_QUANTITY } = require('../validation');
+const reports = require('./reports');
 
 class ManualBillError extends Error {
   constructor(message, status = 400) {
@@ -102,4 +103,59 @@ function getManualBillReceipt(billId) {
   };
 }
 
-module.exports = { ManualBillError, createManualBill, getManualBillReceipt };
+// Kassirning "Statistika" ekrani uchun: ikkala yopilgan-hisob manbasi
+// (dine-in `orders`, stol hisob-kitobi — afitsiant HAM yopgan bo'lishi
+// mumkin — va `manual_bills`, qo'lda chek) birlashtirilib, vaqt bo'yicha
+// kamayish tartibida qaytariladi. Har biri o'z cheki uchun (kind='table' ->
+// GET /kassir/orders/:id/receipt, kind='manual' ->
+// GET /kassir/manual-bills/:id/receipt) qayta ochilishi mumkin.
+//
+// 2026-09-10: `routes/kassirBilling.js` dan ko'chirildi (route bazaga bevosita
+// murojaat qilardi). Shu bilan birga sana filtri `reports.appendDateFilter`
+// orqali o'tadi — ilgari `date(o.closed_at)` UTC kunini olardi, ya'ni
+// Toshkentda 00:00–05:00 oralig'idagi hisoblar kassir statistikasida OLDINGI
+// kunga tushardi va admin hisobotidan farq qilardi (server/businessTime.js).
+const BILLS_LIMIT = 300;
+
+function listBills(query = {}) {
+  const range = reports.dateRange(query);
+
+  const tableParams = [];
+  const tableSql = reports.appendDateFilter(`
+    SELECT o.id AS id, 'table' AS kind, t.name AS label, o.total_amount AS total_amount,
+           o.closed_at AS at, COALESCE(cu.full_name, cu.username) AS by_name
+    FROM orders o
+    JOIN tables t ON t.id = o.table_id
+    LEFT JOIN users cu ON cu.id = o.closed_by
+    WHERE o.status = 'closed'
+  `, tableParams, 'o.closed_at', range);
+
+  const manualParams = [];
+  const manualSql = reports.appendDateFilter(`
+    SELECT mb.id AS id, 'manual' AS kind, 'Qo''lda hisoblash' AS label, mb.total_amount AS total_amount,
+           mb.created_at AS at, COALESCE(u.full_name, u.username) AS by_name
+    FROM manual_bills mb
+    JOIN users u ON u.id = mb.created_by
+    WHERE 1=1
+  `, manualParams, 'mb.created_at', range);
+
+  // NEGA (2026-09-10): ilgari ikkala manba JS'da birlashtirilib `slice(0, 300)`
+  // bilan qisqartirilar, jami summa va son esa SHU QISQARTIRILGAN ro'yxatdan
+  // hisoblanardi — oraliqda 300 dan ko'p hisob bo'lsa "Jami summa" jimgina KAM
+  // ko'rsatardi. Endi bitta UNION ALL so'rovi ikki marta ishlatiladi: biri —
+  // ko'rsatiladigan ro'yxat (eng yangi 300 tasi), ikkinchisi — oraliqdagi
+  // BARCHA hisoblar bo'yicha SUM/COUNT.
+  const unionSql = `${tableSql} UNION ALL ${manualSql}`;
+  const unionParams = [...tableParams, ...manualParams];
+
+  const bills = db
+    .prepare(`SELECT * FROM (${unionSql}) b ORDER BY b.at DESC LIMIT ${BILLS_LIMIT}`)
+    .all(...unionParams);
+  const totals = db
+    .prepare(`SELECT COALESCE(SUM(b.total_amount), 0) AS total_amount, COUNT(*) AS cnt FROM (${unionSql}) b`)
+    .get(...unionParams);
+
+  return { bills, total_amount: totals.total_amount, count: totals.cnt };
+}
+
+module.exports = { ManualBillError, createManualBill, getManualBillReceipt, listBills };

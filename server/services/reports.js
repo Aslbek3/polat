@@ -9,6 +9,7 @@
 // emas, servisda turishi kerak — kelajakda boshqa ekran (masalan kassir
 // statistikasi yoki eksport) xuddi shu raqamlarni qayta yozmasligi uchun.
 const { db } = require('../db');
+const { sqlBusinessDate, businessDateStr } = require('../businessTime');
 
 // Buyurtma ro'yxatida ruxsat etilgan holatlar — bundan tashqarisi
 // (masalan `?status=hack`) e'tiborga olinmaydi, filtr umuman qo'llanmaydi.
@@ -24,16 +25,19 @@ function dateRange(query = {}) {
   return { from, to };
 }
 
-// Server LOKAL vaqti bo'yicha YYYY-MM-DD (2026-09-10, A-03).
-// NEGA SHU YERDA: admin bosh sahifasi "bugun"ni brauzerda `todayStr()`
-// (public/app.js — lokal sana) bilan hisoblab `from=to=bugun` qilib
-// yuborardi. Dashboard endi shu hisobni serverda qiladi — natija AYNAN
-// o'sha bo'lishi uchun xuddi shunday lokal sana olinadi (toISOString() —
-// UTC — EMAS). Bronlar ro'yxati ham "bugundan boshlab" tartibi uchun shu
-// funksiyani ishlatadi: "bugun" loyihada bitta ma'noga ega bo'lsin.
+// "Bugun" — BIZNES vaqti bo'yicha YYYY-MM-DD (2026-09-10).
+// Dashboard, bronlar ro'yxati va shu fayldagi sana filtrlari BITTA ma'noda
+// "bugun"ni ishlatishi uchun. Nomi eski (`localDateStr`) — boshqa servislar
+// shu nom bilan chaqiradi.
+//
+// ⚠️ ILGARI bu SERVER lokal vaqtini qaytarardi (`getFullYear/getDate`),
+// SQL filtrlari esa `date(ustun)` bilan UTC kunini olardi — ya'ni ikki xil
+// soat mintaqasi aralashgan edi. VPS UTC'da ishlaganda Toshkentdagi (UTC+5)
+// 00:00–05:00 orasidagi har bir sotuv OLDINGI kunga yozilardi; restoran
+// 24/7 ishlagani uchun bu har kecha takrorlanardi. Endi ikkalasi ham
+// `server/businessTime.js` dagi yagona siljishni ishlatadi.
 function localDateStr(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return businessDateStr(d);
 }
 
 function getSummary(query) {
@@ -65,11 +69,14 @@ function getSummary(query) {
       SELECT total_amount, created_at AS revenue_date FROM manual_bills
     ) combined WHERE 1=1
   `;
+  // Sana filtri BIZNES vaqti bo'yicha (2026-09-10) — `server/businessTime.js`
+  // izohiga qarang. Ilgari `date(revenue_date)` UTC kunini olardi.
   const revenueParams = [];
-  if (from) { revenueSql += ' AND date(revenue_date) >= date(?)'; revenueParams.push(from); }
-  if (to) { revenueSql += ' AND date(revenue_date) <= date(?)'; revenueParams.push(to); }
+  revenueSql = appendDateFilter(revenueSql, revenueParams, 'revenue_date', { from, to });
   const revenueRow = db.prepare(revenueSql).get(...revenueParams);
 
+  // `expense_date` ATAYLAB siljitilmaydi: u UTC vaqt belgisi emas, xarajat
+  // kiritilganda tanlangan oddiy YYYY-MM-DD satr (allaqachon biznes kuni).
   let expenseSql = 'SELECT COALESCE(SUM(amount),0) AS total FROM expenses WHERE 1=1';
   const expenseParams = [];
   if (from) { expenseSql += ' AND expense_date >= ?'; expenseParams.push(from); }
@@ -113,8 +120,7 @@ function getSummary(query) {
     ) combined WHERE 1=1
   `;
   const cogsParams = [];
-  if (from) { cogsSql += ' AND date(cogs_date) >= date(?)'; cogsParams.push(from); }
-  if (to) { cogsSql += ' AND date(cogs_date) <= date(?)'; cogsParams.push(to); }
+  cogsSql = appendDateFilter(cogsSql, cogsParams, 'cogs_date', { from, to });
   const cogsRow = db.prepare(cogsSql).get(...cogsParams);
 
   return {
@@ -126,12 +132,20 @@ function getSummary(query) {
   };
 }
 
-// Bitta manba uchun sana filtri: `date(<ustun>) >= date(?)` ... — getSummary()
-// bilan AYNAN bir xil shaklda, ro'yxat va jami bitta qoida bo'yicha kesilsin.
+// UTC vaqt belgisi saqlangan ustun bo'yicha sana filtri — YAGONA joy.
+// getSummary() (daromad, tan narx) va listOrders() (ro'yxat) AYNAN shu
+// funksiyadan o'tadi, shuning uchun ro'yxat va jami bir xil kunlarga
+// kesiladi. `kassir /bills` ham (services/manualBills.js) shu qoidani
+// ishlatadi — ikki ekran bir xil kunni ko'rsatadi.
+//
+// 2026-09-10: `date(ustun)` -> `date(ustun, '+300 minutes')` (biznes vaqti).
+// `from`/`to` o'zgarmaydi — ular brauzerdan kelgan, allaqachon Toshkent
+// vaqtidagi YYYY-MM-DD.
 function appendDateFilter(sql, params, column, { from, to }) {
   let out = sql;
-  if (from) { out += ` AND date(${column}) >= date(?)`; params.push(from); }
-  if (to) { out += ` AND date(${column}) <= date(?)`; params.push(to); }
+  const day = sqlBusinessDate(column);
+  if (from) { out += ` AND ${day} >= date(?)`; params.push(from); }
+  if (to) { out += ` AND ${day} <= date(?)`; params.push(to); }
   return out;
 }
 
@@ -226,6 +240,8 @@ module.exports = {
   ORDER_STATUSES,
   ORDERS_LIMIT,
   localDateStr,
+  dateRange,
+  appendDateFilter,
   getSummary,
   listOrders,
 };

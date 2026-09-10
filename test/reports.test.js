@@ -180,9 +180,12 @@ test('summary: sana filtri oraliqdan tashqaridagi yozuvlarni hisobga olmaydi', a
   // Oraliq ichida
   makeClosedOrder({ closedAt: '2031-03-10T09:00:00.000Z', items: [{ menuItemId: item.id, unitPrice: 10000, quantity: 1 }] });
   addExpense({ amount: 1000, date: '2031-03-10' });
-  // Oraliqdan oldin va keyin — kirmasligi kerak
-  makeClosedOrder({ closedAt: '2031-03-09T23:59:00.000Z', items: [{ menuItemId: item.id, unitPrice: 10000, quantity: 7 }] });
-  makeClosedOrder({ closedAt: '2031-03-12T00:01:00.000Z', items: [{ menuItemId: item.id, unitPrice: 10000, quantity: 9 }] });
+  // Oraliqdan oldin va keyin — kirmasligi kerak. Kun chegaralari BIZNES vaqti
+  // (Toshkent, UTC+5, server/businessTime.js) bo'yicha: 18:59Z = 23:59
+  // Toshkent, 19:01Z = ertasi kuni 00:01 Toshkent. (Ilgari bu yerda 23:59Z /
+  // 00:01Z turardi — ya'ni test UTC kunini "to'g'ri" deb qotirgan edi.)
+  makeClosedOrder({ closedAt: '2031-03-09T18:59:00.000Z', items: [{ menuItemId: item.id, unitPrice: 10000, quantity: 7 }] });
+  makeClosedOrder({ closedAt: '2031-03-11T19:01:00.000Z', items: [{ menuItemId: item.id, unitPrice: 10000, quantity: 9 }] });
   addExpense({ amount: 99000, date: '2031-03-09' });
   addExpense({ amount: 88000, date: '2031-03-12' });
 
@@ -198,8 +201,10 @@ test('summary: sana filtri oraliqdan tashqaridagi yozuvlarni hisobga olmaydi', a
 
 test('summary: chegara kunlari (from/to) hisobga kiradi', async () => {
   const item = h.createMenuItem({ price: 5000 });
-  makeClosedOrder({ closedAt: '2031-04-01T00:00:00.000Z', items: [{ menuItemId: item.id, unitPrice: 5000, quantity: 1 }] });
-  makeClosedOrder({ closedAt: '2031-04-03T23:59:59.000Z', items: [{ menuItemId: item.id, unitPrice: 5000, quantity: 1 }] });
+  // Chegaralar Toshkent vaqtida: 1-aprel 00:00 = 31-mart 19:00Z,
+  // 3-aprel 23:59:59 = 3-aprel 18:59:59Z (server/businessTime.js).
+  makeClosedOrder({ closedAt: '2031-03-31T19:00:00.000Z', items: [{ menuItemId: item.id, unitPrice: 5000, quantity: 1 }] });
+  makeClosedOrder({ closedAt: '2031-04-03T18:59:59.000Z', items: [{ menuItemId: item.id, unitPrice: 5000, quantity: 1 }] });
 
   const { body } = await withRouter(adminReportsRouter, adminUser(), (base) =>
     getJson(base, '/summary', { from: '2031-04-01', to: '2031-04-03' })

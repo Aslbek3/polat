@@ -15,12 +15,16 @@
 // olib kelardi (A-01, A-02 aynan shunday xatolar edi). Qolgan hisoblagichlar
 // ham tegishli servisdan olinadi.
 //
-// "Bugun" — server lokal sanasi (`reports.localDateStr`), ya'ni avval
-// brauzer `todayStr()` bilan yuborgan `from=to=bugun` bilan bir xil.
+// "Bugun", "kecha", "oy boshi" — BIZNES vaqti bo'yicha (server/businessTime.js,
+// Toshkent UTC+5). ⚠️ Ilgari server LOKAL vaqti (`getFullYear/getMonth`)
+// ishlatilardi — VPS UTC'da bo'lsa Toshkentda 00:00–05:00 oralig'ida
+// "bugun" hali KECHA bo'lib qolardi va oy boshida "shu oy" oldingi oyni
+// ko'rsatardi (2026-09-10).
 const reports = require('./reports');
 const inventory = require('./inventory');
 const customerOrders = require('./customerOrders');
 const reservations = require('./reservations');
+const { businessDateStr, businessMonthStartStr, addDaysStr } = require('../businessTime');
 
 // getSummary() maydon nomlari -> dashboard shartnomasi nomlari.
 // (`expenses_total` -> `expenses`; qolganlari o'zgarishsiz.)
@@ -37,10 +41,9 @@ function periodSummary(from, to) {
 
 // `now` — faqat testlar uchun (sanani qotirish).
 function getDashboard(now = new Date()) {
-  const today = reports.localDateStr(now);
-  const yesterdayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  const yesterday = reports.localDateStr(yesterdayDate);
-  const monthStart = reports.localDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
+  const today = businessDateStr(now);
+  const yesterday = addDaysStr(today, -1);
+  const monthStart = businessMonthStartStr(now);
 
   return {
     today: periodSummary(today, today),

@@ -91,6 +91,20 @@ async function api(path, options = {}) {
     const message = (data && data.error) || `Xatolik (${res.status})`;
     throw new Error(message);
   }
+  // `withMeta: true` (2026-09-10) — javob sarlavhalarini ham qaytaradi.
+  // NEGA: ro'yxat endpointlari endi cheklangan (LIMIT) — to'liq son va jami
+  // summa `X-Total-Count` / `X-Total-Amount` SARLAVHALARIDA keladi. Ilgari
+  // "Jami" ekranda ro'yxatning o'zidan yig'ilardi, ya'ni cheklovdan oshsa
+  // jimgina KAM ko'rsatardi (kassir /bills da aynan shu xato bo'lgan edi).
+  // Qaytaradi: { data, total, totalAmount, headers } — total/totalAmount
+  // sarlavha bo'lmasa null.
+  if (options.withMeta) {
+    const num = (name) => {
+      const v = res.headers.get(name);
+      return v === null || v === '' ? null : Number(v);
+    };
+    return { data, total: num('X-Total-Count'), totalAmount: num('X-Total-Amount'), headers: res.headers };
+  }
   return data;
 }
 
