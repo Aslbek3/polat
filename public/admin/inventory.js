@@ -5,17 +5,24 @@ let adjustingInvId = null;
 
 // escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
 // nusxa birlashtirildi).
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi
+// (shu sabab "📥 Kirim"/"🗑" tugmalari qayta yuklash paytida DOM'dan
+// yo'qolib, bosishni "yutib" qo'ymaydi), xatoni bir joyda ko'rsatadi.
+// Ilgari shu naqsh 18 ta faylda nusxalangan edi.
 async function loadAll() {
-  const box = document.getElementById('inventoryList');
-  try {
-    [inventoryItems, menuCategories] = await Promise.all([
+  await renderList({
+    box: 'inventoryList',
+    load: () => Promise.all([
       api('/admin/inventory/items'),
       api('/admin/menu/categories').catch(() => []),
-    ]);
-    render();
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    ]),
+    onData: ([items, cats]) => { inventoryItems = items; menuCategories = cats; },
+    isEmpty: () => inventoryItems.length === 0,
+    empty: "Hali ombor mahsuloti yo'q. Yuqoridagi tugma bilan qo'shing (masalan: Suv, Salfetka).",
+    render: renderInventoryHtml,
+    bind: bindInventoryRows,
+  });
 }
 
 function stockBadge(item) {
@@ -26,13 +33,8 @@ function stockBadge(item) {
   return `<span class="badge ok">Yetarli</span>`;
 }
 
-function render() {
-  const box = document.getElementById('inventoryList');
-  if (inventoryItems.length === 0) {
-    box.innerHTML = '<p class="dim">Hali ombor mahsuloti yo\'q. Yuqoridagi tugma bilan qo\'shing (masalan: Suv, Salfetka).</p>';
-    return;
-  }
-  box.innerHTML = inventoryItems.map((it) => `
+function renderInventoryHtml() {
+  return inventoryItems.map((it) => `
     <div class="card">
       <div class="card-row">
         <div>
@@ -56,7 +58,9 @@ function render() {
       </div>
     </div>
   `).join('');
+}
 
+function bindInventoryRows(box) {
   box.querySelectorAll('[data-in]').forEach((b) => b.addEventListener('click', () => openAdjustModal(Number(b.dataset.in), 'in')));
   box.querySelectorAll('[data-out]').forEach((b) => b.addEventListener('click', () => openAdjustModal(Number(b.dataset.out), 'out')));
   box.querySelectorAll('[data-history]').forEach((b) => b.addEventListener('click', () => openHistoryModal(Number(b.dataset.history))));
@@ -228,13 +232,19 @@ async function openHistoryModal(id) {
   const box = document.getElementById('historyList');
   box.innerHTML = '<p class="dim">Yuklanmoqda...</p>';
   document.getElementById('historyModal').classList.remove('hidden');
-  try {
-    const rows = await api(`/admin/inventory/items/${id}/movements`);
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Hali hech qanday harakat yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = rows.map((r) => {
+  // ⚠️ `dedupe: false` SHART (2026-09-10): yuqorida "Yuklanmoqda..." qo'lda
+  // yozildi, ya'ni DOM renderList() bilgan holatdan chetga chiqdi. Dedupe
+  // yoqiq bo'lsa xuddi shu mahsulotning tarixini IKKINCHI marta ochganda
+  // ma'lumot o'zgarmagan deb DOM'ga tegilmasdi va oyna abadiy
+  // "Yuklanmoqda..." bo'lib qolardi. Navbat (eskirgan javobni tashlash) esa
+  // ishlaydi: A mahsulot tarixi ochilib, darhol B ochilsa, kechikkan A javobi
+  // B ning ustidan yozmaydi.
+  await renderList({
+    box,
+    dedupe: false,
+    load: () => api(`/admin/inventory/items/${id}/movements`),
+    empty: "Hali hech qanday harakat yo'q.",
+    render: (rows) => rows.map((r) => {
       const sign = r.delta > 0 ? '+' : '';
       const cls = r.delta > 0 ? 'ok' : 'low';
       const label = MOVEMENT_LABELS[r.reason] || r.reason;
@@ -247,10 +257,8 @@ async function openHistoryModal(id) {
           <div class="badge ${cls}">${sign}${r.delta} ${item ? escapeHtml(item.unit) : ''}</div>
         </div>
       `;
-    }).join('');
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    }).join(''),
+  });
 }
 document.getElementById('historyCloseBtn').addEventListener('click', () => {
   document.getElementById('historyModal').classList.add('hidden');

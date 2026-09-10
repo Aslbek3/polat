@@ -17,23 +17,27 @@ async function openBillReceipt(kind, id) {
   }
 }
 
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi ("Ko'rsatish" ikki marta bosilsa sekinrog'i
+// yangisining ustidan yozmaydi), ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. `onData` — yuqoridagi ikki ko'rsatkich
+// (soni/jami) ro'yxatdan tashqarida, shu sabab alohida yangilanadi.
 async function loadBills() {
-  const box = document.getElementById('billList');
   const from = document.getElementById('filterFrom').value;
   const to = document.getElementById('filterTo').value;
   const qs = new URLSearchParams();
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
-  try {
-    const data = await api(`/kassir/bills${qs.toString() ? '?' + qs.toString() : ''}`);
-    document.getElementById('statCount').textContent = String(data.count);
-    document.getElementById('statTotal').textContent = fmtMoney(data.total_amount);
-
-    if (data.bills.length === 0) {
-      box.innerHTML = '<p class="dim">Bu oraliqda yopilgan hisob topilmadi.</p>';
-      return;
-    }
-    box.innerHTML = data.bills.map((b) => `
+  await renderList({
+    box: 'billList',
+    load: () => api(`/kassir/bills${qs.toString() ? '?' + qs.toString() : ''}`),
+    onData: (data) => {
+      document.getElementById('statCount').textContent = String(data.count);
+      document.getElementById('statTotal').textContent = fmtMoney(data.total_amount);
+    },
+    isEmpty: (data) => data.bills.length === 0,
+    empty: 'Bu oraliqda yopilgan hisob topilmadi.',
+    render: (data) => data.bills.map((b) => `
       <div class="card card-row" data-kind="${b.kind}" data-id="${b.id}" style="cursor:pointer;">
         <div>
           <div class="card-title">${KIND_ICON[b.kind] || ''} ${escapeHtml(b.label)}</div>
@@ -41,13 +45,13 @@ async function loadBills() {
         </div>
         <div class="card-title">${fmtMoney(b.total_amount)}</div>
       </div>
-    `).join('');
-    box.querySelectorAll('[data-kind]').forEach((row) => {
-      row.addEventListener('click', () => openBillReceipt(row.dataset.kind, Number(row.dataset.id)));
-    });
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-kind]').forEach((row) => {
+        row.addEventListener('click', () => openBillReceipt(row.dataset.kind, Number(row.dataset.id)));
+      });
+    },
+  });
 }
 
 document.getElementById('filterBtn').addEventListener('click', loadBills);

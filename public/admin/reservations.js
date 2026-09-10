@@ -3,15 +3,15 @@
 const STATUS_LABEL = { new: 'Yangi', confirmed: 'Tasdiqlangan', cancelled: 'Bekor qilingan' };
 const STATUS_BADGE = { new: 'debt', confirmed: 'ok', cancelled: 'low' };
 
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
 async function loadReservations() {
-  const box = document.getElementById('reservationList');
-  try {
-    const rows = await api('/admin/reservations');
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Hozircha bron so\'rovlari yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = rows.map((r) => `
+  await renderList({
+    box: 'reservationList',
+    load: () => api('/admin/reservations'),
+    empty: "Hozircha bron so'rovlari yo'q.",
+    render: (rows) => rows.map((r) => `
       <div class="card">
         <div class="card-row">
           <div>
@@ -26,12 +26,12 @@ async function loadReservations() {
           <button class="btn small danger" data-del="${r.id}">🗑 O'chirish</button>
         </div>
       </div>
-    `).join('');
-    box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act)));
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delReservation(Number(b.dataset.del))));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act)));
+      box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delReservation(Number(b.dataset.del))));
+    },
+  });
 }
 
 async function setStatus(id, status) {

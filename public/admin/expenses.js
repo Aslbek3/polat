@@ -7,14 +7,16 @@ async function loadExpenses() {
   const qs = new URLSearchParams();
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
-  try {
-    const rows = await api(`/admin/expenses${qs.toString() ? '?' + qs.toString() : ''}`);
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Xarajat topilmadi.</p>';
-      return;
-    }
-    const total = rows.reduce((s, r) => s + r.amount, 0);
-    box.innerHTML = `
+  // renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+  // eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+  // xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
+  await renderList({
+    box,
+    load: () => api(`/admin/expenses${qs.toString() ? '?' + qs.toString() : ''}`),
+    empty: 'Xarajat topilmadi.',
+    render: (rows) => {
+      const total = rows.reduce((s, r) => s + r.amount, 0);
+      return `
       <div class="card-title mt-16">Jami: ${fmtMoney(total)}</div>
     ` + rows.map((r) => `
       <div class="card card-row">
@@ -25,10 +27,11 @@ async function loadExpenses() {
         <button class="btn small danger" data-del="${r.id}">O'chirish</button>
       </div>
     `).join('');
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delExpense(Number(b.dataset.del))));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    },
+    bind: (el) => {
+      el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delExpense(Number(b.dataset.del))));
+    },
+  });
 }
 
 // withBusy() — ikki marta bosishdan himoya (2026-09-10): bu POST idempotent

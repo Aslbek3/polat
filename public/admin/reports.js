@@ -32,16 +32,18 @@ async function loadReport() {
   const status = document.getElementById('filterStatus').value;
   document.getElementById('orderListTitle').textContent = STATUS_TITLE[status] || 'Buyurtmalar';
 
-  const box = document.getElementById('orderList');
-  try {
-    const qs2 = new URLSearchParams(qs);
-    if (status) qs2.set('status', status);
-    const orders = await api(`/admin/reports/orders?${qs2.toString()}`);
-    if (orders.length === 0) {
-      box.innerHTML = '<p class="dim">Buyurtma topilmadi.</p>';
-      return;
-    }
-    box.innerHTML = orders.map((o) => `
+  // renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+  // eskirgan javobni tashlaydi (bu yerda ayniqsa kerak — "Ko'rsatish" va
+  // holat filtri ketma-ket bosilsa ikkita so'rov parallel ketadi va
+  // sekinrog'i keyin kelib yangisining ustidan yozib yuborardi), ma'lumot
+  // o'zgarmagan bo'lsa DOM'ga tegmaydi, xatoni bir joyda ko'rsatadi.
+  const qs2 = new URLSearchParams(qs);
+  if (status) qs2.set('status', status);
+  await renderList({
+    box: 'orderList',
+    load: () => api(`/admin/reports/orders?${qs2.toString()}`),
+    empty: 'Buyurtma topilmadi.',
+    render: (orders) => orders.map((o) => `
       <div class="card card-row">
         <div>
           <div class="card-title">${escapeHtml(o.table_name)} — ${fmtMoney(o.total_amount)} <span class="badge ${o.status === 'closed' ? 'ok' : o.status === 'cancelled' ? 'low' : 'debt'}">${escapeHtml(orderStatusLabel(o.status))}</span></div>
@@ -49,13 +51,13 @@ async function loadReport() {
         </div>
         <button class="btn small" data-order-id="${o.id}">Chek</button>
       </div>
-    `).join('');
-    box.querySelectorAll('[data-order-id]').forEach((btn) => {
-      btn.addEventListener('click', () => openReceiptByOrderId(Number(btn.dataset.orderId)));
-    });
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-order-id]').forEach((btn) => {
+        btn.addEventListener('click', () => openReceiptByOrderId(Number(btn.dataset.orderId)));
+      });
+    },
+  });
 }
 
 document.getElementById('filterBtn').addEventListener('click', loadReport);

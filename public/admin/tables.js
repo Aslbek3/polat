@@ -3,15 +3,16 @@ let editingId = null;
 
 // escapeHtml() — endi ../app.js'dan global (2026-09-09'da 15 xil fayldagi
 // nusxa birlashtirildi).
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
 async function loadTables() {
-  const box = document.getElementById('tableList');
-  try {
-    tables = await api('/admin/tables');
-    if (tables.length === 0) {
-      box.innerHTML = '<p class="dim">Hali stol qo\'shilmagan.</p>';
-      return;
-    }
-    box.innerHTML = tables.map((t) => `
+  await renderList({
+    box: 'tableList',
+    load: () => api('/admin/tables'),
+    onData: (rows) => { tables = rows; },
+    empty: "Hali stol qo'shilmagan.",
+    render: (rows) => rows.map((t) => `
       <div class="card card-row">
         <div class="card-title">${escapeHtml(t.name)} ${t.is_active ? '' : '<span class="badge low">o\'chirilgan</span>'}</div>
         <div style="display:flex; gap:6px;">
@@ -19,12 +20,12 @@ async function loadTables() {
           <button class="btn small danger" data-del="${t.id}">O'chirish</button>
         </div>
       </div>
-    `).join('');
-    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openModal(Number(b.dataset.edit))));
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delTable(Number(b.dataset.del))));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openModal(Number(b.dataset.edit))));
+      box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delTable(Number(b.dataset.del))));
+    },
+  });
 }
 
 function openModal(id) {

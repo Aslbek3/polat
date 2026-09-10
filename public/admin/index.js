@@ -13,16 +13,15 @@ async function loadSummary() {
   }
 }
 
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
 async function loadOccupied() {
-  const box = document.getElementById('occupiedTables');
-  try {
-    const tables = await api('/waiter/tables');
-    const occupied = tables.filter((t) => t.occupied);
-    if (occupied.length === 0) {
-      box.innerHTML = '<p class="dim">Hozir band stol yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = occupied.map((t) => `
+  await renderList({
+    box: 'occupiedTables',
+    load: async () => (await api('/waiter/tables')).filter((t) => t.occupied),
+    empty: "Hozir band stol yo'q.",
+    render: (occupied) => occupied.map((t) => `
       <div class="card card-row">
         <div>
           <div class="card-title">${escapeHtml(t.name)}</div>
@@ -30,10 +29,8 @@ async function loadOccupied() {
         </div>
         <div class="card-title">${fmtMoney(t.total)}</div>
       </div>
-    `).join('');
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    `).join(''),
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -1,38 +1,26 @@
 const express = require('express');
-const { db, nowIso } = require('../db');
 const { asyncRoute } = require('../routeUtils');
+const tables = require('../services/tables');
 
 const router = express.Router();
 
+// Route qatlami faqat kirishni oladi va servis natijasini qaytaradi —
+// barcha DB amallari va tekshiruvlar `services/tables.js` da.
+
 router.get('/', asyncRoute((req, res) => {
-  res.json(db.prepare('SELECT * FROM tables ORDER BY sort_order, id').all());
+  res.json(tables.list());
 }));
 
 router.post('/', asyncRoute((req, res) => {
-  const { name, sort_order } = req.body || {};
-  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Nom kiritilishi shart' });
-  const info = db
-    .prepare('INSERT INTO tables (name, sort_order, is_active, created_at) VALUES (?, ?, 1, ?)')
-    .run(String(name).trim(), Number(sort_order) || 0, nowIso());
-  res.json(db.prepare('SELECT * FROM tables WHERE id = ?').get(info.lastInsertRowid));
+  res.json(tables.create(req.body || {}));
 }));
 
 router.put('/:id', asyncRoute((req, res) => {
-  const existing = db.prepare('SELECT * FROM tables WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Stol topilmadi' });
-  const name = req.body?.name !== undefined ? String(req.body.name).trim() : existing.name;
-  const sortOrder = req.body?.sort_order !== undefined ? Number(req.body.sort_order) : existing.sort_order;
-  db.prepare('UPDATE tables SET name = ?, sort_order = ? WHERE id = ?').run(name, sortOrder, req.params.id);
-  res.json(db.prepare('SELECT * FROM tables WHERE id = ?').get(req.params.id));
+  res.json(tables.update(req.params.id, req.body));
 }));
 
 router.delete('/:id', asyncRoute((req, res) => {
-  const existing = db.prepare('SELECT * FROM tables WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Stol topilmadi' });
-  const openOrder = db.prepare("SELECT id FROM orders WHERE table_id = ? AND status = 'open'").get(req.params.id);
-  if (openOrder) return res.status(400).json({ error: "Bu stolda ochiq buyurtma bor, avval hisob-kitob qiling" });
-  db.prepare('UPDATE tables SET is_active = 0 WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+  res.json(tables.deactivate(req.params.id));
 }));
 
 module.exports = router;

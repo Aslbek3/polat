@@ -27,40 +27,19 @@ function stockStateBadge(o) {
   return '';
 }
 
-// 15 soniyalik pollingni "zararsiz" qilish uchun uchta narsa (2026-09-10):
-//
-//  1. `lastOrdersJson` — oldingi javob bilan solishtirish. Ilgari loadOrders()
-//     SHARTSIZ `box.innerHTML = ...` qilardi: agar poll aynan `mousedown` va
-//     `mouseup` orasida tushsa, tugma DOM'dan olib tashlanardi va `click`
-//     UMUMAN otilmasdi — admin "❌ Bekor qilish"ni bosardi, hech narsa
-//     bo'lmasdi va sababini tushunmasdi. Ma'lumot o'zgarmagan bo'lsa endi
-//     DOM'ga umuman tegilmaydi.
-//  2. `reqSeq` — eskirgan javobni render qilmaslik. Poll va qo'lda chaqirilgan
-//     loadOrders() bir vaqtda ketsa, sekinroq (eski) javob keyin kelib yangisini
-//     ustidan yozib yuborishi mumkin edi.
-//  3. Poll XATOSIDA ro'yxat O'CHIRILMAYDI — faqat toast. Ilgari bitta o'tkinchi
-//     tarmoq uzilishi butun ekranni `<p class="dim">Xatolik (500)</p>` ga
-//     almashtirardi, ya'ni 15 soniyada bir marta ekran tozalanib turardi.
-let lastOrdersJson = null;
-let reqSeq = 0;
-let lastPollErrorMsg = null; // bir xil xatoni har 15 soniyada qayta toast qilmaslik uchun
-
+// 15 soniyalik pollingni "zararsiz" qilgan uchta narsa (eskirgan javobni
+// tashlash, o'zgarmagan ma'lumotda DOM'ga tegmaslik, poll xatosida ro'yxatni
+// O'CHIRMASLIK) shu faylda QO'LDA yozilgan edi — 2026-09-10 da ../app.js'dagi
+// umumiy renderList()ga chiqarildi va barcha ro'yxatlarga tarqatildi.
+// Batafsil "NEGA" izohi o'sha yerda.
 async function loadOrders(isPoll) {
-  const box = document.getElementById('orderList');
-  const seq = ++reqSeq;
-  try {
-    const rows = await api('/admin/customer-orders');
-    if (seq !== reqSeq) return; // eskirgan javob — yangiroq so'rov allaqachon ketgan
-    lastPollErrorMsg = null;
-    const rowsJson = JSON.stringify(rows);
-    if (rowsJson === lastOrdersJson) return; // hech narsa o'zgarmagan — DOM'ga tegmaymiz
-    lastOrdersJson = rowsJson;
-    orders = rows;
-    if (rows.length === 0) {
-      box.innerHTML = '<p class="dim">Hozircha buyurtma yo\'q.</p>';
-      return;
-    }
-    box.innerHTML = rows.map((o) => {
+  await renderList({
+    box: 'orderList',
+    isPoll,
+    load: () => api('/admin/customer-orders'),
+    onData: (rows) => { orders = rows; },
+    empty: "Hozircha buyurtma yo'q.",
+    render: (rows) => rows.map((o) => {
       // Yetkazib berish buyurtmasi "tayyor" (status='completed') bo'lganda ham
       // dastavkachi hali yetkazmagan bo'lishi mumkin — shunday holatda "Bajarildi"
       // deyish CHALG'ITADI (admin buyurtma bilan hech narsa qilish shart emas deb
@@ -100,26 +79,16 @@ async function loadOrders(isPoll) {
         </div>
       </div>
     `;
-    }).join('');
-    box.querySelectorAll('[data-print]').forEach((b) => b.addEventListener('click', () => {
-      const order = orders.find((o) => o.id === Number(b.dataset.print));
-      if (order) openCustomerReceiptModal(order);
-    }));
-    box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act)));
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delOrder(Number(b.dataset.del))));
-  } catch (err) {
-    if (seq !== reqSeq) return;
-    if (isPoll) {
-      // Fon yangilanishi yiqildi — ekrandagi ro'yxat o'z joyida qoladi.
-      if (lastPollErrorMsg !== err.message) {
-        lastPollErrorMsg = err.message;
-        toast(`Yangilanmadi: ${err.message}`, 'error');
-      }
-      return;
-    }
-    lastOrdersJson = null; // keyingi muvaffaqiyatli yuklash albatta qayta chizsin
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    }).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-print]').forEach((b) => b.addEventListener('click', () => {
+        const order = orders.find((o) => o.id === Number(b.dataset.print));
+        if (order) openCustomerReceiptModal(order);
+      }));
+      box.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => setStatus(Number(b.dataset.id), b.dataset.act)));
+      box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delOrder(Number(b.dataset.del))));
+    },
+  });
 }
 
 async function setStatus(id, status) {
@@ -154,6 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // holatini (masalan "Yetkazildi"ga o'zgarishini) ko'rish uchun qo'lda
   // yangilashga (F5) majbur edi. Oshpaz/dastavkachi ekranlari bilan bir xil
   // 15s avtomatik yangilanish qo'shildi (2026-09-08 bug fix).
-  // isPoll=true — xato bo'lsa ro'yxat o'chirilmasin (yuqoridagi izohga qarang).
+  // isPoll=true — xato bo'lsa ro'yxat o'chirilmasin (renderList() izohiga qarang).
   setInterval(() => loadOrders(true), 15000);
 });

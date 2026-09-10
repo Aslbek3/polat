@@ -18,7 +18,7 @@
 // saqlanadi (`customer_orders.stock_state`). Shu sabab har bir amal
 // IDEMPOTENT: bir xil o'tishni necha marta bajarsangiz ham natija bir xil.
 
-const { db } = require('../db');
+const { db, nowIso } = require('../db');
 const inventory = require('./inventory');
 
 class CustomerOrderError extends Error {
@@ -200,10 +200,142 @@ function deleteOrder(orderId) {
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// Ochiq (login shart emas) landing sahifasidan buyurtma yaratish.
+//
+// Ilgari bu mantiq to'liq server/routes/publicCustomerOrders.js ichida edi
+// (validatsiya + INSERT + ombordan sarflash + bildirishnoma). Route fayllari
+// `db.prepare()`ni bevosita chaqirmasligi kerak, shuning uchun 2026-09-10'da
+// shu xizmatga ko'chirildi — mijoz buyurtmasining butun hayot sikli
+// (yaratish -> holat o'zgarishi -> o'chirish) endi bitta faylda.
+//
+// Xato xabarlari `CustomerOrderError` orqali otiladi (standart status 400) -
+// routeUtils.js asyncRoute() ularni AYNAN o'sha status va {error: xabar}
+// JSON ko'rinishida qaytaradi, ya'ni mijoz uchun hech narsa o'zgarmadi.
+// ---------------------------------------------------------------------------
+
+// Intl/Node-locale'ga bog'liq bo'lmagan oddiy "1 234" ko'rinishidagi guruhlash -
+// bu faqat bildirishnoma matni uchun, mijozga qaytariladigan javobga ta'sir
+// qilmaydi (total_amount xom son sifatida qaytadi, formatlash frontend ishi).
+function fmtSomPlain(n) {
+  return Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + " so'm";
+}
+
+// Narx HECH QACHON mijoz brauzeridan ishonib olinmaydi — har bir band shu
+// yerda menu_items jadvalidan qayta qidiriladi.
+function getActiveMenuItem(menuItemId) {
+  return db
+    .prepare('SELECT * FROM menu_items WHERE id = ? AND is_active = 1 AND is_available = 1')
+    .get(menuItemId);
+}
+
+function createFromPublic(payload) {
+  const { full_name, phone, fulfillment, address, note, items, location_lat, location_lng } = payload || {};
+
+  const name = String(full_name || '').trim();
+  const phoneNum = String(phone || '').trim();
+  const fulfillmentType = fulfillment === 'delivery' ? 'delivery' : 'pickup';
+  const addressText = String(address || '').trim();
+  const noteText = String(note || '').trim();
+
+  // Ixtiyoriy GPS lokatsiya (mijoz brauzer Geolocation API orqali ulashgan
+  // bo'lsa) — mijozdan kelgan qiymatga ishonib emas, diapazon tekshiruvi bilan.
+  // Noto'g'ri/noto'liq bo'lsa jimgina e'tiborsiz qoldiramiz (butun buyurtmani
+  // rad etishga arzimaydi, manzil matni asosiy manba).
+  const lat = Number(location_lat);
+  const lng = Number(location_lng);
+  const hasLocation = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
+  // 2026-09-10: `note`/`address`/`phone` uchun UZUNLIK CHEGARASI qo'shildi.
+  // Ilgari faqat `full_name` (120) cheklangan edi. Bu ochiq (login shart
+  // emas) endpoint: bitta IP daqiqasiga 5 ta so'rov yubora oladi
+  // (publicWriteLimiter) va har birida ~1 MB `note` bo'lsa — kuniga ~7 GB
+  // SQLite o'sishi. Admin "Buyurtmalar" sahifasida pagination yo'q, ya'ni
+  // u bu yozuvlarni butunlay yuklab brauzerni ham o'ldirardi.
+  if (!name) throw new CustomerOrderError('Ismingizni kiriting');
+  if (name.length > 120) throw new CustomerOrderError('Ism juda uzun');
+  if (!phoneNum || phoneNum.replace(/\D/g, '').length < 7) {
+    throw new CustomerOrderError("Telefon raqamini to'g'ri kiriting");
+  }
+  if (phoneNum.length > 30) throw new CustomerOrderError('Telefon raqami juda uzun');
+  if (addressText.length > 500) throw new CustomerOrderError('Manzil juda uzun');
+  if (noteText.length > 1000) throw new CustomerOrderError('Izoh juda uzun');
+  if (fulfillmentType === 'delivery' && !addressText) {
+    throw new CustomerOrderError('Yetkazish manzilini kiriting');
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new CustomerOrderError("Savat bo'sh");
+  }
+  if (items.length > 50) throw new CustomerOrderError("Savatda juda ko'p band bor");
+
+  // Har bir band uchun narxni serverda (client'ga ishonmasdan) qayta hisoblaymiz.
+  const resolved = [];
+  for (const raw of items) {
+    const menuItemId = Number(raw?.menu_item_id);
+    const quantity = Number(raw?.quantity);
+    if (!Number.isFinite(menuItemId)) throw new CustomerOrderError("Savat bandi noto'g'ri");
+    if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isInteger(quantity) || quantity > 50) {
+      throw new CustomerOrderError("Miqdorni to'g'ri kiriting");
+    }
+    const item = getActiveMenuItem(menuItemId);
+    if (!item) throw new CustomerOrderError('Menyudagi bir band endi mavjud emas, sahifani yangilang');
+    resolved.push({ item, quantity });
+  }
+
+  const totalAmount = resolved.reduce((sum, r) => sum + r.item.price * r.quantity, 0);
+  const ts = nowIso();
+
+  const run = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO customer_orders (full_name, phone, fulfillment, address, location_lat, location_lng, note, total_amount, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`
+      )
+      .run(name, phoneNum, fulfillmentType, addressText || null, hasLocation ? lat : null, hasLocation ? lng : null, noteText || null, totalAmount, ts);
+
+    // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10, sabab
+    // server/schema.sql'dagi izohda: hisobot o'tmishga qarab o'zgarmasligi uchun).
+    const insertItem = db.prepare(
+      `INSERT INTO customer_order_items (customer_order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const r of resolved) {
+      const itemInfo = insertItem.run(
+        info.lastInsertRowid, r.item.id, r.item.name, r.item.price, r.item.cost_price,
+        r.quantity, r.item.price * r.quantity
+      );
+      // Ichimlik (yoki boshqa) taom omborga bog'langan bo'lsa — shu miqdorni
+      // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato
+      // otadi, butun buyurtma (customer_orders yozuvi bilan birga) bekor bo'ladi.
+      if (r.item.inventory_item_id) {
+        inventory.consume(r.item.inventory_item_id, r.quantity, {
+          customerOrderItemId: itemInfo.lastInsertRowid,
+          productName: r.item.name,
+        });
+      }
+    }
+    // Yetkazib berish buyurtmasi kelganda admin+oshpaz+dastavkachi ekranlariga
+    // baravar ko'rinadigan bildirishnoma (server/routes/deliveryAlerts.js
+    // o'qiydi) — olib ketish (pickup) uchun yozilmaydi, faqat delivery.
+    if (fulfillmentType === 'delivery') {
+      db.prepare(
+        `INSERT INTO notifications (message, is_read, customer_order_id, created_at)
+         VALUES (?, 0, ?, ?)`
+      ).run(`🚚 Yangi yetkazib berish buyurtmasi: ${name} — ${fmtSomPlain(totalAmount)}`, info.lastInsertRowid, ts);
+    }
+
+    return info.lastInsertRowid;
+  });
+
+  const id = run();
+  return { ok: true, id, total_amount: totalAmount };
+}
+
 module.exports = {
   CustomerOrderError,
   STATUSES,
   getOrder,
   transition,
   deleteOrder,
+  createFromPublic,
 };

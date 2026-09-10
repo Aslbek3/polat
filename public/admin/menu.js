@@ -41,12 +41,18 @@ function singularizeCategoryName(name) {
 // o'zi uchun ham abadiy "yo'qolgan" bo'lib qolardi. Endi pastdagi
 // renderInactiveSection() shu qatorlarni alohida ko'rsatib, ♻️ Tiklash
 // tugmasi bilan qayta faollashtirish imkonini beradi.
+//
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
+// `isEmpty: () => false` — "Hali kategoriya yo'q" holati renderMenuHtml()
+// ichida (o'chirilganlar bo'limi bilan birga) hal qilinadi.
 async function loadAll() {
-  const box = document.getElementById('categoryList');
-  try {
-    inventoryLoadFailed = false;
-    inventoryLoadError = '';
-    [categories, items, inventoryItems] = await Promise.all([
+  inventoryLoadFailed = false;
+  inventoryLoadError = '';
+  const data = await renderList({
+    box: 'categoryList',
+    load: () => Promise.all([
       api('/admin/menu/categories?include_inactive=1'),
       api('/admin/menu/items?include_inactive=1'),
       // Ombor bo'lmasa ham menyu ishlayversin — LEKIN xatoni jimgina yutmaymiz
@@ -58,13 +64,16 @@ async function loadAll() {
         inventoryLoadError = err.message;
         return [];
       }),
-    ]);
-    render();
-    if (inventoryLoadFailed) {
-      toast(`Ombor ro'yxati yuklanmadi (${inventoryLoadError}). Taomni tahrirlashda ombor bog'lanishini o'zgartirmang.`, 'error');
-    }
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
+    ]),
+    onData: ([cats, its, inv]) => { categories = cats; items = its; inventoryItems = inv; },
+    isEmpty: () => false,
+    render: renderMenuHtml,
+    bind: bindMenuRows,
+  });
+  // `data` faqat so'rov muvaffaqiyatli bo'lganda (ro'yxat qayta chizilmagan,
+  // ya'ni o'zgarmagan holatda ham) qaytadi — xatoda `undefined`.
+  if (data && inventoryLoadFailed) {
+    toast(`Ombor ro'yxati yuklanmadi (${inventoryLoadError}). Taomni tahrirlashda ombor bog'lanishini o'zgartirmang.`, 'error');
   }
 }
 
@@ -97,12 +106,10 @@ function renderItemRow(it, c, isVariant) {
   `;
 }
 
-function render() {
-  const box = document.getElementById('categoryList');
+function renderMenuHtml() {
   const activeCategories = categories.filter((c) => c.is_active);
   if (activeCategories.length === 0 && categories.length === 0) {
-    box.innerHTML = '<p class="dim">Hali kategoriya yo\'q.</p>';
-    return;
+    return '<p class="dim">Hali kategoriya yo\'q.</p>';
   }
   const catsHtml = activeCategories.length === 0
     ? '<p class="dim">Hali faol kategoriya yo\'q.</p>'
@@ -136,8 +143,19 @@ function render() {
     `;
   }).join('');
 
-  box.innerHTML = catsHtml + renderInactiveSection();
+  return catsHtml + renderInactiveSection();
+}
 
+// "🗑 O'chirilganlar → Ko'rsatish" tugmasi ro'yxatni SERVERGA murojaat
+// qilmasdan qayta chizadi (faqat `showInactive` o'zgaradi) — shu sabab
+// renderList()dan tashqarida turadigan mahalliy qayta chizish kerak.
+function render() {
+  const box = document.getElementById('categoryList');
+  box.innerHTML = renderMenuHtml();
+  bindMenuRows(box);
+}
+
+function bindMenuRows(box) {
   box.querySelectorAll('[data-edit-cat]').forEach((b) => b.addEventListener('click', () => openCatModal(Number(b.dataset.editCat))));
   box.querySelectorAll('[data-del-cat]').forEach((b) => b.addEventListener('click', () => delCategory(Number(b.dataset.delCat))));
   box.querySelectorAll('[data-avail]').forEach((b) => b.addEventListener('change', () => toggleAvailability(Number(b.dataset.avail), b.checked)));

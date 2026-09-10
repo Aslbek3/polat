@@ -42,4 +42,56 @@ function acknowledge(row, ackName, onAcknowledge) {
   return db.prepare('SELECT * FROM notifications WHERE id = ?').get(row.id);
 }
 
-module.exports = { GRACE_MS, listUnread, acknowledge };
+// Bildirishnoma TURLARI — qaysi ustun to'ldirilgani bilan ajraladi:
+//   order_item     — dine-in "🏁 Tayyor" (chefKitchen.js yozadi, afitsiant
+//                    o'qiydi: routes/waiterNotifications.js)
+//   customer_order — "🚚 Yangi yetkazib berish buyurtmasi" (publicCustomerOrders.js
+//                    yozadi; admin+oshpaz+kuryer o'qiydi: routes/deliveryAlerts.js)
+// Har bir ekran FAQAT o'z turini ko'radi va faqat o'z turini tasdiqlay oladi —
+// ilgari afitsiant kuryerga tegishli xabarni ham "tasdiqlab" qo'yishi mumkin
+// edi (2026-09-09'da tuzatilgan). Ustun nomlari shu jadvaldan olinadi, so'rovga
+// foydalanuvchi kiritgan qiymat sifatida tushmaydi.
+const KIND_COLUMNS = {
+  order_item: 'order_item_id',
+  customer_order: 'customer_order_id',
+};
+
+function kindColumn(kind) {
+  const column = KIND_COLUMNS[kind];
+  if (!column) throw new Error(`Noma'lum bildirishnoma turi: ${kind}`);
+  return column;
+}
+
+// Berilgan turdagi o'qilmagan (+ grace-oyna ichidagi) bildirishnomalar.
+function listUnreadOfKind(kind) {
+  return listUnread(`${kindColumn(kind)} IS NOT NULL`);
+}
+
+// Bittasini id bo'yicha topadi, LEKIN faqat so'ralgan turga tegishli bo'lsa.
+// Topilmasa (yoki boshqa turga tegishli bo'lsa) null — chaqiruvchi route uni
+// 404 bilan rad etadi.
+function findOfKind(id, kind) {
+  const column = kindColumn(kind);
+  const row = db.prepare('SELECT * FROM notifications WHERE id = ?').get(id);
+  if (!row || row[column] == null) return null;
+  return row;
+}
+
+// Dine-in "tayyor" bildirishnomasini tasdiqlash. Tasdiqlash bilan BIR
+// tranzaksiyada tegishli taom (notifications.order_item_id) "qabul qilingan"
+// deb belgilanadi — shu bilan taom oshpazning kitchen ekranidan yo'qoladi
+// (server/routes/chefKitchen.js GET /tables filtrlaydi).
+function acknowledgeOrderItem(row, ackName) {
+  return acknowledge(row, ackName, (ts) => {
+    db.prepare('UPDATE order_items SET picked_up_at = ? WHERE id = ?').run(ts, row.order_item_id);
+  });
+}
+
+module.exports = {
+  GRACE_MS,
+  listUnread,
+  acknowledge,
+  listUnreadOfKind,
+  findOfKind,
+  acknowledgeOrderItem,
+};

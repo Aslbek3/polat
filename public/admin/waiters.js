@@ -13,11 +13,19 @@ let resettingId = null;
 const ROLE_LABEL = { admin: 'admin', waiter: 'afitsiant', chef: 'oshpaz', courier: 'dastavka', kassir: 'kassir' };
 const ROLE_BADGE = { admin: 'debt', waiter: 'ok', chef: 'low', courier: 'ok', kassir: 'low' };
 
+// renderList() — ../app.js'dagi umumiy ro'yxat yordamchisi (2026-09-10):
+// eskirgan javobni tashlaydi, ma'lumot o'zgarmagan bo'lsa DOM'ga tegmaydi,
+// xatoni bir joyda ko'rsatadi. Ilgari shu naqsh 18 ta faylda nusxalangan edi.
+// `isEmpty: () => false` — bu ekranda "bo'sh ro'yxat" matni ilgari ham
+// bo'lmagan (admin doim mavjud, ya'ni ro'yxat hech qachon bo'shamaydi),
+// ko'rinish o'zgarmasligi uchun shundayligicha qoldirildi.
 async function loadUsers() {
-  const box = document.getElementById('userList');
-  try {
-    users = await api('/admin/users');
-    box.innerHTML = users.map((u) => {
+  await renderList({
+    box: 'userList',
+    load: () => api('/admin/users'),
+    onData: (rows) => { users = rows; },
+    isEmpty: () => false,
+    render: (rows) => rows.map((u) => {
       const canHardDelete = !u.has_activity;
       let actionBtns = '';
       if (u.is_active) {
@@ -44,14 +52,14 @@ async function loadUsers() {
         </div>
       </div>
     `;
-    }).join('');
-    box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openModal(Number(b.dataset.edit))));
-    box.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => openResetModal(Number(b.dataset.reset))));
-    box.querySelectorAll('[data-activate]').forEach((b) => b.addEventListener('click', () => activateUser(Number(b.dataset.activate))));
-    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delUser(Number(b.dataset.del), b.dataset.hard === 'true')));
-  } catch (err) {
-    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
-  }
+    }).join(''),
+    bind: (box) => {
+      box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => openModal(Number(b.dataset.edit))));
+      box.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => openResetModal(Number(b.dataset.reset))));
+      box.querySelectorAll('[data-activate]').forEach((b) => b.addEventListener('click', () => activateUser(Number(b.dataset.activate))));
+      box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => delUser(Number(b.dataset.del), b.dataset.hard === 'true')));
+    },
+  });
 }
 
 function openModal(id) {

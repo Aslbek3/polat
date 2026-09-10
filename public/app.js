@@ -130,6 +130,104 @@ function toast(message, type = 'ok', durationMs = 3000) {
   toastTimer = setTimeout(() => { el.style.display = 'none'; }, durationMs);
 }
 
+// ── renderList(): ro'yxat chizishning umumiy naqshi (2026-09-10) ──────────
+//
+// NEGA: 18 ta frontend faylda AYNAN bir xil naqsh nusxalangan edi —
+// "so'rov yubor → box.innerHTML = rows.map(...) → tugmalarga listener ula →
+// catch'da box.innerHTML = xato". Har bir nusxa bilan birga 2026-09-10
+// auditida topilgan uchta xato ham nusxalangan edi:
+//
+//   1. Fon yangilanishi (poll) XATO qaytarsa butun ro'yxat o'chib, o'rniga
+//      "Xatolik (500)" chiqardi — bitta o'tkinchi tarmoq uzilishi ekranni
+//      tozalab tashlardi (15 soniyada bir marta).
+//   2. Poll javobi SHARTSIZ innerHTML yozardi: agar u aynan `mousedown` va
+//      `mouseup` orasida tushsa, tugma DOM'dan olib tashlanardi va `click`
+//      UMUMAN otilmasdi — foydalanuvchi "tugma ishlamadi" deb o'ylardi.
+//   3. Poll va qo'lda chaqirilgan yuklash bir vaqtda ketsa, ESKIROQ javob
+//      keyin kelib yangisining ustidan yozib yuborardi.
+//
+// Bu uchtasi avval faqat `public/admin/customer-orders.js`da QO'LDA
+// tuzatilgan edi; shu yerga chiqarilib barcha ro'yxatlarga tarqatildi.
+//
+// Parametrlar (options obyekti):
+//   box     — HTMLElement yoki element id (matn).
+//   load    — async () => data. `data` to'g'ridan-to'g'ri berilsa shart emas.
+//   data    — allaqachon olingan ma'lumot (so'rovsiz chizish uchun: masalan
+//             afitsiant ekrani buyurtma ko'rinishini PATCH javobidan oladi).
+//   render  — (data) => HTML matni. FAQAT ma'lumot o'zgarganda chaqiriladi.
+//   bind    — (box, data) => void. Har render'dan keyin listener ulash.
+//   onData  — (data) => void. Ma'lumot kelishi bilan (chizishdan OLDIN va
+//             o'zgarmagan bo'lsa ham) chaqiriladi — yon elementlarni (jami
+//             summa, sarlavha, global massiv) yangilash uchun.
+//   empty   — bo'sh ro'yxat matni, `<p class="dim">…</p>` ichida chiqadi.
+//             DIQQAT: bu DASTURCHI matni, escape QILINMAYDI — foydalanuvchi
+//             ma'lumotini bu yerga uzatmang.
+//   isEmpty — (data) => bool. Standart: bo'sh massiv.
+//   isPoll  — true bo'lsa xato ro'yxatni O'CHIRMAYDI, faqat toast (va bir xil
+//             xato takror-takror toast qilinmaydi).
+//   key     — holat kaliti (bir sahifada bir nechta ro'yxat bo'lsa kerak
+//             bo'ladi). Standart: box elementi (yoki uning id matni).
+//   dedupe  — false bo'lsa JSON solishtiruvi o'chiriladi (har safar qayta
+//             chiziladi).
+//
+// Qaytaradi: muvaffaqiyatda `data`, xatoda/eskirgan javobda `undefined`.
+//
+// ⚠️ `render` foydalanuvchi ma'lumotini HTML'ga qo'yganda escapeHtml() SHART —
+// bu yordamchi uni o'zi qilib bermaydi (shablon har xil).
+const renderListStates = new Map();
+
+async function renderList(options) {
+  const box = typeof options.box === 'string' ? document.getElementById(options.box) : options.box;
+  if (!box) return undefined;
+  const key = options.key || (typeof options.box === 'string' ? options.box : box);
+  let st = renderListStates.get(key);
+  if (!st) {
+    // seq — so'rovlar navbati (eskirgan javobni tashlash uchun);
+    // sig — oxirgi chizilgan ma'lumotning JSON "barmoq izi";
+    // lastError — bir xil poll xatosini qayta-qayta toast qilmaslik uchun.
+    st = { seq: 0, sig: null, lastError: null };
+    renderListStates.set(key, st);
+  }
+  const my = ++st.seq;
+
+  let data;
+  try {
+    data = options.load ? await options.load() : options.data;
+  } catch (err) {
+    if (my !== st.seq) return undefined; // eskirgan javob — yangiroq so'rov ketgan
+    if (options.isPoll) {
+      // Fon yangilanishi yiqildi — ekrandagi ro'yxat o'z joyida qoladi.
+      if (st.lastError !== err.message) {
+        st.lastError = err.message;
+        toast(`Yangilanmadi: ${err.message}`, 'error');
+      }
+      return undefined;
+    }
+    st.sig = null; // keyingi muvaffaqiyatli yuklash albatta qayta chizsin
+    box.innerHTML = `<p class="dim">${escapeHtml(err.message)}</p>`;
+    return undefined;
+  }
+  if (my !== st.seq) return undefined;
+  st.lastError = null;
+
+  if (options.onData) options.onData(data);
+
+  if (options.dedupe !== false) {
+    const sig = JSON.stringify(data === undefined ? null : data);
+    if (sig === st.sig) return data; // hech narsa o'zgarmagan — DOM'ga tegmaymiz
+    st.sig = sig;
+  }
+
+  const empty = options.isEmpty ? options.isEmpty(data) : (Array.isArray(data) && data.length === 0);
+  if (empty) {
+    box.innerHTML = `<p class="dim">${options.empty || "Ro'yxat bo'sh."}</p>`;
+    return data;
+  }
+  box.innerHTML = options.render(data);
+  if (options.bind) options.bind(box, data);
+  return data;
+}
+
 // Brauzerning standart (ekranga mos kelmaydigan, "<sayt> says" ko'rinishidagi)
 // window.confirm() o'rniga ilova dizayniga mos custom oyna — mavjud
 // .modal-backdrop/.modal/.modal-actions CSS naqshidan (admin/tables.html va
