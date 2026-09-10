@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
+<title>Sozlamalar — Ziyo Famliy admin</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings" aria-current="page"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
+    </nav>
+    <div class="app-main">
+      <div class="topbar">
+        <h1>Sozlamalar</h1>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
+      </div>
+      <main>
+        <!-- L-29 (2026-09-10): GET/PUT /api/admin/settings. Mijoz sayti (landing)
+             bu qiymatlarni GET /api/public/settings orqali o'qiydi: telefon va
+             manzil "Aloqa" bo'limida, yetkazib berish shartlari buyurtma
+             oynasida; telefon/manzil chekda ham chiqadi (app.js getSettings). -->
+        <form id="settingsForm" novalidate>
+          <div class="card">
+            <h2 class="card-title">Restoran</h2>
+            <div class="form-grid mt-8">
+              <div class="field">
+                <label for="sName">Tizimdagi nomi</label>
+                <input id="sName" maxlength="120" autocomplete="off" required>
+                <p class="card-sub">Chek va saytdagi nom alohida — bu faqat tizim sozlamasi.</p>
+              </div>
+              <div class="field">
+                <label for="sPhone">Telefon</label>
+                <input id="sPhone" type="tel" maxlength="30" autocomplete="off" placeholder="+998 90 123 45 67">
+                <p class="card-sub">Saytning «Aloqa» bo'limida va chekda chiqadi. Bir nechta raqamni vergul bilan ajrating.</p>
+              </div>
+              <div class="field">
+                <label for="sAddress">Manzil</label>
+                <input id="sAddress" maxlength="300" autocomplete="off" placeholder="Farg'ona viloyati, Quva">
+                <p class="card-sub">Saytda va chekda chiqadi.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">Yetkazib berish</h2>
+            <div class="form-grid mt-8">
+              <div class="field">
+                <label for="sDeliveryEnabled" class="inline-check">
+                  <input type="checkbox" id="sDeliveryEnabled"> Yetkazib berish yoqilgan
+                </label>
+                <p class="card-sub">O'chirilsa, saytdagi buyurtma oynasida faqat «Olib ketish» qoladi.</p>
+              </div>
+              <div class="field">
+                <label for="sFee">Yetkazib berish narxi (so'm)</label>
+                <input id="sFee" type="number" min="0" step="1" inputmode="numeric">
+                <p class="card-sub">0 — saytda narx ko'rsatilmaydi.</p>
+              </div>
+              <div class="field">
+                <label for="sMinOrder">Minimal buyurtma summasi (so'm)</label>
+                <input id="sMinOrder" type="number" min="0" step="1" inputmode="numeric">
+                <p class="card-sub">0 — cheklov yo'q.</p>
+              </div>
+              <div class="field">
+                <label for="sTime">Yetkazib berish vaqti</label>
+                <input id="sTime" maxlength="60" autocomplete="off" placeholder="masalan: 30–45 daqiqa">
+              </div>
+              <div class="field">
+                <label for="sPayment">To'lov usullari</label>
+                <input id="sPayment" maxlength="120" autocomplete="off" placeholder="masalan: Naqd, Click, Payme">
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" class="btn primary block" id="settingsSaveBtn" disabled>Saqlash</button>
+        </form>
+      </main>
+    </div>
+  </div>
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

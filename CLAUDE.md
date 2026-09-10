@@ -911,3 +911,33 @@ va `mouseup` orasida tugmani DOM'dan olib tashlashi, eskirgan javobning
 yangisini bosib ketishi. Ular avval faqat `admin/customer-orders.js` da
 qo'lda tuzatilgan edi — endi umumiy yordamchiga chiqarilib barcha
 ro'yxatlarga tarqatildi.
+
+**Tuzatish (2026-09-10, keyinroq):** yuqoridagi "har bir route faylida `db.prepare` — 0 ta" da'vosi aslida **noto'g'ri edi** — tekshiruv `grep "db.prepare"` bilan qilingan va ko'p qatorli `db\n  .prepare(...)` shakli ko'rilmagan. Qolib ketgan 4 ta fayl (`waiterOrders.js`, `kassirTables.js`, `publicReservations.js`, `kassirBilling.js`) keyingi bosqichda servisga ko'chirildi. **Ishonchli tekshiruv:** `grep -rn "require('../db')" server/routes/` — natija bo'sh bo'lishi kerak.
+
+## Holat — 2026-09-10 (4): UI/UX tahlili va tuzatishlar
+
+To'liq tahlil — `docs/UI-UX-TAHLIL.md` (168 topilma; boshida "Bajarilish holati" jadvali). **146 tasi tuzatildi**, 22 tasi ochiq — har birining sababi o'sha jadvalda (4 tasi ataylab/qaror sizda, 5 tasi haqiqiy surat/matn talab qiladi, 2 tasi yangi imkoniyat, qolgani xatti-harakatga ta'sirsiz CSS sayqali).
+
+### Biznes vaqti (UTC+5) — `server/businessTime.js`
+Vaqt belgilari bazada UTC; hisobotlar esa `date(ustun)` bilan **UTC kunini** olardi — restoran 24/7 ishlagani uchun Toshkentda 00:00–05:00 dagi har bir sotuv oldingi kunga yozilardi. Endi barcha sana filtrlari (`reports.appendDateFilter`, kassir `/bills`, dashboard "bugun/kecha/oy boshi") bitta siljishdan o'tadi. `.env` `BUSINESS_TZ_OFFSET` (standart 300). ⚠️ `expenses.expense_date` ataylab siljitilmaydi — u vaqt belgisi emas, tanlangan sana.
+
+### Server tomonidagi o'zgarishlar (UI talab qilgani)
+- Login `COLLATE NOCASE` — "Afitsiant" katta harf bilan kirsa hisob qulflanmaydi (rate-limit kichik harfli kalit bilan ishlardi).
+- X-06: hali yuborilmagan bir xil taom qayta qo'shilsa miqdori oshadi (yangi qator emas). Oshxona FIFO (`oldest_sent_at`), bekor qilingan taom xabari o'chadi, xabarda miqdor ("Osh ×2").
+- Yangi endpointlar: `GET /api/admin/dashboard` (bitta so'rovda ertalabki brifing), `GET/PUT /api/admin/settings` + ochiq `GET /api/public/settings` (restoran nomi/telefon/manzil, yetkazib berish narxi/minimal summa/vaqt, to'lov usullari — landing shu yerdan o'qiydi), `GET /api/kassir/manual-bills/:id/receipt`, `GET /api/admin/customer-orders/:id`.
+- Ro'yxatlar `X-Total-Count` / `X-Total-Amount` sarlavhalarini qaytaradi — frontend `api(path, { withMeta: true })` bilan o'qiydi va "oxirgi N tasi ko'rsatilmoqda (jami M)" deb ogohlantiradi.
+- Ochiq endpointlar uchun alohida rate-limiterlar (bron va buyurtma — har biri 15/daqiqa).
+
+### Frontend umumiy qatlami (`public/app.js`, `public/admin/admin.js`)
+`openDialog/closeDialog` (fokus tuzog'i, Escape, fokusni qaytarish — `openModal` nomi `admin/tables.js`/`waiters.js` bilan to'qnashgani uchun boshqa nom), `setFieldError/clearFieldErrors`, `datePresets`, `attachSearch/matchesSearch` (apostrofga befarq), `onVisible` (sahifaga qaytilganda darhol yangilash), `onActivate` (`role="button"` kartalar uchun Enter/Space), `waitBadgeHtml` (kutish vaqti, 20/30 daqiqada rang), tarmoq xatosi o'zbekcha + offline banner. `admin.js` — forma yopilishida "saqlanmagan o'zgarish" himoyasi, filtr chiplari, URL filtrlari. ⚠️ Barcha skriptlar bitta global scope'da — yangi funksiya nomi qo'shishdan oldin to'qnashuvni tekshiring.
+
+### Dizayn tizimi (`public/style.css`)
+Kontrast AA'ga chiqarildi (`--text-faint #9a9078`, `--danger #ec877f`), `color-scheme: dark`, `:focus-visible`, `:disabled`, `line-height`, 44px bosish maydonlari, eng kichik matn 12px, `body.no-nav` (pastki menyusiz sahifalar), `.app-main`, `.filter-row` (sana filtri qatori — o'raladi, 320px'da siljimaydi), `label.inline-check`, print uslublari, `prefers-reduced-motion`. Pinch-zoom hamma sahifada ochildi (`maximum-scale=1` olib tashlandi), `viewport-fit=cover` + safe-area.
+
+### Admin paneli
+Yangi **Sozlamalar** sahifasi (`admin/settings.html`). Menyu ikki guruhga: "Kunlik ish" / "Sozlash". Bosh sahifa — Tushum → Tan narx → Xarajat → Sof foyda (raqamlar qo'shiladi), kecha bilan ▲/▼ %, o'rtacha chek, "E'tibor talab qiladi" bloki, 30 s'da yangilanadi. Hisobot ro'yxati uch manbani ko'rsatadi (🪑 stol / 🌐 onlayn / 🧮 qo'lda chek) — summary bilan bir xil. Bronlar standart "Kelgusi", onlayn buyurtmalar standart "Faol". Qidiruv — Menyu, Ombor, Xodimlar, Onlayn buyurtmalar.
+
+### ⚠️ Ishga tushirishdan keyin qilinadigan
+Admin → **Sozlamalar**'da yetkazib berish narxi, minimal summa, vaqt va to'lov usullarini to'ldirish — bo'sh bo'lsa landing bu qatorlarni ko'rsatmaydi (L-29).
+
+**Tekshiruv:** 206/206 test; Playwright 171/171 (21 sahifa × 5 rol × 320/390/1280px — JS xatosi, CSP, gorizontal scroll yo'q).

@@ -2,7 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Xodimlar — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -10,38 +11,45 @@
 </head>
 <body class="app-body">
   <div class="app-shell">
-    <nav class="bottom-nav" id="bottomNav">
-      <a href="index.html" data-page="index"><span class="ic">📊</span>Bosh sahifa</a>
-      <a href="menu.html" data-page="menu"><span class="ic">🍽️</span>Menyu</a>
-      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
-      <a href="waiters.html" data-page="waiters"><span class="ic">👥</span>Xodimlar</a>
-      <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
-      <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
-      <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
-      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
-      <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters" aria-current="page"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
     </nav>
-    <div style="flex:1;">
+    <div class="app-main">
       <div class="topbar">
         <h1>Xodimlar</h1>
-        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
-        <button class="btn primary block" id="addBtn">+ Yangi foydalanuvchi</button>
-        <div id="userList" class="mt-16"><p class="dim">Yuklanmoqda...</p></div>
+        <button type="button" class="btn primary block" id="addBtn">+ Yangi xodim</button>
+        <label for="userSearch" class="sr-only">Xodimlardan qidirish</label>
+        <input type="search" class="search-box mt-16" id="userSearch" placeholder="Ism, login yoki rol…">
+        <div id="userList"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>
   </div>
 
+  <!-- A-19/A-20 (2026-09-10): .modal — <form>, openFormDialog(). Login harfga
+       sezgir (X-10) — telefon klaviaturasi birinchi harfni kattalashtirmasin. -->
   <div class="modal-backdrop hidden" id="modal">
-    <div class="modal">
-      <h2 id="modalTitle">Yangi foydalanuvchi</h2>
+    <form class="modal" id="userForm" novalidate>
+      <h2 id="modalTitle">Yangi xodim</h2>
       <div class="form-grid">
-        <div class="field"><label>Login</label><input id="fUsername"></div>
-        <div class="field" id="passField"><label>Parol</label><input id="fPassword" type="text"></div>
-        <div class="field"><label>To'liq ismi</label><input id="fFullName"></div>
+        <div class="field"><label for="fUsername">Login</label><input id="fUsername" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
+        <div class="field" id="passField"><label for="fPassword">Parol (kamida 6 belgi)</label><input id="fPassword" type="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+        <div class="field"><label for="fFullName">To'liq ismi</label><input id="fFullName" autocomplete="off"></div>
         <div class="field">
-          <label>Rol</label>
+          <label for="fRole">Rol</label>
           <select id="fRole">
             <option value="waiter">Afitsiant</option>
             <option value="chef">Oshpaz</option>
@@ -52,26 +60,27 @@
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="cancelBtn">Bekor</button>
-        <button class="btn primary" id="saveBtn">Saqlash</button>
+        <button type="button" class="btn" id="cancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="saveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <div class="modal-backdrop hidden" id="resetModal">
-    <div class="modal">
-      <h2>Parolni tiklash</h2>
+    <form class="modal" id="resetForm" novalidate>
+      <h2 id="resetModalTitle">Parolni tiklash</h2>
       <div class="form-grid">
-        <div class="field"><label>Yangi parol</label><input id="rPassword" type="text"></div>
+        <div class="field"><label for="rPassword">Yangi parol (kamida 6 belgi)</label><input id="rPassword" type="text" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required></div>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="resetCancelBtn">Bekor</button>
-        <button class="btn primary" id="resetSaveBtn">Saqlash</button>
+        <button type="button" class="btn" id="resetCancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="resetSaveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
   <script src="waiters.js"></script>
 </body>
 </html>

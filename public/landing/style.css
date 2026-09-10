@@ -180,11 +180,17 @@ button { font-family: inherit; }
 .hero-content .kicker { color: var(--gold-light); text-align: center; }
 .hero-content h1 {
   font-family: var(--serif); font-weight: 700; font-size: clamp(52px, 11vw, 108px);
-  margin: 0 0 18px; line-height: 1; letter-spacing: 0.01em;
+  /* D-D4 (2026-09-10): line-height 1 edi — 320px'da ikki qatorga o'tganda
+     harf dumlari (g, y, q) keyingi qatorga tegardi. */
+  margin: 0 0 18px; line-height: 1.1; letter-spacing: 0.01em;
 }
+/* D-B7 (2026-09-10): tagline rasmning eng och (overlay 0.35) qismiga tushadi —
+   kontrast ~3.6:1 edi va rasmga bog'liq. Yengil soya + qalinroq shrift matnni
+   fondan ajratadi, qaysi rasm qo'yilishidan qat'i nazar. */
 .hero-tagline {
-  font-size: clamp(15px, 2vw, 19px); color: rgba(255,255,255,0.88); max-width: 520px;
-  margin: 0 auto 34px; line-height: 1.6; font-weight: 300;
+  font-size: clamp(15px, 2vw, 19px); color: rgba(255,255,255,0.95); max-width: 520px;
+  margin: 0 auto 34px; line-height: 1.6; font-weight: 400;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75), 0 0 12px rgba(0, 0, 0, 0.45);
 }
 .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 
@@ -808,4 +814,18 @@ body.has-cart .site-toast { bottom: calc(100px + env(safe-area-inset-bottom)); }
     animation: none;
     box-shadow: 0 0 0 3px var(--black), 0 20px 44px -14px rgba(0, 0, 0, 0.55);
   }
+}
+
+/* D-I4 (2026-09-10): chop etishda (Ctrl+P — masalan menyuni qog'ozga
+   chiqarish) qora fonlar, suzuvchi savat, modal va xarita chiqardi —
+   toner isrofi va o'qib bo'lmas sahifa. Endi faqat mazmun: oq fon, qora matn. */
+@media print {
+  .site-header, .nav-toggle, .hero-actions, .cart-bar, .site-toast,
+  .book-backdrop, .contact-map, .contact-actions, .gallery-section { display: none !important; }
+  body, .hero, .contact-section, .site-footer { background: #fff !important; color: #000 !important; }
+  .hero { min-height: 0 !important; padding: 16px 0 !important; background-image: none !important; }
+  .hero-overlay { display: none !important; }
+  .hero-content, .hero-tagline, .section-title, .kicker { color: #000 !important; text-shadow: none !important; }
+  a { color: #000 !important; text-decoration: none; }
+  .section { padding: 16px 0 !important; }
 }

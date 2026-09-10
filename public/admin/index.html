@@ -2,7 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Bosh sahifa — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -10,36 +11,55 @@
 </head>
 <body class="app-body">
   <div class="app-shell">
-    <nav class="bottom-nav" id="bottomNav">
-      <a href="index.html" data-page="index"><span class="ic">📊</span>Bosh sahifa</a>
-      <a href="menu.html" data-page="menu"><span class="ic">🍽️</span>Menyu</a>
-      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
-      <a href="waiters.html" data-page="waiters"><span class="ic">👥</span>Xodimlar</a>
-      <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
-      <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
-      <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
-      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
-      <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index" aria-current="page"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
     </nav>
-    <div style="flex:1;">
+    <div class="app-main">
       <div class="topbar">
         <h1>Bosh sahifa</h1>
-        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
+        <!-- A-01/A-03 (2026-09-10): plitkalar HISOB tartibida — Tushum − Tan narx
+             − Xarajat = Sof foyda. Ilgari tan narx ko'rsatilmasdi va ekrandagi
+             raqamlar qo'shilmasdi (120 000 − 0 = 60 000). -->
+        <h2 class="sr-only">Bugungi ko'rsatkichlar</h2>
         <div class="stat-grid">
-          <div class="stat-tile"><div class="label">Bugungi tushum</div><div class="value" id="statRevenue">—</div></div>
-          <div class="stat-tile"><div class="label">Bugungi xarajat</div><div class="value" id="statExpenses">—</div></div>
-          <div class="stat-tile"><div class="label">Sof foyda</div><div class="value" id="statNet">—</div></div>
-          <div class="stat-tile"><div class="label">Yopilgan buyurtma</div><div class="value" id="statOrders">—</div></div>
+          <div class="stat-tile"><div class="label">Bugungi tushum</div><div class="value" id="statRevenue">—</div><span class="stat-delta" id="deltaRevenue"></span></div>
+          <div class="stat-tile muted"><div class="label">Taom tan narxi</div><div class="value" id="statCogs">—</div><span class="stat-delta" id="deltaCogs"></span></div>
+          <div class="stat-tile"><div class="label">Bugungi xarajatlar</div><div class="value" id="statExpenses">—</div><span class="stat-delta" id="deltaExpenses"></span></div>
+          <div class="stat-tile"><div class="label">Bugungi sof foyda</div><div class="value" id="statNet">—</div><span class="stat-delta" id="deltaNet"></span></div>
         </div>
+        <div class="stat-grid mt-8">
+          <div class="stat-tile"><div class="label">Bugungi sotuvlar soni</div><div class="value" id="statOrders">—</div><span class="stat-delta" id="deltaOrders"></span></div>
+          <div class="stat-tile"><div class="label">O'rtacha chek</div><div class="value" id="statAvg">—</div><span class="stat-delta" id="deltaAvg"></span></div>
+        </div>
+        <p class="card-sub" id="dashUpdated"></p>
 
-        <div class="card-title mt-16">Hozir band stollar</div>
+        <h2 class="card-title mt-16">E'tibor talab qiladi</h2>
+        <div id="dashAlerts" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
+
+        <h2 class="card-title mt-16" id="monthTitle">Shu oy</h2>
+        <div class="card mt-8" id="monthCard"><p class="dim">Yuklanmoqda...</p></div>
+
+        <h2 class="card-title mt-16">Hozir band stollar</h2>
         <div id="occupiedTables" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>
   </div>
   <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
   <script src="index.js"></script>
 </body>
 </html>

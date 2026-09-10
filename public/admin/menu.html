@@ -2,7 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Menyu — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -10,91 +11,99 @@
 </head>
 <body class="app-body">
   <div class="app-shell">
-    <nav class="bottom-nav" id="bottomNav">
-      <a href="index.html" data-page="index"><span class="ic">📊</span>Bosh sahifa</a>
-      <a href="menu.html" data-page="menu"><span class="ic">🍽️</span>Menyu</a>
-      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
-      <a href="waiters.html" data-page="waiters"><span class="ic">👥</span>Xodimlar</a>
-      <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
-      <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
-      <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
-      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
-      <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu" aria-current="page"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
     </nav>
-    <div style="flex:1;">
+    <div class="app-main">
       <div class="topbar">
         <h1>Menyu</h1>
-        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
-        <button class="btn primary block" id="addCatBtn">+ Yangi kategoriya</button>
-        <div id="categoryList" class="mt-16"><p class="dim">Yuklanmoqda...</p></div>
+        <button type="button" class="btn primary block" id="addCatBtn">+ Yangi kategoriya</button>
+        <!-- A-08 (2026-09-10): taom va kategoriya nomi bo'yicha qidiruv. -->
+        <label for="menuSearch" class="sr-only">Menyudan qidirish</label>
+        <input type="search" class="search-box mt-16" id="menuSearch" placeholder="Taom yoki kategoriya nomi…">
+        <div id="categoryList"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>
   </div>
 
+  <!-- A-19/A-20 (2026-09-10): .modal — <form>, openFormDialog() (menu.js). -->
   <div class="modal-backdrop hidden" id="catModal">
-    <div class="modal">
+    <form class="modal" id="catForm" novalidate>
       <h2 id="catModalTitle">Yangi kategoriya</h2>
       <div class="form-grid">
-        <div class="field"><label>Nomi</label><input id="catName"></div>
-        <div class="field"><label>Tartib raqami</label><input id="catSort" type="number" value="0"></div>
+        <div class="field"><label for="catName">Nomi</label><input id="catName" required></div>
+        <div class="field"><label for="catSort">Tartib raqami</label><input id="catSort" type="number" value="0" step="1"></div>
         <div class="field">
-          <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-size:14px;">
+          <label for="catRequireInventory" style="display:flex; align-items:center; gap:6px; text-transform:none; font-size:14px;">
             <input type="checkbox" id="catRequireInventory"> Faqat ombor bilan bog'langan taomlar ko'rinsin
           </label>
           <p class="dim" style="font-size:12px; margin-top:4px;">Yoqilsa, bu bo'limdagi ombor mahsulotiga bog'lanmagan taomlar mijoz/afitsiant menyusida yashirin turadi (masalan "Ichimliklar" uchun — faqat haqiqiy ombor zaxirasi bor ichimlik ko'rinsin).</p>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="catCancelBtn">Bekor</button>
-        <button class="btn primary" id="catSaveBtn">Saqlash</button>
+        <button type="button" class="btn" id="catCancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="catSaveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <div class="modal-backdrop hidden" id="itemModal">
-    <div class="modal">
+    <form class="modal" id="itemForm" novalidate>
       <h2 id="itemModalTitle">Yangi taom</h2>
       <p id="itemParentHint" class="dim hidden" style="font-size:13px; margin:-8px 0 12px; padding:8px 10px; background:var(--surface-2); border-radius:var(--radius-sm);"></p>
       <div class="form-grid">
-        <div class="field"><label>Nomi</label><input id="itemName"></div>
-        <div class="field"><label>Hajmi (ixtiyoriy — masalan: 0.5L, 1L, 330ml)</label><input id="itemVolume" placeholder="masalan: 0.5L"></div>
+        <div class="field"><label for="itemName">Nomi</label><input id="itemName" required></div>
+        <div class="field"><label for="itemVolume">Hajmi (ixtiyoriy — masalan: 0.5L, 1L, 330ml)</label><input id="itemVolume" placeholder="masalan: 0.5L"></div>
         <div class="field">
-          <label>Tan narxi (so'm, ixtiyoriy — faqat admin ko'radi)</label>
-          <input id="itemCostPrice" type="number" placeholder="masalan: 15000">
-          <p id="itemCostPriceHint" class="dim" style="font-size:12px; margin-top:4px;"></p>
+          <label for="itemCostPrice">Tan narxi (so'm, ixtiyoriy — faqat admin ko'radi)</label>
+          <input id="itemCostPrice" type="number" min="0" step="1" inputmode="numeric" placeholder="masalan: 15000">
+          <p id="itemCostPriceHint" class="card-sub"></p>
         </div>
         <div class="field">
-          <label>Sotuv narxi (so'm)</label>
-          <input id="itemPrice" type="number">
-          <p id="itemPriceHint" class="dim" style="font-size:12px; margin-top:4px;"></p>
+          <label for="itemPrice">Sotuv narxi (so'm)</label>
+          <input id="itemPrice" type="number" min="0" step="1" inputmode="numeric" required>
+          <p id="itemPriceHint" class="card-sub"></p>
         </div>
-        <div class="field"><label>Tartib raqami</label><input id="itemSort" type="number" value="0"></div>
-        <div class="field"><label>Tavsif (afitsiant taom ustiga bosganda ko'radi)</label><textarea id="itemDescription" rows="3" placeholder="Masalan: tarkibi, hajmi, achchiqligi..."></textarea></div>
+        <div class="field"><label for="itemSort">Tartib raqami</label><input id="itemSort" type="number" value="0" step="1"></div>
+        <div class="field"><label for="itemDescription">Tavsif (afitsiant taom ustiga bosganda ko'radi)</label><textarea id="itemDescription" rows="3" placeholder="Masalan: tarkibi, hajmi, achchiqligi..."></textarea></div>
         <div class="field">
-          <label>Ombor mahsuloti bilan bog'lash (ixtiyoriy)</label>
+          <label for="itemInventory">Ombor mahsuloti bilan bog'lash (ixtiyoriy)</label>
           <select id="itemInventory">
             <option value="">— Bog'lanmagan (mavjudlik qo'lda boshqariladi) —</option>
           </select>
-          <p class="dim" style="font-size:12px; margin-top:4px;">Bog'lansa, bu taomning "mavjud/tugadi" holati VA narxi endi Ombor bo'limidagi qoldiq/sotuv narxidan avtomatik hisoblanadi.</p>
+          <p class="card-sub">Bog'lansa, bu taomning "mavjud/tugadi" holati VA narxi endi Ombor bo'limidagi qoldiq/sotuv narxidan avtomatik hisoblanadi.</p>
         </div>
         <div class="field">
-          <label>Rasm (ixtiyoriy — majburiy emas)</label>
-          <img id="itemImagePreview" class="hidden" style="max-width:120px; border-radius:var(--radius-sm); display:block; margin-bottom:8px;">
+          <label for="itemImageFile">Rasm (ixtiyoriy — majburiy emas)</label>
+          <img id="itemImagePreview" class="hidden" alt="Tanlangan taom rasmi" style="max-width:120px; border-radius:var(--radius-sm); display:block; margin-bottom:8px;">
           <input id="itemImageFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
           <button class="btn small" id="itemImageRemoveBtn" style="margin-top:6px;" type="button">Rasmni olib tashlash</button>
-          <p id="itemImageStatus" class="dim" style="font-size:12px; margin-top:4px;"></p>
+          <p id="itemImageStatus" class="card-sub" role="status"></p>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="itemCancelBtn">Bekor</button>
-        <button class="btn primary" id="itemSaveBtn">Saqlash</button>
+        <button type="button" class="btn" id="itemCancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="itemSaveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
   <script src="menu.js"></script>
 </body>
 </html>

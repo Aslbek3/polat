@@ -81,11 +81,15 @@ async function loadAll() {
 // HAM bir xil ko'rinish (variant biroz kichikroq/chekinib chiqadi,
 // isVariant=true bo'lganda). 2026-09-09'da "turi" funksiyasi qo'shilganda
 // avvalgi inline shablon shu funksiyaga chiqarildi (nested render uchun).
+// D-H3 / D-H9 (2026-09-10): ✎ va 🗑 — .btn.icon (44×44) + aria-label taom
+// nomi bilan (ekran o'qiruvchi 30 ta bir xil "tugma"ni o'qimasin); rasm —
+// bezak (nom yonida yozilgan), shuning uchun alt="".
 function renderItemRow(it, c, isVariant) {
+  const label = `${it.name}${it.volume ? ` (${it.volume})` : ''}`;
   return `
     <div class="menu-item-row${isVariant ? ' menu-item-variant' : ''}">
       <div style="display:flex; align-items:center; gap:10px;">
-        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); flex-shrink:0;">` : ''}
+        ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" alt="" style="width:40px; height:40px; object-fit:cover; border-radius:var(--radius-sm); flex-shrink:0;">` : ''}
         <div>
           <div class="mi-name">${escapeHtml(it.name)}${it.volume ? ` <span class="dim" style="font-weight:400;">(${escapeHtml(it.volume)})</span>` : ''}</div>
           <div class="mi-price">${fmtMoney(it.price)}${it.cost_price != null ? ` <span class="dim" style="font-size:12px; font-weight:400;">(tan narxi ${fmtMoney(it.cost_price)}, foyda ${fmtMoney(it.price - it.cost_price)})</span>` : ''}</div>
@@ -96,53 +100,75 @@ function renderItemRow(it, c, isVariant) {
           ? `<span class="badge ${it.inventory_quantity > 0 ? 'ok' : 'low'}">📦 ${escapeHtml(it.inventory_name || '')}${it.inventory_volume ? ` (${escapeHtml(it.inventory_volume)})` : ''}: ${it.inventory_quantity} ${escapeHtml(it.inventory_unit || '')}</span>`
           : c.require_inventory_link
             ? `<span class="badge low" title="Bu bo'lim faqat ombor bilan bog'langan taomlarni ko'rsatadi — bog'lanmaguncha mijoz/afitsiant menyusida yashirin">🚫 Yashirin (ombor yo'q)</span>`
-            : `<label style="display:flex; align-items:center; gap:4px; font-size:12px;">
-                 <input type="checkbox" data-avail="${it.id}" ${it.is_available ? 'checked' : ''}> mavjud
+            : `<label class="inline-check" style="font-size:12px;">
+                 <input type="checkbox" data-avail="${it.id}" aria-label="${escapeHtml(`«${label}» mavjud`)}" ${it.is_available ? 'checked' : ''}> mavjud
                </label>`}
-        <button class="btn small" data-edit-item="${it.id}">✎</button>
-        <button class="btn small danger" data-del-item="${it.id}">🗑</button>
+        <button type="button" class="btn icon" data-edit-item="${it.id}" aria-label="${escapeHtml(`«${label}» ni tahrirlash`)}" title="Tahrirlash">✎</button>
+        <button type="button" class="btn icon danger" data-del-item="${it.id}" aria-label="${escapeHtml(`«${label}» ni o'chirish`)}" title="O'chirish">🗑</button>
       </div>
     </div>
   `;
 }
 
+// Qidiruv so'rovi (A-08, 2026-09-10) — attachSearch() normallashtirgan matn.
+let menuQuery = '';
+
+const itemSearchText = (it) => `${it.name} ${it.volume || ''}`;
+
+// A-23 (2026-09-10): bo'sh holat — nima qilish kerakligini aytadi.
+// A-08: qidiruvda kategoriya nomi mos kelsa — butun bo'lim, aks holda faqat
+// mos taomlar (yoki mos "turi" bor taomlar) ko'rinadi.
 function renderMenuHtml() {
   const activeCategories = categories.filter((c) => c.is_active);
   if (activeCategories.length === 0 && categories.length === 0) {
-    return '<p class="dim">Hali kategoriya yo\'q.</p>';
+    return `<div class="empty-state"><div>Hali kategoriya yo'q.</div>
+      <div class="empty-hint">Avval yuqoridagi «+ Yangi kategoriya» tugmasi bilan bo'lim qo'shing (masalan: Taomlar, Ichimliklar), keyin unga taom qo'shing.</div></div>`;
   }
-  const catsHtml = activeCategories.length === 0
-    ? '<p class="dim">Hali faol kategoriya yo\'q.</p>'
-    : activeCategories.map((c) => {
-    // Faqat ASOSIY taomlar (parent_item_id yo'q) shu bo'limda to'g'ridan-to'g'ri
-    // ko'rsatiladi — har birining "turi" (variant) 2026-09-09'da qo'shilgan
-    // pastdagi ichma-ich ro'yxatda, "+ Turi qo'shish" tugmasi bilan chiqadi.
+  const q = menuQuery;
+  const cards = activeCategories.map((c) => {
+    const catMatch = !q || matchesSearch(c.name, q);
+    // Faqat ASOSIY taomlar (parent_item_id yo'q) bo'limda to'g'ridan-to'g'ri,
+    // "turi" (variant) — ichma-ich ro'yxatda (2026-09-09).
     const catItems = items.filter((it) => it.category_id === c.id && it.is_active && !it.parent_item_id);
+    const shown = catItems.map((it) => {
+      const allVariants = items.filter((v) => v.parent_item_id === it.id && v.is_active);
+      const itemMatch = catMatch || matchesSearch(itemSearchText(it), q);
+      const variants = itemMatch ? allVariants : allVariants.filter((v) => matchesSearch(itemSearchText(v), q));
+      return itemMatch || variants.length ? { it, variants } : null;
+    }).filter(Boolean);
+    if (q && !catMatch && shown.length === 0) return '';
+    // D-H11: bo'lim nomi — haqiqiy sarlavha (<h2>).
     return `
       <div class="card">
         <div class="card-row">
-          <div class="card-title">${escapeHtml(c.name)}${c.require_inventory_link ? ' <span class="badge ok">📦 Faqat ombor</span>' : ''}</div>
+          <h2 class="card-title">${escapeHtml(c.name)}${c.require_inventory_link ? ' <span class="badge ok">📦 Faqat ombor</span>' : ''}</h2>
           <div style="display:flex; gap:6px;">
-            <button class="btn small" data-edit-cat="${c.id}">Tahrirlash</button>
-            <button class="btn small danger" data-del-cat="${c.id}">O'chirish</button>
+            <button type="button" class="btn small" data-edit-cat="${c.id}" aria-label="${escapeHtml(`«${c.name}» bo'limini tahrirlash`)}">Tahrirlash</button>
+            <button type="button" class="btn small danger" data-del-cat="${c.id}" aria-label="${escapeHtml(`«${c.name}» bo'limini o'chirish`)}">O'chirish</button>
           </div>
         </div>
         <div class="mt-8">
-          ${catItems.length === 0 ? '<p class="dim" style="font-size:13px;">Taom yo\'q</p>' : catItems.map((it) => {
-            const variants = items.filter((v) => v.parent_item_id === it.id && v.is_active);
-            return renderItemRow(it, c, false) + `
+          ${shown.length === 0 ? `<p class="card-sub">Bu bo'limda hali taom yo'q — pastdagi tugma bilan qo'shing.</p>` : shown.map(({ it, variants }) => renderItemRow(it, c, false) + `
               <div class="menu-item-variants">
                 ${variants.map((v) => renderItemRow(v, c, true)).join('')}
-                <button class="btn small" data-add-variant="${it.id}">+ Turi qo'shish</button>
+                <button type="button" class="btn small" data-add-variant="${it.id}" aria-label="${escapeHtml(`«${it.name}» uchun tur qo'shish`)}">+ Turi qo'shish</button>
               </div>
-            `;
-          }).join('')}
-          <button class="btn small mt-8" data-add-item-cat="${c.id}">+ ${escapeHtml(singularizeCategoryName(c.name))} qo'shish</button>
+            `).join('')}
+          <button type="button" class="btn small mt-8" data-add-item-cat="${c.id}">+ ${escapeHtml(singularizeCategoryName(c.name))} qo'shish</button>
         </div>
       </div>
     `;
-  }).join('');
+  }).filter(Boolean);
 
+  let catsHtml;
+  if (activeCategories.length === 0) {
+    catsHtml = `<div class="empty-state"><div>Hali faol kategoriya yo'q.</div>
+      <div class="empty-hint">Yangi bo'lim qo'shing yoki pastdagi «O'chirilganlar»dan tiklang.</div></div>`;
+  } else if (cards.length === 0) {
+    catsHtml = `<div class="empty-state"><div>«${escapeHtml(q)}» bo'yicha taom yoki kategoriya topilmadi.</div></div>`;
+  } else {
+    catsHtml = cards.join('');
+  }
   return catsHtml + renderInactiveSection();
 }
 
@@ -175,27 +201,27 @@ function bindMenuRows(box) {
 // GET /items o'chirilganlarni butunlay yashirgani uchun, ilgari bunday
 // qatorni admin panelidan qayta tiklashning HECH QANDAY yo'li yo'q edi).
 function renderInactiveSection() {
-  const inactiveCats = categories.filter((c) => !c.is_active);
-  const inactiveItems = items.filter((it) => !it.is_active);
+  const inactiveCats = categories.filter((c) => !c.is_active && matchesSearch(c.name, menuQuery));
+  const inactiveItems = items.filter((it) => !it.is_active && matchesSearch(itemSearchText(it), menuQuery));
   if (inactiveCats.length === 0 && inactiveItems.length === 0) return '';
   return `
     <div class="card" style="margin-top:16px;">
       <div class="card-row">
         <div class="card-title dim">🗑 O'chirilganlar (${inactiveCats.length + inactiveItems.length})</div>
-        <button class="btn small" id="toggleInactiveBtn">${showInactive ? 'Yashirish' : "Ko'rsatish"}</button>
+        <button type="button" class="btn small" id="toggleInactiveBtn" aria-expanded="${showInactive ? 'true' : 'false'}">${showInactive ? 'Yashirish' : "Ko'rsatish"}</button>
       </div>
       ${showInactive ? `
         <div class="mt-8">
           ${inactiveCats.map((c) => `
             <div class="menu-item-row">
               <div class="mi-name dim">${escapeHtml(c.name)} <span class="dim" style="font-size:12px;">(bo'lim)</span></div>
-              <button class="btn small" data-restore-cat="${c.id}">♻️ Tiklash</button>
+              <button type="button" class="btn small" data-restore-cat="${c.id}" aria-label="${escapeHtml(`«${c.name}» bo'limini tiklash`)}"><span aria-hidden="true">♻️</span> Tiklash</button>
             </div>
           `).join('')}
           ${inactiveItems.map((it) => `
             <div class="menu-item-row">
               <div class="mi-name dim">${escapeHtml(it.name)}</div>
-              <button class="btn small" data-restore-item="${it.id}">♻️ Tiklash</button>
+              <button type="button" class="btn small" data-restore-item="${it.id}" aria-label="${escapeHtml(`«${it.name}» ni tiklash`)}"><span aria-hidden="true">♻️</span> Tiklash</button>
             </div>
           `).join('')}
         </div>
@@ -233,37 +259,45 @@ function openCatModal(id) {
   document.getElementById('catName').value = cat ? cat.name : '';
   document.getElementById('catSort').value = cat ? cat.sort_order : 0;
   document.getElementById('catRequireInventory').checked = cat ? !!cat.require_inventory_link : false;
-  document.getElementById('catModal').classList.remove('hidden');
+  // A-19/A-20/A-21 (2026-09-10): openFormDialog() — role=dialog, fokus,
+  // Escape/fon bosilsa o'zgarish bo'lsa so'raydi (admin.js).
+  openFormDialog('catModal', { onClose: () => { editingCatId = null; } });
 }
-function closeCatModal() { document.getElementById('catModal').classList.add('hidden'); editingCatId = null; }
+function closeCatModal() { closeDialog('catModal', 'saved'); }
 
 document.getElementById('addCatBtn').addEventListener('click', () => openCatModal(null));
-document.getElementById('catCancelBtn').addEventListener('click', closeCatModal);
-// withBusy() — ikki marta bosishdan himoya (2026-09-10). Aks holda sekin
-// tarmoqda ikkinchi bosish ikkinchi POST yuborib, dublikat kategoriya/taom
-// yaratardi.
-document.getElementById('catSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+document.getElementById('catCancelBtn').addEventListener('click', () => requestCloseFormDialog('catModal'));
+// withBusy() — ikki marta bosishdan himoya: ikkinchi POST dublikat
+// kategoriya yaratardi. <form> submit — Enter ham saqlaydi (A-19);
+// xato — maydon ostida (A-18).
+document.getElementById('catForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('catSaveBtn');
+  if (btn.disabled) return;
+  clearFieldErrors('catForm');
   const name = document.getElementById('catName').value.trim();
   const sort_order = Number(document.getElementById('catSort').value) || 0;
   const require_inventory_link = document.getElementById('catRequireInventory').checked;
-  if (!name) return toast('Nomini kiriting', 'error');
-  try {
-    if (editingCatId) {
-      await api(`/admin/menu/categories/${editingCatId}`, { method: 'PUT', body: { name, sort_order, require_inventory_link } });
-    } else {
-      await api('/admin/menu/categories', { method: 'POST', body: { name, sort_order, require_inventory_link } });
+  if (!name) { setFieldError('catName', 'Kategoriya nomini kiriting'); return; }
+  withBusy(btn, async () => {
+    try {
+      if (editingCatId) {
+        await api(`/admin/menu/categories/${editingCatId}`, { method: 'PUT', body: { name, sort_order, require_inventory_link } });
+      } else {
+        await api('/admin/menu/categories', { method: 'POST', body: { name, sort_order, require_inventory_link } });
+      }
+      closeCatModal();
+      toast('Saqlandi');
+      loadAll();
+    } catch (err) {
+      toast(err.message, 'error');
     }
-    closeCatModal();
-    toast('Saqlandi');
-    loadAll();
-  } catch (err) {
-    toast(err.message, 'error');
-  }
-}));
+  });
+});
 
 async function delCategory(id) {
-  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
-  if (!(await customConfirm("Kategoriyani o'chirasizmi? (unga tegishli taomlar ko'rinmay qoladi)"))) return;
+  const cat = categories.find((c) => c.id === id);
+  if (!(await customConfirm(`${cat ? `«${cat.name}»` : 'Kategoriya'} o'chirilsinmi? Unga tegishli taomlar menyuda ko'rinmay qoladi (keyin «O'chirilganlar»dan tiklash mumkin).`, { okText: "O'chirish", danger: true }))) return;
   try {
     await api(`/admin/menu/categories/${id}`, { method: 'DELETE' });
     toast("O'chirildi");
@@ -311,9 +345,15 @@ function openItemModal(categoryId, itemId, parentId) {
   document.getElementById('itemImageStatus').textContent = '';
   currentImageUrl = item ? (item.image_url || null) : null;
   updateImagePreview();
-  document.getElementById('itemModal').classList.remove('hidden');
+  // A-19/A-20/A-21 (2026-09-10). Rasm URL'i input qiymatida ko'rinmaydi
+  // ("Rasmni olib tashlash" faqat o'zgaruvchini o'zgartiradi) — isDirty.
+  const openedImageUrl = currentImageUrl;
+  openFormDialog('itemModal', {
+    isDirty: () => currentImageUrl !== openedImageUrl,
+    onClose: () => { editingItemId = null; itemModalParentId = null; },
+  });
 }
-function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; itemModalParentId = null; }
+function closeItemModal() { closeDialog('itemModal', 'saved'); }
 
 // Taom modalidagi "Ombor mahsuloti bilan bog'lash" select'ini har safar ochilganda
 // joriy ombor ro'yxati bilan to'ldiradi (faol mahsulotlar + hozir tanlangan bo'lsa
@@ -398,7 +438,7 @@ function updateImagePreview() {
   }
 }
 
-document.getElementById('itemCancelBtn').addEventListener('click', closeItemModal);
+document.getElementById('itemCancelBtn').addEventListener('click', () => requestCloseFormDialog('itemModal'));
 
 // Rasm — MAJBURIY EMAS: fayl tanlangan zahoti (Saqlash bosilishidan oldin)
 // alohida (multipart, oddiy JSON api() orqali emas) so'rov bilan yuklanadi,
@@ -427,8 +467,8 @@ document.getElementById('itemImageFile').addEventListener('change', async (e) =>
     statusEl.textContent = 'Rasm yuklandi.';
   } catch (err) {
     statusEl.textContent = '';
-    toast(err.message, 'error');
     e.target.value = '';
+    setFieldError(e.target, err.message, { focus: false }); // A-18
   } finally {
     saveBtn.disabled = false;
   }
@@ -441,7 +481,27 @@ document.getElementById('itemImageRemoveBtn').addEventListener('click', () => {
   updateImagePreview();
 });
 
-document.getElementById('itemSaveBtn').addEventListener('click', (e) => withBusy(e.currentTarget, async () => {
+// <form> submit (A-19: Enter ham saqlaydi; rasm yuklanayotganda "Saqlash"
+// disabled — Enter bilan ham yuborilmaydi). A-18: xatolar maydon ostida.
+document.getElementById('itemForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('itemSaveBtn');
+  if (btn.disabled) return;
+  clearFieldErrors('itemForm');
+  const name = document.getElementById('itemName').value.trim();
+  const priceRaw = document.getElementById('itemPrice').value.trim();
+  const costRaw = document.getElementById('itemCostPrice').value.trim();
+  const price = Number(priceRaw);
+  const cost = costRaw === '' ? null : Number(costRaw);
+  let bad = false;
+  if (!name) { setFieldError('itemName', 'Taom nomini kiriting'); bad = true; }
+  if (priceRaw === '' || !Number.isFinite(price) || price < 0) { setFieldError('itemPrice', "Sotuv narxini kiriting (0 yoki musbat son)"); bad = true; }
+  if (cost !== null && (!Number.isFinite(cost) || cost < 0)) { setFieldError('itemCostPrice', "Tan narx 0 yoki musbat son bo'lsin"); bad = true; }
+  if (bad) return;
+  withBusy(btn, saveItem);
+});
+
+async function saveItem() {
   const name = document.getElementById('itemName').value.trim();
   const volume = document.getElementById('itemVolume').value.trim();
   const costPriceRaw = document.getElementById('itemCostPrice').value.trim();
@@ -452,9 +512,6 @@ document.getElementById('itemSaveBtn').addEventListener('click', (e) => withBusy
   const image_url = currentImageUrl || '';
   const inventorySelectVal = document.getElementById('itemInventory').value;
   const inventory_item_id = inventorySelectVal ? Number(inventorySelectVal) : null;
-  if (!name) return toast('Nomini kiriting', 'error');
-  if (!Number.isFinite(price) || price < 0) return toast("Sotuv narxini to'g'ri kiriting", 'error');
-  if (cost_price !== null && (!Number.isFinite(cost_price) || cost_price < 0)) return toast("Tan narxni to'g'ri kiriting", 'error');
   try {
     if (editingItemId) {
       await api(`/admin/menu/items/${editingItemId}`, { method: 'PUT', body: { name, price, cost_price, sort_order, description, image_url, volume, inventory_item_id } });
@@ -467,7 +524,7 @@ document.getElementById('itemSaveBtn').addEventListener('click', (e) => withBusy
   } catch (err) {
     toast(err.message, 'error');
   }
-}));
+}
 
 // ⚠️ Muvaffaqiyatdan keyin XOTIRADAGI `items` massivini ham yangilaymiz
 // (2026-09-10). NEGA: ilgari faqat serverga so'rov ketardi, `items` esa eski
@@ -487,10 +544,9 @@ async function toggleAvailability(id, checked) {
 }
 
 async function delItem(id) {
-  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10):
-  // loyiha dizayniga mos oyna, va u bloklanmagani uchun setInterval
-  // callbacklari to'planib qolmaydi.
-  if (!(await customConfirm("Taomni o'chirasizmi?"))) return;
+  // customConfirm() — brauzerning standart confirm() o'rniga (2026-09-10).
+  const it = items.find((i) => i.id === id);
+  if (!(await customConfirm(`${it ? `«${it.name}»` : 'Taom'} o'chirilsinmi?`, { okText: "O'chirish", danger: true }))) return;
   try {
     await api(`/admin/menu/items/${id}`, { method: 'DELETE' });
     toast("O'chirildi");
@@ -502,5 +558,8 @@ async function delItem(id) {
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav('menu');
+  // A-08: qidiruv — tarmoqsiz, mahalliy render() (renderMenuHtml joriy
+  // `menuQuery`ni o'qiydi, keyingi loadAll() ham shu filtr bilan chizadi).
+  attachSearch('menuSearch', { onFilter: (q) => { menuQuery = q; if (categories.length) render(); } });
   loadAll();
 });

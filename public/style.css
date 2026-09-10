@@ -313,18 +313,25 @@ main { max-width: 900px; margin: 0 auto; padding: 16px; }
 .bottom-nav::-webkit-scrollbar { display: none; }
 .bottom-nav a {
   flex: 1 0 72px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px; text-decoration: none; color: var(--text-faint); font-size: 11px; min-height: 44px;
+  gap: 2px; text-decoration: none; color: var(--text-faint); font-size: 12px; min-height: 44px;
   padding: 0 6px; white-space: nowrap; line-height: 1.2;
   transition: color .15s var(--ease);
 }
 .bottom-nav a:focus-visible { outline-offset: -3px; } /* overflow konteyner kesmasin */
 .bottom-nav a .ic { font-size: 18px; }
+/* D-D3 (2026-09-10): eng kichik matn 11px edi (.bottom-nav a, .badge, th,
+   .stat-tile .label) — D-B2 dagi past kontrast bilan bir joyda. Endi 12px. */
 .bottom-nav a.active { color: var(--gold-2); font-weight: 600; }
 
 /* Admin drawer ichidagi guruh sarlavhasi ("Kunlik ish" / "Sozlash", 6.3-bo'lim).
    Mobil pastki qatorda joy yo'q — faqat sidebar rejimida ko'rinadi.
    D-D5: ataylab UPPERCASE emas. */
 .nav-group-title { display: none; }
+
+/* Admin sahifalarining asosiy ustuni (drawer yonida). D-J5 (2026-09-10):
+   ilgari har 10 ta HTML'da inline `style="flex:1;"` edi. min-width:0 —
+   ichidagi keng jadval/qator flex elementni ekrandan kengaytirib yubormasin. */
+.app-main { flex: 1; min-width: 0; }
 
 @media (min-width: 720px) {
   /* Sidebar endi doim ochiq sticky panel emas — standart holatda yopiq,
@@ -366,9 +373,14 @@ main { max-width: 900px; margin: 0 auto; padding: 16px; }
 }
 .card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .card-title { font-family: var(--serif); font-weight: 600; letter-spacing: 0.01em; }
+/* D-H11 (2026-09-10): admin bo'lim sarlavhalari endi haqiqiy <h2>/<h3> —
+   brauzer standarti (24px + katta margin) o'rniga karta sarlavhasi o'lchami.
+   :where() — o'ziga xoslik (0,1,0), ya'ni pastdagi .mt-* yordamchilari
+   margin'ni baribir bosib o'tadi (ular fayl davomida KEYIN keladi). */
+:where(h2, h3).card-title { font-size: 17px; margin: 0; }
 .card-sub { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
 
-.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.2; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.2; }
 .badge.low { background: var(--danger-light); color: var(--danger); }
 .badge.ok { background: var(--ok-light); color: var(--ok); }
 .badge.debt { background: var(--warn-light); color: var(--warn); }
@@ -435,7 +447,7 @@ main { max-width: 900px; margin: 0 auto; padding: 16px; }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 9px 6px; border-bottom: 1px solid var(--border); font-size: 14px; }
-th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+th { color: var(--text-faint); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* D-A5 (2026-09-10): .table-desktop / .card-list-mobile olib tashlandi —
    grep bo'yicha hech bir HTML/JS'da ishlatilmagan o'lik CSS edi. */
@@ -443,7 +455,23 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
 /* ---------------- Forms ---------------- */
 
 .form-grid { display: flex; flex-direction: column; gap: 12px; }
+/* Sana filtri qatori (Dan / Gacha / [Holat] / Ko'rsatish) — admin Hisobot,
+   Xarajatlar, kassir Statistika. 2026-09-10: ilgari har sahifada inline
+   `flex-direction:row` edi, `flex-wrap`siz — 390px'da qator 459–511px ga
+   cho'zilib butun sahifani gorizontal siljitardi (fixed pastki menyu ham
+   shu kenglikka yoyilardi). Endi sig'masa keyingi qatorga o'tadi. */
+.form-grid.filter-row { flex-direction: row; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.filter-row .field { flex: 1 1 140px; min-width: 0; }
 .field label { display: block; font-size: 12px; color: var(--text-faint); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Checkbox + matn bitta qatorda (masalan Sozlamalar > "Yetkazib berish
+   yoqilgan") — maydon sarlavhasi (UPPERCASE) kabi emas, oddiy matn. */
+/* Checkbox o'zi 22px — bosish maydonini (44px) uni o'rab turgan <label> beradi
+   (masalan Menyu ro'yxatidagi "mavjud" belgisi). */
+label.inline-check { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.field label.inline-check {
+  display: flex; margin-bottom: 0;
+  text-transform: none; letter-spacing: normal; font-size: 14px; color: var(--text);
+}
 .field input, .field select, .field textarea {
   width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: rgba(0, 0, 0, 0.18); color: var(--text);
@@ -577,7 +605,7 @@ a.btn { text-decoration: none; }
   border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow-sm);
   min-width: 0;
 }
-.stat-tile .label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-tile .label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-tile .value {
   font-family: var(--serif); font-size: clamp(15px, 4vw, 21px); font-weight: 700; margin-top: 6px; color: var(--gold-2);
   line-height: 1.2; overflow-wrap: anywhere;
@@ -770,6 +798,11 @@ a.btn { text-decoration: none; }
 #menuItems .menu-item-row .mi-info { cursor: pointer; }
 #menuItems .menu-item-row .mi-image {
   width: 100%; height: 84px; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 6px;
+}
+/* D-F6 (2026-09-10): 320px'da 2 ustun — har karta ~135px, uzun taom nomi
+   3–4 qatorga bo'linardi. Juda tor ekranda bitta ustun. */
+@media (max-width: 340px) {
+  #menuItems { grid-template-columns: 1fr; }
 }
 
 .qty-stepper { display: flex; align-items: center; gap: 8px; }

@@ -2,7 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Xarajatlar — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -10,46 +11,57 @@
 </head>
 <body class="app-body">
   <div class="app-shell">
-    <nav class="bottom-nav" id="bottomNav">
-      <a href="index.html" data-page="index"><span class="ic">📊</span>Bosh sahifa</a>
-      <a href="menu.html" data-page="menu"><span class="ic">🍽️</span>Menyu</a>
-      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
-      <a href="waiters.html" data-page="waiters"><span class="ic">👥</span>Xodimlar</a>
-      <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
-      <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
-      <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
-      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
-      <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses" aria-current="page"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
     </nav>
-    <div style="flex:1;">
+    <div class="app-main">
       <div class="topbar">
         <h1>Xarajatlar</h1>
-        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
-        <div class="card">
-          <div class="form-grid">
-            <div class="field"><label>Sana</label><input id="fDate" type="date"></div>
-            <div class="field"><label>Summasi (so'm)</label><input id="fAmount" type="number"></div>
-            <div class="field"><label>Turkumi (ixtiyoriy)</label><input id="fCategory" placeholder="masalan: mahsulot, kommunal"></div>
-            <div class="field"><label>Izoh</label><input id="fNote"></div>
-            <button class="btn primary block" id="addBtn">+ Xarajat qo'shish</button>
+        <!-- A-18/A-19 (2026-09-10): <form> — Enter bilan yuboriladi, xato maydon ostida. -->
+        <form class="card" id="expenseForm" novalidate>
+          <h2 class="card-title">Yangi xarajat</h2>
+          <div class="form-grid mt-8">
+            <div class="field"><label for="fDate">Sana</label><input id="fDate" type="date" required></div>
+            <div class="field"><label for="fAmount">Summasi (so'm)</label><input id="fAmount" type="number" min="1" step="1" inputmode="numeric" required></div>
+            <div class="field"><label for="fCategory">Turkumi (ixtiyoriy)</label><input id="fCategory" placeholder="masalan: mahsulot, kommunal"></div>
+            <div class="field"><label for="fNote">Izoh</label><input id="fNote"></div>
+            <button type="submit" class="btn primary block" id="addBtn">+ Xarajat qo'shish</button>
           </div>
-        </div>
+        </form>
 
-        <div class="card">
-          <div class="form-grid" style="flex-direction:row; gap:8px; align-items:flex-end;">
-            <div class="field"><label>Dan</label><input id="filterFrom" type="date"></div>
-            <div class="field"><label>Gacha</label><input id="filterTo" type="date"></div>
-            <button class="btn" id="filterBtn">Filtrlash</button>
+        <!-- A-12 (2026-09-10): standart holatda SHU OY (datePresets), "Jami"
+             davr nomi bilan va X-Total-Amount sarlavhasidan. -->
+        <form class="card" id="filterForm" novalidate>
+          <div id="expensePresets"></div>
+          <div class="form-grid filter-row">
+            <div class="field"><label for="filterFrom">Dan</label><input id="filterFrom" type="date"></div>
+            <div class="field"><label for="filterTo">Gacha</label><input id="filterTo" type="date"></div>
+            <button type="submit" class="btn" id="filterBtn">Ko'rsatish</button>
           </div>
-        </div>
+        </form>
 
-        <div id="expenseList"><p class="dim">Yuklanmoqda...</p></div>
+        <h2 class="card-title mt-16" id="expenseTotal">Jami: …</h2>
+        <p class="card-sub hidden" id="expenseNote" role="status"></p>
+        <div id="expenseList" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>
   </div>
   <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
   <script src="expenses.js"></script>
 </body>
 </html>

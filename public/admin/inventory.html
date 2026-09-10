@@ -2,7 +2,8 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Ombor — Ziyo Famliy admin</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -10,74 +11,84 @@
 </head>
 <body class="app-body">
   <div class="app-shell">
-    <nav class="bottom-nav" id="bottomNav">
-      <a href="index.html" data-page="index"><span class="ic">📊</span>Bosh sahifa</a>
-      <a href="menu.html" data-page="menu"><span class="ic">🍽️</span>Menyu</a>
-      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
-      <a href="waiters.html" data-page="waiters"><span class="ic">👥</span>Xodimlar</a>
-      <a href="expenses.html" data-page="expenses"><span class="ic">💵</span>Xarajat</a>
-      <a href="reservations.html" data-page="reservations"><span class="ic">📅</span>Bronlar</a>
-      <a href="customer-orders.html" data-page="customer-orders"><span class="ic">🛒</span>Buyurtmalar</a>
-      <a href="inventory.html" data-page="inventory"><span class="ic">📦</span>Ombor</a>
-      <a href="reports.html" data-page="reports"><span class="ic">📈</span>Hisobot</a>
+    <nav class="bottom-nav" id="bottomNav" aria-label="Admin bo'limlari">
+      <div class="nav-group-title">Kunlik ish</div>
+      <a href="index.html" data-page="index"><span class="ic" aria-hidden="true">📊</span>Bosh sahifa</a>
+      <a href="customer-orders.html" data-page="customer-orders"><span class="ic" aria-hidden="true">🛒</span>Onlayn buyurtmalar</a>
+      <a href="reservations.html" data-page="reservations"><span class="ic" aria-hidden="true">📅</span>Bronlar</a>
+      <a href="reports.html" data-page="reports"><span class="ic" aria-hidden="true">📈</span>Hisobot</a>
+      <a href="expenses.html" data-page="expenses"><span class="ic" aria-hidden="true">💵</span>Xarajatlar</a>
+      <a href="inventory.html" data-page="inventory" aria-current="page"><span class="ic" aria-hidden="true">📦</span>Ombor</a>
+      <div class="nav-group-title">Sozlash</div>
+      <a href="menu.html" data-page="menu"><span class="ic" aria-hidden="true">🍽️</span>Menyu</a>
+      <a href="tables.html" data-page="tables"><span class="ic" aria-hidden="true">🪑</span>Stollar</a>
+      <a href="waiters.html" data-page="waiters"><span class="ic" aria-hidden="true">👥</span>Xodimlar</a>
+      <a href="settings.html" data-page="settings"><span class="ic" aria-hidden="true">⚙️</span>Sozlamalar</a>
     </nav>
-    <div style="flex:1;">
+    <div class="app-main">
       <div class="topbar">
         <h1>Ombor</h1>
-        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+        <button type="button" class="logout-btn" id="logoutBtn">Chiqish</button>
       </div>
       <main>
         <p class="dim" style="margin-bottom:12px;">Suv, salfetka va shunga o'xshash sarflanadigan mahsulotlar qoldig'i. Menyu bo'limida (masalan ichimlik) taomni shu yerdagi mahsulotga bog'lasangiz, uning "mavjud/tugadi" holati bu yerdagi qoldiqdan avtomatik hisoblanadi.</p>
-        <button class="btn primary block" id="addItemBtn">+ Yangi ombor mahsuloti</button>
-        <div id="inventoryList" class="mt-16"><p class="dim">Yuklanmoqda...</p></div>
+        <button type="button" class="btn primary block" id="addItemBtn">+ Yangi ombor mahsuloti</button>
+        <!-- A-09 / A-08 (2026-09-10): tepada ogohlantirish, "faqat kam
+             qolganlar" chipi va nom bo'yicha qidiruv (inventory.js). -->
+        <div id="lowStockBanner" class="mt-16"></div>
+        <div id="invFilterChips"></div>
+        <label for="invSearch" class="sr-only">Ombordan qidirish</label>
+        <input type="search" class="search-box" id="invSearch" placeholder="Mahsulot nomi…">
+        <div id="inventoryList"><p class="dim">Yuklanmoqda...</p></div>
       </main>
     </div>
   </div>
 
+  <!-- A-19/A-20 (2026-09-10): .modal — <form>, openFormDialog(). -->
   <div class="modal-backdrop hidden" id="invModal">
-    <div class="modal">
+    <form class="modal" id="invForm" novalidate>
       <h2 id="invModalTitle">Yangi ombor mahsuloti</h2>
       <div class="form-grid">
-        <div class="field"><label>Nomi</label><input id="invName" placeholder="masalan: Suv"></div>
-        <div class="field"><label>Hajmi (ixtiyoriy — masalan: 0.5L, 1L, 5L)</label><input id="invVolume" placeholder="masalan: 0.5L"></div>
-        <div class="field"><label>O'lchov birligi</label><input id="invUnit" placeholder="dona / litr / quti" value="dona"></div>
-        <div class="field" id="invQtyField"><label>Boshlang'ich qoldiq</label><input id="invQty" type="number" value="0"></div>
-        <div class="field"><label>Kam qoldiq chegarasi (ixtiyoriy — 0 = o'chirilgan)</label><input id="invThreshold" type="number" value="0"></div>
-        <div class="field"><label>Tan narxi (xarid narxi, so'm/birlik — ixtiyoriy)</label><input id="invCost" type="number" value="0"></div>
+        <div class="field"><label for="invName">Nomi</label><input id="invName" placeholder="masalan: Suv" required></div>
+        <div class="field"><label for="invVolume">Hajmi (ixtiyoriy — masalan: 0.5L, 1L, 5L)</label><input id="invVolume" placeholder="masalan: 0.5L"></div>
+        <div class="field"><label for="invUnit">O'lchov birligi</label><input id="invUnit" placeholder="dona / litr / quti" value="dona"></div>
+        <div class="field" id="invQtyField"><label for="invQty">Boshlang'ich qoldiq</label><input id="invQty" type="number" value="0" min="0" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="invThreshold">Kam qoldiq chegarasi (ixtiyoriy — 0 = o'chirilgan)</label><input id="invThreshold" type="number" value="0" min="0" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="invCost">Tan narxi (xarid narxi, so'm/birlik — ixtiyoriy)</label><input id="invCost" type="number" value="0" min="0" step="1" inputmode="numeric"></div>
         <div class="field">
-          <label>Sotuv narxi (so'm/birlik)</label>
-          <input id="invSale" type="number" value="0">
-          <p class="dim" style="font-size:12px; margin-top:4px;">Bu mahsulot Menyu bo'limida biror taomga bog'lansa, o'sha taomning narxi AVTOMATIK shu qiymatga tenglanadi (tan narxi menyuda hech qachon ko'rinmaydi).</p>
+          <label for="invSale">Sotuv narxi (so'm/birlik)</label>
+          <input id="invSale" type="number" value="0" min="0" step="1" inputmode="numeric">
+          <p class="card-sub">Bu mahsulot Menyu bo'limida biror taomga bog'lansa, o'sha taomning narxi AVTOMATIK shu qiymatga tenglanadi (tan narxi menyuda hech qachon ko'rinmaydi).</p>
         </div>
         <div class="field" id="invMenuCategoryField">
-          <label>Menyuda ko'rsatish (ixtiyoriy)</label>
+          <label for="invMenuCategory">Menyuda ko'rsatish (ixtiyoriy)</label>
           <select id="invMenuCategory">
             <option value="">— Menyuda ko'rsatilmasin (masalan salfetka) —</option>
           </select>
-          <p class="dim" style="font-size:12px; margin-top:4px;">Bo'lim tanlansa, shu mahsulot uchun mos taom o'sha bo'limda AVTOMATIK yaratiladi va bog'lanadi — Menyu bo'limiga alohida o'tish shart emas.</p>
+          <p class="card-sub">Bo'lim tanlansa, shu mahsulot uchun mos taom o'sha bo'limda AVTOMATIK yaratiladi va bog'lanadi — Menyu bo'limiga alohida o'tish shart emas.</p>
         </div>
-        <p class="dim" id="invLinkedNote" style="font-size:12px;"></p>
+        <p class="card-sub" id="invLinkedNote"></p>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="invCancelBtn">Bekor</button>
-        <button class="btn primary" id="invSaveBtn">Saqlash</button>
+        <button type="button" class="btn" id="invCancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="invSaveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <div class="modal-backdrop hidden" id="adjustModal">
-    <div class="modal">
+    <form class="modal" id="adjustForm" novalidate>
       <h2 id="adjustModalTitle">Qoldiqni o'zgartirish</h2>
       <p class="dim" id="adjustCurrentQty"></p>
       <div class="form-grid">
-        <div class="field"><label id="adjustQtyLabel">Necha dona keldi?</label><input id="adjustDelta" type="number" min="1" placeholder="masalan: 24"></div>
-        <div class="field"><label>Izoh (ixtiyoriy)</label><input id="adjustNote" placeholder="masalan: yangi partiya keldi"></div>
+        <div class="field"><label for="adjustDelta" id="adjustQtyLabel">Necha dona keldi?</label><input id="adjustDelta" type="number" min="1" step="1" inputmode="numeric" placeholder="masalan: 24" required></div>
+        <div class="field"><label for="adjustNote">Izoh (ixtiyoriy)</label><input id="adjustNote" placeholder="masalan: yangi partiya keldi"></div>
       </div>
       <div class="modal-actions">
-        <button class="btn" id="adjustCancelBtn">Bekor</button>
-        <button class="btn primary" id="adjustSaveBtn">Saqlash</button>
+        <button type="button" class="btn" id="adjustCancelBtn">Bekor</button>
+        <button type="submit" class="btn primary" id="adjustSaveBtn">Saqlash</button>
       </div>
-    </div>
+    </form>
   </div>
 
   <div class="modal-backdrop hidden" id="historyModal">
@@ -85,12 +96,13 @@
       <h2 id="historyModalTitle">Tarix</h2>
       <div id="historyList" class="mt-8"><p class="dim">Yuklanmoqda...</p></div>
       <div class="modal-actions">
-        <button class="btn primary" id="historyCloseBtn">Yopish</button>
+        <button type="button" class="btn primary" id="historyCloseBtn">Yopish</button>
       </div>
     </div>
   </div>
 
   <script src="../app.js" data-api-base="../"></script>
+  <script src="admin.js"></script>
   <script src="inventory.js"></script>
 </body>
 </html>

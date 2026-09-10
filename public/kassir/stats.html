@@ -6,6 +6,7 @@
      (WCAG 1.4.4); iOS avtozoom esa style.css'dagi input{font-size:16px} bilan hal
      qilingan. viewport-fit=cover — D-F8 safe-area (env()) nolga teng bo'lmasin. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14120e">
 <title>Statistika — Kassa — Ziyo Famliy</title>
 <link rel="stylesheet" href="../style.css">
 <link rel="manifest" href="../manifest.json">
@@ -32,7 +33,7 @@
                flex-wrap (2026-09-10): ikki sana maydoni + "Filtrlash" 390px'da
                ~450px talab qilib butun sahifani gorizontal siljitardi — endi
                sig'maganda tugma keyingi qatorga o'tadi. -->
-          <div class="form-grid" style="flex-direction:row; flex-wrap:wrap; gap:8px; align-items:flex-end;">
+          <div class="form-grid filter-row">
             <div class="field"><label for="filterFrom">Dan</label><input id="filterFrom" type="date"></div>
             <div class="field"><label for="filterTo">Gacha</label><input id="filterTo" type="date"></div>
             <button type="button" class="btn" id="filterBtn">Filtrlash</button>
