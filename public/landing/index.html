@@ -2,11 +2,60 @@
 <html lang="uz">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- NEGA (L-33, 2026-09-10): `maximum-scale=1` olib tashlandi — pinch-zoom'ni
+     bloklardi (WCAG 1.4.4). iOS'dagi input-zoom muammosi 15px+ shrift bilan
+     allaqachon hal qilingan, zoom'ni butunlay taqiqlash shart emas. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ziyo Famliy — zamonaviy restoran</title>
-<meta name="description" content="Ziyo Famliy restorani — issiq taomlar, salatlar va ichimliklar. Toshkent markazida hashamatli va samimiy muhit.">
+<!-- NEGA (L-28, 2026-09-10): "Toshkent markazida" edi — restoran esa Quva'da
+     (sahifadagi manzil bilan zid). Bu matn Google va Telegram preview'ida chiqadi. -->
+<meta name="description" content="Ziyo Famliy restorani — issiq taomlar, salatlar va ichimliklar. Farg&rsquo;ona viloyati, Quva tumanida hashamatli va samimiy muhit.">
+<!-- NEGA (L-32, 2026-09-10): havola asosan Telegram orqali tarqaladi —
+     og:* teglarsiz preview bo'sh chiqardi. og:image hozircha hero rasmi
+     (haqiqiy foto yo'q, L-30). -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ziyo Famliy">
+<meta property="og:title" content="Ziyo Famliy — zamonaviy restoran">
+<meta property="og:description" content="Issiq taomlar, salatlar va ichimliklar. Onlayn buyurtma va stol bron qilish. Farg&rsquo;ona viloyati, Quva tumani.">
+<meta property="og:locale" content="uz_UZ">
+<meta property="og:image" content="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&amp;w=1200&amp;auto=format&amp;fit=crop">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="../icon.svg">
+<!-- NEGA (2026-09-10): shriftlar ilgari style.css ichidagi `@import` bilan
+     yuklanardi — brauzer avval style.css'ni to'liq yuklab, keyingina shrift
+     CSS'ini so'rardi (ketma-ket, render bloklanadi). preconnect + <link>
+     bilan so'rov parallel boshlanadi. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&amp;family=Poppins:wght@300;400;500;600;700&amp;display=swap">
 <link rel="stylesheet" href="style.css">
+<!-- NEGA (L-32, 2026-09-10): schema.org/Restaurant — qidiruv tizimlari uchun
+     tuzilgan ma'lumot. Qiymatlar sahifadagi "Aloqa" bo'limidan olingan;
+     u yerda o'zgarsa, shu yerni ham yangilash kerak (bu blok statik). -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Restaurant",
+  "name": "Ziyo Famliy",
+  "description": "Issiq taomlar, salatlar va ichimliklar. Onlayn buyurtma (olib ketish va yetkazib berish) va stol bron qilish.",
+  "image": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=1200&auto=format&fit=crop",
+  "telephone": "+998985757574",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Farg'ona halqa yo'li",
+    "addressLocality": "Quva tumani",
+    "addressRegion": "Farg'ona viloyati",
+    "addressCountry": "UZ"
+  },
+  "openingHoursSpecification": {
+    "@type": "OpeningHoursSpecification",
+    "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "opens": "00:00",
+    "closes": "23:59"
+  },
+  "acceptsReservations": true
+}
+</script>
 </head>
 <body>
 
@@ -14,8 +63,11 @@
   <header class="site-header" id="siteHeader">
     <div class="header-inner">
       <a href="#hero" class="brand">Ziyo Famliy</a>
-      <nav class="nav-links" id="navLinks">
-        <button class="nav-close" id="navClose" type="button" aria-label="Yopish">&times;</button>
+      <nav class="nav-links" id="navLinks" aria-label="Asosiy menyu">
+        <!-- NEGA (L-18, 2026-09-10): mobil menyu ochiq bo'lganda YAGONA yopish
+             tugmasi shu. Gamburger endi "×"ga aylanmaydi — ilgari ikkalasi
+             deyarli bir joyda ustma-ust turardi. -->
+        <button class="nav-close" id="navClose" type="button" aria-label="Menyuni yopish"><span aria-hidden="true">&times;</span></button>
         <a href="#hero">Bosh sahifa</a>
         <a href="#menu">Menyu</a>
         <a href="#galereya">Galereya</a>
@@ -23,8 +75,11 @@
         <a href="#aloqa">Aloqa</a>
         <a href="../login.html" class="nav-login">Xodim kirishi</a>
       </nav>
-      <a href="#" class="btn-pill header-cta" data-book>Stol bron qilish</a>
-      <button class="nav-toggle" id="navToggle" aria-label="Menyu">
+      <button type="button" class="btn-pill header-cta" data-book>Stol bron qilish</button>
+      <!-- NEGA (L-03, 2026-09-10): mobilda (≤1040px) header'da doimiy kichik
+           "Menyu" havolasi — pastga tushib ketgan mijoz gamburgersiz menyuga qaytadi. -->
+      <a href="#menu" class="header-quick">Menyu</a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Menyuni ochish" aria-expanded="false" aria-controls="navLinks">
         <span></span><span></span><span></span>
       </button>
     </div>
@@ -37,21 +92,23 @@
       <p class="kicker">Farg&rsquo;ona Quva &middot; Fine dining</p>
       <h1>Ziyo Famliy</h1>
       <p class="hero-tagline">Olov ustida pishirilgan taomlar, samimiy muhit va unutilmas kechqurun.</p>
+      <!-- NEGA (L-02, 2026-09-10): daromad buyurtmadan keladi — birlamchi
+           (oltin) tugma endi menyu/buyurtma, bron esa ikkilamchi. -->
       <div class="hero-actions">
-        <a href="#" class="btn-solid" data-book>Stol bron qilish</a>
-        <a href="#menu" class="btn-ghost">Menyuni ko&rsquo;rish</a>
+        <a href="#menu" class="btn-solid">Menyu va buyurtma</a>
+        <button type="button" class="btn-ghost" data-book>Stol bron qilish</button>
       </div>
     </div>
-    <a href="#menu" class="scroll-cue" aria-label="Pastga">
+    <a href="#menu" class="scroll-cue" aria-label="Menyuga o&rsquo;tish">
       <span></span>
     </a>
   </section>
 
   <!-- ============ MENU (real menyu, DB'dan) ============ -->
-  <section class="section menu-section" id="menu">
+  <section class="section menu-section" id="menu" aria-labelledby="menuTitle">
     <div class="container">
       <p class="kicker center">Bizning menyu</p>
-      <h2 class="section-title center">Taomlarimiz bilan tanishing</h2>
+      <h2 class="section-title center" id="menuTitle" tabindex="-1">Taomlarimiz bilan tanishing</h2>
 
       <div class="menu-tabs" id="menuTabs"></div>
       <div id="menuPanels"><p class="dim center">Menyu yuklanmoqda...</p></div>
@@ -81,8 +138,8 @@
       <div class="about-text">
         <p class="kicker">Bizning tarix</p>
         <h2 class="section-title">Yetti yildan ortiq davom etayotgan ishtiyoq</h2>
-        <p>Ziyo famliy 2019-yilda kichik oilaviy oshxona sifatida ish boshlagan edi. Bugun u &mdash; olov ustida pishirilgan taomlar va samimiy mehmondo&rsquo;stlik falsafasini asrab qolgan, Quva tumani markazidagi sevimli manzillardan biri.</p>
-        <p>Har bir taom sifatli, halollik sertifikati bor mahsulotlaridan, qo&rsquo;lda va sevgi bilan tayyorlanadi.</p>
+        <p>Ziyo Famliy 2019-yilda kichik oilaviy oshxona sifatida ish boshlagan edi. Bugun u &mdash; olov ustida pishirilgan taomlar va samimiy mehmondo&rsquo;stlik falsafasini asrab qolgan, Quva tumani markazidagi sevimli manzillardan biri.</p>
+        <p>Har bir taom sifatli, halollik sertifikati bor mahsulotlardan, qo&rsquo;lda va sevgi bilan tayyorlanadi.</p>
 
         <div class="chef-card">
           <div class="chef-photo" style="background-image:url('https://images.unsplash.com/photo-1583394293214-28ded15ee548?q=80&w=400&auto=format&fit=crop')"></div>
@@ -100,31 +157,35 @@
     <div class="container contact-grid">
       <div class="contact-info">
         <p class="kicker light">Aloqa</p>
-        <h2 class="section-title light">Bizni kuting</h2>
+        <h2 class="section-title light">Biz bilan bog&rsquo;laning</h2>
 
+        <!-- NEGA (2026-09-10): #contactAddress / #contactPhones / #contactCallBtn —
+             script.js GET /api/public/settings'dan qiymat kelsa shularni
+             almashtiradi. Kelmasa (endpoint yo'q / bo'sh) — shu HTML qoladi. -->
         <ul class="info-list">
           <li>
-            <span class="info-ic">&#128205;</span>
-            <div><strong>Manzil</strong><br>Farg&rsquo;ona viloyati, Quva tumani, Farg&rsquo;ona halqa yo&rsquo;li</div>
+            <span class="info-ic" aria-hidden="true">&#128205;</span>
+            <div><strong>Manzil</strong><br><span id="contactAddress">Farg&rsquo;ona viloyati, Quva tumani, Farg&rsquo;ona halqa yo&rsquo;li</span></div>
           </li>
           <li>
-            <span class="info-ic">&#128337;</span>
+            <span class="info-ic" aria-hidden="true">&#128337;</span>
             <div><strong>Ish vaqti</strong><br>Har kuni &middot; 24/7</div>
           </li>
           <li>
-            <span class="info-ic">&#128222;</span>
-            <div><strong>Telefon</strong><br><a href="tel:+998916527771">+998 91 652 77 71</a><br><a href="tel:+998985757574">+998 98 575 75 74</a></div>
+            <span class="info-ic" aria-hidden="true">&#128222;</span>
+            <div><strong>Telefon</strong><br><span id="contactPhones"><a href="tel:+998916527771">+998 91 652 77 71</a><br><a href="tel:+998985757574">+998 98 575 75 74</a></span></div>
           </li>
         </ul>
 
         <div class="contact-actions">
-          <a href="tel:+998985757574" class="btn-solid">Qo&rsquo;ng&rsquo;iroq qilish</a>
-          <a href="#" class="btn-ghost" data-book>Stol bron qilish</a>
+          <a href="tel:+998985757574" class="btn-solid" id="contactCallBtn">Qo&rsquo;ng&rsquo;iroq qilish</a>
+          <button type="button" class="btn-ghost" data-book>Stol bron qilish</button>
         </div>
       </div>
 
       <div class="contact-map">
         <iframe
+          title="Restoran joylashuvi xaritada"
           src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3740.447888071671!2d72.08613609999999!3d40.50985120000001!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x38bc870034a4acbb%3A0x4cf81e158eb2adb9!2sShaurma%20Po'lat%20Lavash!5e1!3m2!1sen!2s!4v1788860540073!5m2!1sen!2s"
           width="100%" height="100%" style="border:0;" allowfullscreen="" loading="lazy"
           referrerpolicy="strict-origin-when-cross-origin"></iframe>
@@ -140,21 +201,23 @@
   </footer>
 
   <!-- ============ STOL BRON QILISH OYNASI ============ -->
+  <!-- NEGA (L-34, 2026-09-10): role="dialog" + aria-modal + aria-labelledby;
+       fokus tuzog'i va fokusni qaytarish script.js'da (makeDialog). -->
   <div class="book-backdrop" id="bookBackdrop">
-    <div class="book-modal">
-      <button class="book-modal-close" id="bookModalClose" aria-label="Yopish">&times;</button>
+    <div class="book-modal" role="dialog" aria-modal="true" aria-labelledby="bookTitle">
+      <button class="book-modal-close" id="bookModalClose" type="button" aria-label="Yopish"><span aria-hidden="true">&times;</span></button>
 
       <div id="bookFormWrap">
         <p class="kicker">Ziyo Famliy</p>
-        <h3>Stol bron qilish</h3>
+        <h3 id="bookTitle" tabindex="-1">Stol bron qilish</h3>
         <form id="bookForm" class="book-form" novalidate>
           <div class="book-field">
             <label for="bkName">Ism familiya</label>
-            <input type="text" id="bkName" name="full_name" required autocomplete="name">
+            <input type="text" id="bkName" name="full_name" required autocomplete="name" maxlength="120">
           </div>
           <div class="book-field">
             <label for="bkPhone">Telefon raqam</label>
-            <input type="tel" id="bkPhone" name="phone" required autocomplete="tel" placeholder="+998 90 123 45 67">
+            <input type="tel" id="bkPhone" name="phone" required autocomplete="tel" inputmode="tel" maxlength="30" placeholder="+998 90 123 45 67">
           </div>
           <div class="book-row">
             <div class="book-field">
@@ -168,88 +231,109 @@
           </div>
           <div class="book-field">
             <label for="bkGuests">Kishilar soni</label>
-            <input type="number" id="bkGuests" name="party_size" min="1" max="50" value="2" required>
+            <input type="number" id="bkGuests" name="party_size" min="1" max="50" value="2" required inputmode="numeric">
           </div>
           <div class="book-field">
             <label for="bkNote">Qo&rsquo;shimcha izoh (ixtiyoriy)</label>
-            <textarea id="bkNote" name="note" rows="2" placeholder="Masalan: deraza yonida stol"></textarea>
+            <textarea id="bkNote" name="note" rows="2" maxlength="1000" placeholder="Masalan: deraza yonida stol"></textarea>
           </div>
-          <div class="book-error" id="bkError"></div>
+          <div class="book-error" id="bkError" role="alert"></div>
           <button type="submit" class="btn-solid block" id="bkSubmit">Bron qilish</button>
         </form>
       </div>
 
-      <div class="book-success hidden" id="bookSuccess">
-        <div class="book-success-icon">&#10003;</div>
+      <div class="book-success hidden" id="bookSuccess" tabindex="-1">
+        <div class="book-success-icon" aria-hidden="true">&#10003;</div>
         <h3>Rahmat!</h3>
         <p id="bookSuccessText">Bron so&rsquo;rovingiz qabul qilindi. Tez orada siz bilan bog&rsquo;lanamiz.</p>
-        <button class="btn-ghost dark" id="bookSuccessClose">Yopish</button>
+        <button type="button" class="btn-ghost dark" id="bookSuccessClose">Yopish</button>
       </div>
     </div>
   </div>
 
   <!-- ============ SAVAT PANELI (pastda suzuvchi) ============ -->
   <div class="cart-bar" id="cartBar">
-    <div class="cart-bar-inner">
+    <div class="cart-bar-inner" id="cartBarInner">
       <div class="cart-info">
-        <span id="cartCount">0 ta taom</span>
+        <span id="cartCount">0 ta</span>
         <span class="cart-total" id="cartTotal">0 so&rsquo;m</span>
       </div>
-      <button type="button" class="btn-solid" id="cartOpenBtn">Buyurtma berish</button>
+      <!-- NEGA (L-08, 2026-09-10): "Buyurtma berish" emas — bosilganda avval
+           savat tarkibi (o'zgartirish/o'chirish bilan) ochiladi. -->
+      <button type="button" class="btn-solid" id="cartOpenBtn">Savatni ko&rsquo;rish</button>
     </div>
   </div>
 
+  <!-- Ekran o'qiruvchi uchun e'lonlar (savat o'zgarishi, toast matni) — doim DOM'da. -->
+  <div class="sr-only" id="liveRegion" aria-live="polite"></div>
+  <!-- Vizual qisqa xabar (masalan: saqlangan savatdagi taom endi mavjud emas). -->
+  <div class="site-toast" id="siteToast"></div>
+
   <!-- ============ BUYURTMA BERISH OYNASI ============ -->
   <div class="book-backdrop" id="checkoutBackdrop">
-    <div class="book-modal">
-      <button class="book-modal-close" id="checkoutModalClose" aria-label="Yopish">&times;</button>
+    <div class="book-modal" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+      <button class="book-modal-close" id="checkoutModalClose" type="button" aria-label="Yopish"><span aria-hidden="true">&times;</span></button>
 
       <div id="checkoutFormWrap">
         <p class="kicker">Ziyo Famliy</p>
-        <h3>Buyurtma berish</h3>
+        <h3 id="checkoutTitle" tabindex="-1">Buyurtma berish</h3>
 
-        <div class="checkout-summary" id="checkoutSummary"></div>
+        <div class="checkout-summary" id="checkoutSummary" role="region" aria-label="Savat tarkibi"></div>
 
         <form id="checkoutForm" class="book-form" novalidate>
           <div class="book-field">
             <label for="coName">Ism familiya</label>
-            <input type="text" id="coName" name="full_name" required autocomplete="name">
+            <input type="text" id="coName" name="full_name" required autocomplete="name" maxlength="120">
           </div>
           <div class="book-field">
             <label for="coPhone">Telefon raqam</label>
-            <input type="tel" id="coPhone" name="phone" required autocomplete="tel" placeholder="+998 90 123 45 67">
+            <input type="tel" id="coPhone" name="phone" required autocomplete="tel" inputmode="tel" maxlength="30" placeholder="+998 90 123 45 67">
           </div>
 
-          <div class="book-field">
-            <label>Buyurtma turi</label>
+          <!-- NEGA (L-36, 2026-09-10): ilgari oddiy <button>lar edi — "Buyurtma
+               turi" yorlig'i hech narsaga bog'lanmagan, tanlov faqat rang bilan
+               bildirilardi. Endi haqiqiy radio: strelka tugmalari, ekran
+               o'qiruvchi "1/2, tanlangan" deydi, nuqta rangsiz ham ko'rinadi. -->
+          <fieldset class="fulfillment-field">
+            <legend>Buyurtma turi</legend>
             <div class="fulfillment-toggle" id="fulfillmentToggle">
-              <button type="button" class="fulfillment-opt active" data-fulfillment="pickup">Olib ketish</button>
-              <button type="button" class="fulfillment-opt" data-fulfillment="delivery">Yetkazib berish</button>
+              <label class="fulfillment-opt active">
+                <input type="radio" name="fulfillment" value="pickup" checked>
+                <span>Olib ketish</span>
+              </label>
+              <label class="fulfillment-opt" id="coDeliveryOpt">
+                <input type="radio" name="fulfillment" value="delivery">
+                <span>Yetkazib berish</span>
+              </label>
             </div>
-          </div>
+          </fieldset>
+
+          <!-- L-29: yetkazib berish shartlari (settings'dan) — script.js to'ldiradi. -->
+          <div class="delivery-info hidden" id="coDeliveryInfo"></div>
 
           <div class="book-field hidden" id="coAddressField">
             <label for="coAddress">Yetkazish manzili</label>
-            <input type="text" id="coAddress" name="address" placeholder="Ko&rsquo;cha, uy, mo&rsquo;ljal">
-            <button type="button" class="location-btn" id="coLocationBtn">&#128205; Joylashuvni yuborish</button>
-            <div class="location-status" id="coLocationStatus"></div>
+            <input type="text" id="coAddress" name="address" maxlength="500" autocomplete="street-address" placeholder="Ko&rsquo;cha, uy, mo&rsquo;ljal">
+            <button type="button" class="location-btn" id="coLocationBtn"><span aria-hidden="true">&#128205;</span> <span id="coLocationBtnText">Joylashuvni yuborish</span></button>
+            <div class="location-status" id="coLocationStatus" aria-live="polite"></div>
           </div>
 
           <div class="book-field">
             <label for="coNote">Qo&rsquo;shimcha izoh (ixtiyoriy)</label>
-            <textarea id="coNote" name="note" rows="2" placeholder="Masalan: achchiq bo&rsquo;lmasin"></textarea>
+            <textarea id="coNote" name="note" rows="2" maxlength="1000" placeholder="Masalan: achchiq bo&rsquo;lmasin"></textarea>
           </div>
 
-          <div class="book-error" id="coError"></div>
-          <button type="submit" class="btn-solid block" id="coSubmit">Buyurtma berish</button>
+          <div class="co-min-warning" id="coMinWarning" aria-live="polite"></div>
+          <div class="book-error" id="coError" role="alert"></div>
+          <button type="submit" class="btn-solid block" id="coSubmit" aria-describedby="coMinWarning">Buyurtma berish</button>
         </form>
       </div>
 
-      <div class="book-success hidden" id="checkoutSuccess">
-        <div class="book-success-icon">&#10003;</div>
+      <div class="book-success hidden" id="checkoutSuccess" tabindex="-1">
+        <div class="book-success-icon" aria-hidden="true">&#10003;</div>
         <h3>Rahmat!</h3>
         <p id="checkoutSuccessText">Buyurtmangiz qabul qilindi. Tez orada siz bilan bog&rsquo;lanamiz.</p>
-        <button class="btn-ghost dark" id="checkoutSuccessClose">Yopish</button>
+        <button type="button" class="btn-ghost dark" id="checkoutSuccessClose">Yopish</button>
       </div>
     </div>
   </div>

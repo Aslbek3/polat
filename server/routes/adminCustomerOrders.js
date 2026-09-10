@@ -8,40 +8,23 @@
 // izohga qarang). Endi bu route faqat HTTP qatlami: kirishni oladi va
 // servisni chaqiradi.
 const express = require('express');
-const { db } = require('../db');
 const { asyncRoute } = require('../routeUtils');
 const customerOrders = require('../services/customerOrders');
 
 const router = express.Router();
 
-// ⚠️ 2026-09-10: ilgari bu yerda CHEKLOV YO'Q edi va ustiga N+1 so'rov
-// bor edi (har bir buyurtma uchun alohida items so'rovi). Sahifa har 15
-// soniyada poll qiladi: kuniga 30 ta buyurtma -> 1 yildan keyin ~11 000
-// buyurtma -> HAR 15 SONIYADA 11 001 ta sinxron SQLite so'rovi.
-// better-sqlite3 sinxron bo'lgani uchun bu vaqtda butun server (oshxona
-// ekrani, chek chop etish — hammasi) bloklanadi.
-// Endi: LIMIT + items uchun BITTA `IN (...)` so'rov (aynan
-// courierOrders.js da qilingan tuzatish, bu yerga qo'llanmagan edi).
-const ORDERS_PAGE_SIZE = 200;
-
+// 2026-09-10 (A-07): `?status=new|active|all` filtri (standart `all` —
+// mavjud frontend buzilmasin). SQL, LIMIT va items'ni bitta so'rovda
+// biriktirish (N+1 tuzatishi) servisga ko'chirildi — route'da `db.prepare`
+// bo'lmasligi kerak (services/customerOrders.js listOrders() izohiga qarang).
 router.get('/', asyncRoute((req, res) => {
-  const orders = db
-    .prepare('SELECT * FROM customer_orders ORDER BY id DESC LIMIT ?')
-    .all(ORDERS_PAGE_SIZE);
-  if (orders.length === 0) return res.json([]);
+  res.json(customerOrders.listOrders({ status: req.query.status }));
+}));
 
-  const ids = orders.map((o) => o.id);
-  const placeholders = ids.map(() => '?').join(',');
-  const allItems = db
-    .prepare(`SELECT * FROM customer_order_items WHERE customer_order_id IN (${placeholders})`)
-    .all(...ids);
-
-  const itemsByOrder = new Map();
-  for (const it of allItems) {
-    if (!itemsByOrder.has(it.customer_order_id)) itemsByOrder.set(it.customer_order_id, []);
-    itemsByOrder.get(it.customer_order_id).push(it);
-  }
-  res.json(orders.map((o) => ({ ...o, items: itemsByOrder.get(o.id) || [] })));
+// Bitta buyurtma items bilan (2026-09-10, A-02) — hisobot ro'yxatidagi
+// kind='online' qatorining chekini ochish uchun.
+router.get('/:id', asyncRoute((req, res) => {
+  res.json(customerOrders.getOrderWithItems(req.params.id));
 }));
 
 router.put('/:id', asyncRoute((req, res) => {

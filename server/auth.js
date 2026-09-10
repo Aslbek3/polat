@@ -196,7 +196,37 @@ function createAuth({ sessionSecret }) {
     if (typeof username !== 'string' || typeof password !== 'string') {
       return res.status(400).json({ error: "Login va parol kiritilishi shart" });
     }
-    const user = db.prepare('SELECT * FROM users WHERE username = ? AND is_active = 1').get(username.trim());
+    // X-10 (2026-09-10): qidiruv katta-kichik harfga BEFARQ (`COLLATE NOCASE`).
+    // NEGA: ilgari `WHERE username = ?` harfga SEZGIR edi, index.js'dagi
+    // rate-limiter kaliti esa `toLowerCase()` qilinadi. Telefon klaviaturasi
+    // birinchi harfni avtomatik kattalashtiradi -> "Afitsiant" -> 401 -> ...
+    // 10-urinishda to'g'ri yozilgan "afitsiant" ham 15 daqiqaga qulflanardi
+    // (ikkalasi limiterda BIR kalit). Endi qidiruv va limiter bir xil
+    // qoidada ishlaydi. Parol esa, albatta, harfga sezgirligicha qoladi.
+    //
+    // TO'QNASHUV (bazada faqat harf registri bilan farqli ikki login bo'lsa,
+    // masalan "Ali" va "ali" — yangi yaratishda services/users.js buni endi
+    // rad etadi, lekin eski bazada qolgan bo'lishi mumkin): natija
+    // deterministik —
+    //   1) AYNAN mos (harfi ham bir xil) login birinchi olinadi — shu tufayli
+    //      bu tuzatishdan OLDIN ishlayotgan hisob kirishdan mahrum bo'lmaydi;
+    //   2) aniq mos yo'q bo'lsa — eng kichik id'li (eng birinchi yaratilgan)
+    //      faol hisob olinadi.
+    // Ikkinchi hisob parolini tekshirishga urinilmaydi — "qaysi biriga
+    // kirdim" noaniq bo'lib qolmasin. Bunday juftlikni admin qo'lda
+    // (birining loginini o'zgartirib/bloklab) hal qilishi kerak.
+    //
+    // ESLATMA: SQLite NOCASE faqat ASCII harflarni tenglashtiradi (A-Z).
+    // Kirill harfli login'lar uchun registr hamon farq qiladi — lekin
+    // loyihadagi login'lar lotin/ASCII.
+    const user = db
+      .prepare(
+        `SELECT * FROM users
+         WHERE username = ? COLLATE NOCASE AND is_active = 1
+         ORDER BY (username = ?) DESC, id ASC
+         LIMIT 1`
+      )
+      .get(username.trim(), username.trim());
     if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
       return res.status(401).json({ error: "Login yoki parol noto'g'ri" });
     }

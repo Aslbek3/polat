@@ -24,6 +24,18 @@ function dateRange(query = {}) {
   return { from, to };
 }
 
+// Server LOKAL vaqti bo'yicha YYYY-MM-DD (2026-09-10, A-03).
+// NEGA SHU YERDA: admin bosh sahifasi "bugun"ni brauzerda `todayStr()`
+// (public/app.js — lokal sana) bilan hisoblab `from=to=bugun` qilib
+// yuborardi. Dashboard endi shu hisobni serverda qiladi — natija AYNAN
+// o'sha bo'lishi uchun xuddi shunday lokal sana olinadi (toISOString() —
+// UTC — EMAS). Bronlar ro'yxati ham "bugundan boshlab" tartibi uchun shu
+// funksiyani ishlatadi: "bugun" loyihada bitta ma'noga ega bo'lsin.
+function localDateStr(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function getSummary(query) {
   const { from, to } = dateRange(query);
 
@@ -114,33 +126,106 @@ function getSummary(query) {
   };
 }
 
-// Hisobot ekranidagi buyurtmalar ro'yxati. Sana bo'yicha saralash
-// `COALESCE(closed_at, opened_at)` bilan — hali yopilmagan buyurtma
-// ochilgan kuniga tegishli hisoblanadi.
+// Bitta manba uchun sana filtri: `date(<ustun>) >= date(?)` ... — getSummary()
+// bilan AYNAN bir xil shaklda, ro'yxat va jami bitta qoida bo'yicha kesilsin.
+function appendDateFilter(sql, params, column, { from, to }) {
+  let out = sql;
+  if (from) { out += ` AND date(${column}) >= date(?)`; params.push(from); }
+  if (to) { out += ` AND date(${column}) <= date(?)`; params.push(to); }
+  return out;
+}
+
+// Hisobot ekranidagi buyurtmalar ro'yxati.
+//
+// ⚠️ 2026-09-10 (A-02, A-22): ilgari bu ro'yxat FAQAT stol (`orders`)
+// jadvalidan o'qirdi, `getSummary()` esa daromadni UCH manbadan (stol +
+// landing `completed` + kassir `manual_bills`) yig'ardi. Natijada ekranda
+// "2 ta buyurtma, 75 000" yozilib, pastda bitta karta turardi — ega raqamni
+// ro'yxat bilan solishtira olmasdi (kassir `stats.html`da buni qila olardi,
+// ega esa yo'q). Endi `kassirBilling.js` `/bills` naqshi qo'llanadi: manbalar
+// bitta UNION ALL so'roviga birlashtiriladi va shu so'rov ikki marta
+// ishlatiladi — ko'rsatiladigan ro'yxat (LIMIT) va CHEKLOVSIZ jami son
+// (`total_count`, route uni `X-Total-Count` sarlavhasiga qo'yadi).
+//
+// Qaysi manba qachon kiradi:
+//   - `status` berilmagan (yoki noma'lum qiymat) — stolning BARCHA holatlari
+//     (avvalgidek) + summary hisoblaydigan landing/qo'lda cheklar;
+//   - `status=closed` — summary'ning daromadiga kiradigan AYNAN o'sha 3 manba
+//     (yopilgan stol + bajarilgan landing + qo'lda chek);
+//   - `status=open|cancelled` — faqat stol buyurtmalari (landing/qo'lda chekda
+//     bunday holat yo'q), xulq avvalgidek.
+//
+// Sana: stol — `COALESCE(closed_at, opened_at)` (yopilmagan buyurtma ochilgan
+// kuniga tegishli); landing va qo'lda chek — `created_at` (summary bilan bir
+// xil: landing jadvalida alohida "bajarilgan vaqt" ustuni yo'q). Shu sabab
+// landing/qo'lda chek uchun `opened_at = closed_at = created_at`.
+//
+// `id` faqat O'Z `kind`i ichida noyob (stol #5 va qo'lda chek #5 bo'lishi
+// mumkin) — frontend chekni `kind` bo'yicha ochishi SHART.
+// `table_name` — ESKI frontend uchun moslik maydoni (`label` bilan bir xil);
+// yangi kod `label`ni ishlatsin.
 function listOrders(query) {
-  const { from, to } = dateRange(query);
+  const range = dateRange(query);
   const rawStatus = query && query.status;
   const status = rawStatus && ORDER_STATUSES.includes(rawStatus) ? rawStatus : null;
-  let sql = `
-    SELECT o.id, o.status, o.total_amount, o.opened_at, o.closed_at, t.name AS table_name,
+  const includeOtherSources = status === null || status === 'closed';
+
+  const params = [];
+  let tableSql = `
+    SELECT o.id AS id, 'table' AS kind, t.name AS label, o.status AS status,
+           o.total_amount AS total_amount, o.opened_at AS opened_at, o.closed_at AS closed_at,
            COALESCE(ou.full_name, ou.username) AS opened_by_name,
-           COALESCE(cu.full_name, cu.username) AS closed_by_name
+           COALESCE(cu.full_name, cu.username) AS closed_by_name,
+           COALESCE(o.closed_at, o.opened_at) AS sort_at
     FROM orders o
     JOIN tables t ON t.id = o.table_id
-    JOIN users ou ON ou.id = o.opened_by
+    LEFT JOIN users ou ON ou.id = o.opened_by
     LEFT JOIN users cu ON cu.id = o.closed_by
     WHERE 1=1
   `;
-  const params = [];
-  if (status) { sql += ' AND o.status = ?'; params.push(status); }
-  if (from) { sql += ' AND date(COALESCE(o.closed_at, o.opened_at)) >= date(?)'; params.push(from); }
-  if (to) { sql += ' AND date(COALESCE(o.closed_at, o.opened_at)) <= date(?)'; params.push(to); }
-  sql += ` ORDER BY o.id DESC LIMIT ${ORDERS_LIMIT}`;
-  return db.prepare(sql).all(...params);
+  if (status) { tableSql += ' AND o.status = ?'; params.push(status); }
+  tableSql = appendDateFilter(tableSql, params, 'COALESCE(o.closed_at, o.opened_at)', range);
+
+  let unionSql = tableSql;
+  if (includeOtherSources) {
+    const onlineSql = appendDateFilter(`
+      SELECT co.id AS id, 'online' AS kind, 'Onlayn: ' || co.full_name AS label, co.status AS status,
+             co.total_amount AS total_amount, co.created_at AS opened_at, co.created_at AS closed_at,
+             NULL AS opened_by_name, NULL AS closed_by_name,
+             co.created_at AS sort_at
+      FROM customer_orders co
+      WHERE co.status = 'completed'
+    `, params, 'co.created_at', range);
+
+    // Qo'lda chekda holat yo'q — uning yaratilishining o'zi to'lov (summary
+    // izohiga qarang), shuning uchun ro'yxatda 'closed' sifatida ko'rinadi.
+    const manualSql = appendDateFilter(`
+      SELECT mb.id AS id, 'manual' AS kind, 'Qo''lda chek' AS label, 'closed' AS status,
+             mb.total_amount AS total_amount, mb.created_at AS opened_at, mb.created_at AS closed_at,
+             COALESCE(u.full_name, u.username) AS opened_by_name,
+             COALESCE(u.full_name, u.username) AS closed_by_name,
+             mb.created_at AS sort_at
+      FROM manual_bills mb
+      LEFT JOIN users u ON u.id = mb.created_by
+      WHERE 1=1
+    `, params, 'mb.created_at', range);
+
+    unionSql = `${tableSql} UNION ALL ${onlineSql} UNION ALL ${manualSql}`;
+  }
+
+  const rows = db
+    .prepare(`SELECT * FROM (${unionSql}) r ORDER BY r.sort_at DESC, r.id DESC LIMIT ${ORDERS_LIMIT}`)
+    .all(...params);
+  const { cnt } = db.prepare(`SELECT COUNT(*) AS cnt FROM (${unionSql}) r`).get(...params);
+
+  const orders = rows.map(({ sort_at: _sortAt, ...row }) => ({ ...row, table_name: row.label }));
+  return { orders, total_count: cnt };
 }
 
 module.exports = {
   ORDER_STATUSES,
+  ORDERS_LIMIT,
+  localDateStr,
   getSummary,
   listOrders,
 };

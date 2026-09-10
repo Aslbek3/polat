@@ -2,7 +2,9 @@
 // Bitta stolda bir vaqtning o'zida faqat bitta 'open' buyurtma bo'ladi (schema.sql'dagi
 // qisman unikal indeks bilan DB darajasida ham kafolatlangan) — mehmon ovqat davomida
 // qo'shimcha buyursa (hatto boshqa afitsiant xizmat qilsa ham) xuddi shu ochiq
-// buyurtmaga yangi qator qo'shiladi. Har bir amal (qo'shish/yopish) bitta atomik
+// buyurtmaga yangi qator qo'shiladi (2026-09-10, X-06: hali oshxonaga yuborilmagan
+// bir xil taom bo'lsa — yangi qator emas, o'sha qatorning miqdori oshadi;
+// addItemToTable() izohiga qarang). Har bir amal (qo'shish/yopish) bitta atomik
 // tranzaksiyada bajariladi.
 const { db, nowIso } = require('../db');
 const inventory = require('./inventory');
@@ -92,21 +94,67 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
       order = { id: info.lastInsertRowid };
     }
 
-    const subtotal = item.price * qty;
-    // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10). Sotuv
-    // narxi (unit_price) allaqachon shu yerda "muzlatilar" edi, tan narx esa
-    // hisobotda menu_items'dan JONLI o'qilardi — natijada narx keyin
-    // o'zgartirilsa o'tgan oylarning foydasi ham o'zgarib ketardi.
-    const info = db.prepare(
-      `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
-    ).run(order.id, item.id, item.name, item.price, item.cost_price, qty, subtotal, waiterId, ts);
+    // X-06 (2026-09-10): BIR XIL YUBORILMAGAN TAOM BIRLASHTIRILADI.
+    // ⚠️ Bu xulq ATAYLAB o'zgartirildi — ilgari (va CLAUDE.md'dagi "Asosiy
+    // oqimlar"da hamon) "har bosilgan '+' alohida order_items qatori" edi.
+    // NEGA: afitsiant "Osh"ni 3 marta bossa "Osh ×1", "Osh ×1", "Osh ×1"
+    // chiqardi — u "Osh ×3" kutadi; oshpaz ekranida uchta qator va uchta
+    // "Tayyor" tugmasi, chekda ham uchta qator bo'lardi.
+    //
+    // FAQAT hali oshxonaga YUBORILMAGAN (`sent_at IS NULL`) faol qatorga
+    // qo'shiladi. Yuborilgan qatorni oshpaz allaqachon ko'rgan va uni
+    // "tayyor" deb belgilagan bo'lishi mumkin — unga miqdor qo'shilsa
+    // "3 ta tayyor" belgisi aslida tayyorlanmagan 4-taomni ham qamrab olardi.
+    // Yuborilgandan keyin qo'shilgan taom — YANGI qator (oshxonaga alohida
+    // boradi). Yuborilmagan qatorda `ready_at` bo'lishi mumkin emas
+    // (kitchen.setItemReady sent_at'ni talab qiladi), shu sabab oshxonadagi
+    // "tayyor" mantig'i buzilmaydi.
+    //
+    // Narx nusxalari (`unit_price`, `cost_price_snapshot`) ham mos bo'lishi
+    // shart: ikki bosish orasida admin narxni o'zgartirgan bo'lsa, eski
+    // qatorga yangi narxdagi taom "eski narxda" qo'shilib ketmasin — bunday
+    // holatda yangi qator ochiladi. `added_by` solishtirilmaydi (ikki
+    // afitsiant bitta stolga bir xil taom qo'shsa ham bitta qator bo'ladi;
+    // qator birinchi qo'shgan afitsiant nomida qoladi).
+    const mergeTarget = db
+      .prepare(
+        `SELECT * FROM order_items
+         WHERE order_id = ? AND menu_item_id = ? AND status = 'active' AND sent_at IS NULL
+           AND unit_price = ? AND cost_price_snapshot IS ?
+         ORDER BY id ASC LIMIT 1`
+      )
+      .get(order.id, item.id, item.price, item.cost_price);
+
+    let orderItemId;
+    if (mergeTarget) {
+      // Birlashgan miqdor ham yuqori chegaradan oshmasligi kerak (aks holda
+      // 1000 tadan bosib-bosib chegarani aylanib o'tish mumkin bo'lardi).
+      const newQty = parseQuantity(mergeTarget.quantity + qty);
+      db.prepare('UPDATE order_items SET quantity = ?, subtotal = ? WHERE id = ?')
+        .run(newQty, mergeTarget.unit_price * newQty, mergeTarget.id);
+      orderItemId = mergeTarget.id;
+    } else {
+      const subtotal = item.price * qty;
+      // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10). Sotuv
+      // narxi (unit_price) allaqachon shu yerda "muzlatilar" edi, tan narx esa
+      // hisobotda menu_items'dan JONLI o'qilardi — natijada narx keyin
+      // o'zgartirilsa o'tgan oylarning foydasi ham o'zgarib ketardi.
+      const info = db.prepare(
+        `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+      ).run(order.id, item.id, item.name, item.price, item.cost_price, qty, subtotal, waiterId, ts);
+      orderItemId = info.lastInsertRowid;
+    }
 
     // Taom omborga (masalan suv/salfetka) bog'langan bo'lsa — shu miqdorni
     // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato otadi,
     // shu tranzaksiya (order_item qo'shilishi bilan birga) butunlay bekor bo'ladi.
+    // Birlashtirishda ham FAQAT hozir qo'shilgan `qty` sarflanadi (qatorning
+    // umumiy miqdori emas) — oldingi miqdor avvalgi bosishda sarflangan.
+    // Harakat shu (birlashgan) qatorga bog'lanadi, shuning uchun qator bekor
+    // qilinsa cancelOrderItem() umumiy miqdorni to'g'ri qaytaradi.
     if (item.inventory_item_id) {
-      inventory.consume(item.inventory_item_id, qty, { orderItemId: info.lastInsertRowid, userId: waiterId, productName: item.name });
+      inventory.consume(item.inventory_item_id, qty, { orderItemId, userId: waiterId, productName: item.name });
     }
 
     return order.id;
@@ -210,6 +258,19 @@ function cancelOrderItem(orderItemId, userId) {
       }
     }
     db.prepare("UPDATE order_items SET status = 'cancelled' WHERE id = ?").run(orderItemId);
+
+    // X-12 (2026-09-10): shu taomning hali TASDIQLANMAGAN "tayyor"
+    // bildirishnomasi ham o'chiriladi. NEGA: oshpaz taomni "tayyor" deb
+    // belgilagach afitsiant uni bekor qilsa (yoki "−" bilan miqdorni 0 ga
+    // tushirsa — frontend bu holda aynan shu funksiyani chaqiradi), xabar
+    // afitsiant ekranida abadiy osilib qolardi: taom endi yo'q, "Qabul
+    // qildim" esa bekor qilingan qatorga picked_up_at yozardi. Naqsh
+    // services/kitchen.js setItemReady()'dagi "tayyor emas"ga qaytarish
+    // bilan bir xil. Tasdiqlangan (acknowledged_at to'ldirilgan) xabarlar
+    // tarix sifatida qoladi. Tranzaksiya ichida — bekor qilish muvaffaqiyatsiz
+    // bo'lsa xabar ham joyida qoladi.
+    db.prepare('DELETE FROM notifications WHERE order_item_id = ? AND acknowledged_at IS NULL')
+      .run(orderItemId);
     return order.id;
   });
 
@@ -293,6 +354,20 @@ function getReceipt(orderId) {
   return buildOrderView(orderId, { includeCancelled: true });
 }
 
+// Stolning eng oxirgi (bekor qilinmagan) buyurtmasi cheki — afitsiant va
+// kassir "/tables/:id/receipt/latest" uchun.
+// 2026-09-10: bu SQL ilgari routes/waiterOrders.js va routes/kassirTables.js
+// da IKKI NUSXADA `db.prepare` bilan yozilgan edi — loyiha qoidasini
+// (route'larda db.prepare yo'q) buzardi. Endi bitta joyda.
+// Bekor qilingan ('cancelled') buyurtma chiqarilmaydi — u chek EMAS.
+function getLatestReceiptForTable(tableId) {
+  const order = db
+    .prepare("SELECT id FROM orders WHERE table_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1")
+    .get(tableId);
+  if (!order) throw new OrderError("Bu stol uchun hali buyurtma bo'lmagan", 404);
+  return getReceipt(order.id);
+}
+
 // Afitsiant "stollar" ekrani uchun: har bir faol stol + band/bo'sh holati + joriy summa.
 function listTablesOverview() {
   const tables = db.prepare('SELECT * FROM tables WHERE is_active = 1 ORDER BY sort_order, id').all();
@@ -330,6 +405,7 @@ module.exports = {
   closeTable,
   cancelEmptyOrder,
   getReceipt,
+  getLatestReceiptForTable,
   listTablesOverview,
   buildOrderView,
 };

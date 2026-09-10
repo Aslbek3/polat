@@ -144,7 +144,15 @@ test("bitta stolda bir vaqtda faqat bitta ochiq buyurtma bo'ladi", () => {
   const second = orders.addItemToTable(table.id, item.id, 1, waiter.id);
 
   assert.strictEqual(first.order.id, second.order.id);
-  assert.strictEqual(second.items.length, 2);
+  // 2026-09-10 (X-06) — ATAYLAB o'zgartirildi: ilgari `items.length === 2`
+  // kutilardi (har "+" alohida qator). Endi hali oshxonaga yuborilmagan bir
+  // xil taom BIRLASHTIRILADI ("Osh ×2", ikki qator emas) — shu sabab bitta
+  // qator, miqdori 2. Bu testning asl maqsadi (ikkinchi qo'shish YANGI
+  // buyurtma ochmaydi) o'zgarmagan; birlashtirishning to'liq qamrovi
+  // test/ux-orders.test.js'da.
+  assert.strictEqual(second.items.length, 1);
+  assert.strictEqual(second.items[0].quantity, 2);
+  assert.strictEqual(second.total, item.price * 2);
 });
 
 test("mavjud bo'lmagan taomni qo'shib bo'lmaydi", () => {

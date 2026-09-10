@@ -10,8 +10,15 @@ const expenses = require('../services/expenses');
 
 const router = express.Router();
 
+// 2026-09-10 (A-12): javob hamon MASSIV (frontend buzilmasin), lekin eng
+// yangi 500 tasi bilan cheklangan. Cheklovsiz son va summa sarlavhalarda —
+// frontend "Jami"ni ro'yxatdan emas, `X-Total-Amount`dan olishi kerak
+// (services/expenses.js listExpenses() izohiga qarang).
 router.get('/', asyncRoute((req, res) => {
-  res.json(expenses.listExpenses(req.query));
+  const { expenses: rows, total_count: totalCount, total_amount: totalAmount } = expenses.listExpenses(req.query);
+  res.setHeader('X-Total-Count', String(totalCount));
+  res.setHeader('X-Total-Amount', String(totalAmount));
+  res.json(rows);
 }));
 
 router.post('/', asyncRoute((req, res) => {

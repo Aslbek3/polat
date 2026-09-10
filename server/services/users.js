@@ -97,7 +97,15 @@ function createUser(body) {
   assertPassword(password);
   assertRole(role);
   const uname = String(username).trim();
-  const dup = db.prepare('SELECT id FROM users WHERE username = ?').get(uname);
+  // X-10 (2026-09-10): bandlik tekshiruvi katta-kichik harfga BEFARQ.
+  // NEGA: login endi `COLLATE NOCASE` bilan qidiriladi (server/auth.js
+  // loginRoute). "Ali" bor bo'lsa-yu "ali" ham yaratilsa, ikkalasi bitta
+  // kirish so'roviga mos kelib qolardi va ikkinchisi amalda kira olmasdi.
+  // Shu sabab bunday juftlik umuman yaratilmaydi. (`schema.sql` dagi
+  // `UNIQUE` cheklovi harfga sezgir — asosiy himoya shu yerda.)
+  // Bloklangan (is_active = 0) hisob ham loginni band qiladi — u qayta
+  // faollashtirilishi mumkin.
+  const dup = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(uname);
   if (dup) throw new UserError('Bu login band');
   const { salt, hash } = hashPassword(password);
   const info = db

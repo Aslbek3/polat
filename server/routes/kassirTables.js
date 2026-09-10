@@ -7,13 +7,13 @@
 // server/services/orders.js xizmat qatlamidan foydalanadi — afitsiant bilan
 // bir xil ma'lumot/mantiq, faqat "taom qo'shish" yo'q.
 const express = require('express');
-const { db } = require('../db');
 const {
   listTablesOverview,
   getOpenOrderForTable,
   closeTable,
   cancelEmptyOrder,
   getReceipt,
+  getLatestReceiptForTable,
 } = require('../services/orders');
 const { asyncRoute } = require('../routeUtils');
 
@@ -43,13 +43,11 @@ router.post('/tables/:id/cancel-order', asyncRoute((req, res) => {
   res.json(view);
 }));
 
+// 2026-09-10: SQL services/orders.js getLatestReceiptForTable()ga ko'chirildi
+// (route'da db.prepare bo'lmasin; waiterOrders.js bilan umumiy). Bekor
+// qilingan buyurtma chiqarilmaydi, topilmasa 404 — avvalgidek.
 router.get('/tables/:id/receipt/latest', asyncRoute((req, res) => {
-  const order = db
-    // 2026-09-10: bekor qilingan buyurtma chiqarilmaydi — u chek EMAS
-    .prepare("SELECT id FROM orders WHERE table_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1")
-    .get(req.params.id);
-  if (!order) return res.status(404).json({ error: "Bu stol uchun hali buyurtma bo'lmagan" });
-  res.json(getReceipt(order.id));
+  res.json(getLatestReceiptForTable(req.params.id));
 }));
 
 router.get('/orders/:id/receipt', asyncRoute((req, res) => {

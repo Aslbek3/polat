@@ -32,11 +32,43 @@ const CHEF_ORDER_FIELDS = 'id, full_name, fulfillment, status, note, total_amoun
 // Faqat afitsiant "yuborgan" (sent_at to'ldirilgan) VA afitsiant hali
 // "Qabul qildim" bosmagan (picked_up_at bo'sh) qatorlar ko'rinadi —
 // afitsiant tasdiqlashi bilan taom ro'yxatdan yo'qoladi.
+//
+// X-01 (2026-09-10): FIFO TARTIB. Ilgari stollar `sort_order, id` bo'yicha
+// (listTablesOverview) qaytardi — "Stol 4" 25 daqiqa kutayotgan bo'lsa ham
+// raqami katta bo'lgani uchun ro'yxat pastida qolardi va oshpaz buni
+// bilmasdi. Endi tartib:
+//   1) band + oshpazga ko'rinadigan taomi bor stollar — eng eski ko'rinadigan
+//      taomining `sent_at` qiymati bo'yicha O'SIB boruvchi (eng uzoq
+//      kutayotgani birinchi);
+//   2) band, lekin hali hech narsa yuborilmagan (yoki hammasi olib ketilgan)
+//      stollar;
+//   3) bo'sh stollar — eng oxirida. Ular ATAYLAB chiqarib tashlanmadi:
+//      public/chef/kitchen.js o'zi `.filter((t) => t.occupied)` qiladi,
+//      javob shaklini torroq qilish boshqa iste'molchini buzishi mumkin edi.
+// 2- va 3-guruh ichida (va teng `oldest_sent_at`da) avvalgi `sort_order, id`
+// tartibi saqlanadi (Array#sort barqaror — stable).
+//
+// Har bir stolga `oldest_sent_at` (ISO satr yoki null) qo'shildi — frontend
+// undan kutish vaqtini ("⏱ 12 daq") hisoblaydi. `sent_at` ISO-8601 (nowIso)
+// bo'lgani uchun satr sifatida solishtirish xronologik tartibga teng.
 function listKitchenTables() {
-  return listTablesOverview().map((t) => {
-    if (!t.occupied) return t;
+  const rows = listTablesOverview().map((t) => {
+    if (!t.occupied) return { ...t, oldest_sent_at: null };
     const view = buildOrderView(t.order_id);
-    return { ...t, items: view.items.filter((it) => it.sent_at && !it.picked_up_at) };
+    const items = view.items.filter((it) => it.sent_at && !it.picked_up_at);
+    const oldestSentAt = items.reduce(
+      (min, it) => (min === null || it.sent_at < min ? it.sent_at : min),
+      null
+    );
+    return { ...t, items, oldest_sent_at: oldestSentAt };
+  });
+
+  const group = (t) => (!t.occupied ? 2 : t.oldest_sent_at ? 0 : 1);
+  return rows.sort((a, b) => {
+    const g = group(a) - group(b);
+    if (g !== 0) return g;
+    if (group(a) !== 0 || a.oldest_sent_at === b.oldest_sent_at) return 0;
+    return a.oldest_sent_at < b.oldest_sent_at ? -1 : 1;
   });
 }
 
@@ -98,8 +130,15 @@ function setItemReady(orderItemId, ready) {
         .prepare('SELECT t.name AS name FROM orders o JOIN tables t ON t.id = o.table_id WHERE o.id = ?')
         .get(item.order_id);
       if (table) {
+        // X-31 (2026-09-10): miqdor 1 dan katta bo'lsa xabarga " ×N" qo'shiladi.
+        // NEGA: "Stol 3 taomi tayyor: Osh" — 3 ta osh bo'lsa ham afitsiant
+        // bittasini olib ketib, qolganini "hali tayyor emas" deb o'ylardi.
+        // X-06 (bir xil yuborilmagan taom birlashtirilishi) bilan bu yanada
+        // muhim: endi bitta qator ko'pincha bir nechta porsiya.
+        // 1 ta bo'lsa avvalgidek — ortiqcha "×1" shovqin qilmaydi.
+        const qtyLabel = item.quantity > 1 ? ` ×${item.quantity}` : '';
         db.prepare('INSERT INTO notifications (message, is_read, order_item_id, created_at) VALUES (?, 0, ?, ?)')
-          .run(`${table.name} taomi tayyor: ${item.name_snapshot}`, item.id, nowIso());
+          .run(`${table.name} taomi tayyor: ${item.name_snapshot}${qtyLabel}`, item.id, nowIso());
       }
     } else {
       // "Tayyor emas"ga qaytarilsa, tasdiqlanmagan bildirishnomani ham

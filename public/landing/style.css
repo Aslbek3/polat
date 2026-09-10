@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Poppins:wght@300;400;500;600;700&display=swap');
+/* NEGA (2026-09-10): shriftlar endi index.html <head>'dagi preconnect + <link>
+   orqali yuklanadi. `@import` bu yerda render'ni bloklardi (style.css to'liq
+   kelmaguncha shrift so'rovi boshlanmasdi). */
 
 :root {
   --black: #121212;
@@ -14,6 +16,15 @@
   --text-dim: #6d6357;
   --text-light: #f8f2e7;
   --text-light-dim: #cabfaf;
+  /* NEGA (L-41, 2026-09-10): matn sifatidagi terracotta (kicker, narx) uchun
+     alohida to'qroq token. #c1502e krem fonda 4.23:1, cream-2'da 3.80:1 edi
+     (AA 4.5 dan past). #a3421f: krem 5.61, cream-2 5.04, oq 6.26. Tugma
+     fonlaridagi --terracotta o'zgarmadi (oq matn unda 4.71:1 — o'tadi). */
+  --accent-text: #a3421f;
+  /* NEGA (L-40, 2026-09-10): fokus halqasi rangi — yorug' fonda to'q
+     terracotta (oq/krem ustida 6.7–7.5:1), to'q bo'limlarda pastda
+     oltinga almashtiriladi (#121212 ustida 11:1). */
+  --focus-ring: #8f3a1f;
   --serif: 'Playfair Display', Georgia, serif;
   --sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -34,13 +45,32 @@ body {
 img { max-width: 100%; display: block; }
 a { text-decoration: none; color: inherit; }
 ul { list-style: none; margin: 0; padding: 0; }
+button { font-family: inherit; }
 .hidden { display: none !important; }
+
+/* Faqat ekran o'qiruvchi uchun (vizual yashirin, lekin a11y daraxtida). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* NEGA (L-40, 2026-09-10): tugma va havolalarda fokus ko'rsatkichi yo'q edi
+   (faqat inputlarda bor edi). Klaviatura bilan yuruvchi qayerda turganini
+   ko'rmasdi. :focus-visible — sichqoncha bilan bosilganda halqa chiqmaydi. */
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.site-header, .hero, .gallery-section, .contact-section, .site-footer, .site-toast {
+  --focus-ring: var(--gold-light);
+}
+.cart-bar { --focus-ring: var(--black); }
+/* Dastur tomonidan fokus beriladigan sarlavha/konteynerlar (tabindex=-1) —
+   ular bosiladigan element emas, halqa chalg'itadi. */
+[tabindex="-1"]:focus { outline: none; }
 
 .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
 
 .kicker {
   font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase;
-  color: var(--terracotta); font-weight: 600; margin: 0 0 10px;
+  color: var(--accent-text); font-weight: 600; margin: 0 0 10px;
 }
 .kicker.light { color: var(--gold-light); }
 .kicker.center { text-align: center; }
@@ -53,6 +83,10 @@ ul { list-style: none; margin: 0; padding: 0; }
 .section-title.light { color: var(--text-light); }
 
 .section { padding: clamp(60px, 9vw, 110px) 0; }
+/* NEGA (L-03, 2026-09-10): endi mobil header'da doimiy "Menyu" havolasi bor —
+   #menu'ga sakraganda fixed header (~72px) bo'lim kicker'ini yopib
+   qo'ymasin (mobilda bo'lim padding'i 60px, header'dan kichik). */
+.section[id] { scroll-margin-top: 24px; }
 
 /* ================= HEADER ================= */
 
@@ -74,27 +108,31 @@ ul { list-style: none; margin: 0; padding: 0; }
   font-family: var(--serif); font-weight: 700; font-size: 24px; color: #fff; letter-spacing: 0.02em;
   white-space: nowrap; flex-shrink: 0;
 }
-.nav-links { display: flex; gap: 30px; }
+.nav-links { display: flex; align-items: center; gap: 26px; }
+/* NEGA (L-17, 2026-09-10): desktop havolalar ~24px balandlikda edi —
+   bosish maydoni endi 44px (vizual chiziq pastda qoladi). */
 .nav-links a {
+  display: inline-flex; align-items: center; min-height: 44px;
   color: rgba(255,255,255,0.85); font-size: 14px; font-weight: 500; letter-spacing: 0.02em;
-  position: relative; padding-bottom: 4px; transition: color .2s var(--ease);
+  position: relative; transition: color .2s var(--ease);
 }
 .nav-links a::after {
-  content: ''; position: absolute; left: 0; bottom: 0; width: 0; height: 1px; background: var(--gold-light);
+  content: ''; position: absolute; left: 0; bottom: 9px; width: 0; height: 1px; background: var(--gold-light);
   transition: width .25s var(--ease);
 }
 .nav-links a:hover { color: #fff; }
 .nav-links a:hover::after { width: 100%; }
 
 .nav-links a.nav-login {
-  border: 1px solid rgba(255,255,255,0.3); border-radius: 999px; padding: 6px 16px;
+  border: 1px solid rgba(255,255,255,0.3); border-radius: 999px; padding: 0 16px;
   color: rgba(255,255,255,0.65); font-size: 12px;
 }
 .nav-links a.nav-login::after { content: none; }
 .nav-links a.nav-login:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
 
 .btn-pill {
-  display: inline-flex; align-items: center; padding: 11px 22px; border-radius: 999px;
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 22px; border-radius: 999px;
+  border: none; cursor: pointer; font-family: var(--sans);
   background: linear-gradient(155deg, var(--gold-light), var(--gold)); color: var(--black);
   font-weight: 600; font-size: 13px; letter-spacing: 0.02em;
   transition: transform .2s var(--ease), box-shadow .2s var(--ease);
@@ -103,21 +141,31 @@ ul { list-style: none; margin: 0; padding: 0; }
 .btn-pill:hover { transform: translateY(-2px); }
 .header-cta { white-space: nowrap; }
 
+/* L-03: mobil "Menyu" havolasi — desktopda ko'rinmaydi (u yerda nav bor). */
+.header-quick { display: none; }
+
 .nav-toggle {
   display: none; flex-direction: column; justify-content: center; gap: 5px;
-  width: 40px; height: 40px; border: none; background: none; cursor: pointer; padding: 0;
+  width: 44px; height: 44px; border: none; background: none; cursor: pointer; padding: 0;
+  flex: 0 0 auto;
 }
+.nav-toggle span { display: block; width: 24px; height: 2px; background: #fff; margin: 0 auto; }
 
 .nav-close { display: none; }
-.nav-toggle span { display: block; width: 24px; height: 2px; background: #fff; margin: 0 auto; transition: transform .25s var(--ease), opacity .25s var(--ease); }
-.nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-.nav-toggle.open span:nth-child(2) { opacity: 0; }
-.nav-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
 /* ================= HERO ================= */
 
+/* NEGA (L-01 + L-20, 2026-09-10): `height: 100vh` edi — telefonda birinchi
+   taom ~1.3 ekran pastda qolardi, iOS Safari'da esa 100vh URL paneli
+   ostiga kirib, pastga ishora ko'rinmasdi. Endi `min-height: 70svh`
+   (svh = brauzer paneli ko'ringan holatdagi kichik viewport), svh'ni
+   bilmaydigan brauzerlar uchun oldingi qatordagi 70vh qoladi. Balandlik
+   `height` emas `min-height` — kontent ko'p bo'lsa (yotiq telefon) bo'lim o'sadi. */
 .hero {
-  position: relative; height: 100vh; min-height: 560px;
+  position: relative;
+  min-height: 70vh;
+  min-height: 70svh;
+  padding: 110px 0 96px;
   background-size: cover; background-position: center;
   display: flex; align-items: center; justify-content: center;
 }
@@ -142,29 +190,43 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .btn-solid {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 15px 32px; border-radius: 999px;
+  min-height: 44px; padding: 15px 32px; border-radius: 999px;
+  border: none; cursor: pointer; font-family: var(--sans);
   background: linear-gradient(155deg, var(--gold-light), var(--gold)); color: var(--black);
   font-weight: 600; font-size: 14px; letter-spacing: 0.03em;
   box-shadow: 0 14px 30px -10px rgba(201, 162, 39, 0.55);
   transition: transform .2s var(--ease), box-shadow .2s var(--ease);
 }
 .btn-solid:hover { transform: translateY(-2px); }
+/* Bloklangan tugma (masalan yetkazishda minimal summa yetmasa — L-29). */
+.btn-solid:disabled {
+  background: var(--cream-2); color: var(--text-dim); box-shadow: none;
+  cursor: not-allowed; transform: none;
+}
 
 .btn-ghost {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 15px 32px; border-radius: 999px;
+  min-height: 44px; padding: 15px 32px; border-radius: 999px;
+  background: transparent; cursor: pointer; font-family: var(--sans);
   border: 1px solid rgba(255,255,255,0.5); color: #fff;
   font-weight: 500; font-size: 14px; letter-spacing: 0.02em;
   transition: border-color .2s var(--ease), background .2s var(--ease);
 }
 .btn-ghost:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
 
+/* NEGA (L-17, 2026-09-10): pastga ishora 26×42 edi — bosish maydoni endi
+   44×56 (havolaning o'zi), "sichqoncha" chizmasi ::before bilan o'sha
+   o'lchamda qoldi. */
 .scroll-cue {
-  position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 2;
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 2;
+  display: block; width: 44px; height: 56px;
+}
+.scroll-cue::before {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 26px; height: 42px; border: 2px solid rgba(255,255,255,0.6); border-radius: 20px;
 }
 .scroll-cue span {
-  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 17px; left: 50%; transform: translateX(-50%);
   width: 4px; height: 8px; border-radius: 3px; background: #fff;
   animation: scrollcue 1.6s infinite var(--ease);
 }
@@ -209,64 +271,131 @@ ul { list-style: none; margin: 0; padding: 0; }
 .menu-row-image {
   width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius); flex: 0 0 auto;
 }
+/* NEGA (L-21, 2026-09-10): hozir 11 ta taomning birortasida rasm yo'q —
+   qatorlar "yalang'och" ko'rinardi. Rasm bo'lmasa (yoki yuklanmasa) taom
+   nomining birinchi harfi brend rangidagi kvadratda. Dekorativ
+   (aria-hidden) — nom baribir yonida yozilgan. */
+.menu-row-thumb {
+  width: 56px; height: 56px; border-radius: var(--radius); flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  background: #f6e6e2; color: var(--terracotta-dark);
+  font-family: var(--serif); font-weight: 700; font-size: 24px; line-height: 1;
+  user-select: none;
+}
 .menu-row-main { flex: 1; min-width: 0; }
 .menu-row-main h4 { font-family: var(--serif); font-size: 16px; margin: 0 0 4px; font-weight: 700; }
 .menu-row-volume { font-weight: 400; color: var(--text-dim); font-size: 0.85em; }
 .menu-row-desc { color: var(--text-dim); font-size: 13px; margin: 0 0 6px; }
-.menu-row-price { color: var(--terracotta); font-weight: 600; font-size: 14px; }
-.menu-row-unavailable { opacity: 0.55; }
+/* Narx rangi --accent-text: variant qatorlari krem fonda — #c1502e u yerda 4.23:1 edi. */
+.menu-row-price { color: var(--accent-text); font-weight: 600; font-size: 14px; }
+
+/* NEGA (L-22, 2026-09-10): ilgari butun qatorga `opacity: 0.55` berilardi —
+   "Tugadi" nishoni 2.29:1, narx 2.23:1, tavsif 2.33:1 bo'lib qolardi, ya'ni
+   eng muhim signal eng o'qib bo'lmaydigan elementga aylangan edi. Endi
+   shaffoflik yo'q, aniq ranglar:
+     nom/tavsif/narx  #6d6357 / #faf7f2 fonda  = 5.50:1
+     (variant qatori, krem fonda)               = 5.28:1
+     "Tugadi" nishoni #9b2c25 / #fbe1de         = 6.09:1 (to'liq quyuqlikda) */
+.menu-row-unavailable { background: #faf7f2; }
+.menu-row-unavailable h4,
+.menu-row-unavailable .menu-row-desc,
+.menu-row-unavailable .menu-row-price { color: var(--text-dim); }
+.menu-row-unavailable .menu-row-thumb { background: #ece7df; color: var(--text-dim); }
+.menu-row-unavailable .menu-row-image { filter: grayscale(1); }
 .menu-row-badge {
   display: inline-block; font-family: var(--sans, inherit); font-weight: 700; font-size: 11px;
-  letter-spacing: 0.03em; color: #b3352e; background: #fbe1de; border-radius: 999px;
+  letter-spacing: 0.03em; color: #9b2c25; background: #fbe1de; border-radius: 999px;
   padding: 2px 8px; vertical-align: middle; margin-left: 4px;
 }
 
+/* NEGA (L-17 + L-25, 2026-09-10): miqdor tugmalari 44×44 (ilgari desktop 40,
+   mobil 36 — mobilda teskari kichraytirilgan edi). Miqdor 0 bo'lsa faqat
+   "+ Qo'shish" tugmasi, 1+ bo'lsa "− N +" stepper (script.js qtyControlHtml). */
 .menu-qty {
-  display: flex; align-items: center; gap: 14px; flex: 0 0 auto;
-  align-self: flex-end; margin-top: 8px;
+  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  align-self: flex-end;
 }
 .menu-qty button {
-  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--cream-2);
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--cream-2);
   background: #fff; color: var(--text-dark); font-size: 21px; font-weight: 700; line-height: 1;
   cursor: pointer; transition: border-color .15s var(--ease), color .15s var(--ease), background .15s var(--ease);
 }
-.menu-qty button:hover { border-color: var(--terracotta); color: var(--terracotta); }
-.menu-qty button.qty-inc { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
-.menu-qty button.qty-inc:hover { background: var(--terracotta-dark); }
+.menu-qty button.qty-inc,
+.menu-qty button.qty-add { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+.menu-qty button.qty-add {
+  width: auto; border-radius: 999px; padding: 0 18px 0 14px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+}
+.menu-qty button.qty-add span { font-size: 19px; font-weight: 700; }
+.menu-qty button:disabled { background: var(--cream-2); border-color: var(--cream-2); color: var(--text-dim); cursor: not-allowed; }
+@media (hover: hover) {
+  .menu-qty button:hover { border-color: var(--terracotta); color: var(--terracotta); }
+  .menu-qty button.qty-inc:hover,
+  .menu-qty button.qty-add:hover { background: var(--terracotta-dark); border-color: var(--terracotta-dark); color: #fff; }
+  .menu-qty button:disabled:hover { background: var(--cream-2); border-color: var(--cream-2); color: var(--text-dim); }
+}
 .menu-qty .qty-val { min-width: 22px; text-align: center; font-weight: 700; font-size: 17px; }
 
 @media (max-width: 640px) {
   .menu-row { padding: 14px 16px; gap: 10px; }
   .menu-row-main h4 { font-size: 15px; }
-  .menu-qty { gap: 10px; }
-  .menu-qty button { width: 36px; height: 36px; font-size: 19px; }
+  .menu-row-image, .menu-row-thumb { width: 48px; height: 48px; }
+  .menu-row-thumb { font-size: 21px; }
+  .menu-qty { gap: 8px; }
+  .menu-qty button { font-size: 19px; }
+}
+/* Juda tor ekran (≤380px) — tugmalar nomni siqib qo'ymasin, pastki qatorga tushadi. */
+@media (max-width: 380px) {
+  .menu-row { flex-wrap: wrap; }
+  .menu-row-main { flex-basis: calc(100% - 58px); }
+  .menu-qty { width: 100%; justify-content: flex-end; }
 }
 
-/* Taom "turi" (variant, 2026-09-09) — asosiy taom pastida "Turlari (N)"
-   tugmasi chiqadi, bosilganda o'sha turlar (o'z narxi/rasmi bilan, alohida
-   savatga qo'shiladigan to'liq taom sifatida) shu tugma ostida ochiladi. */
+/* Taom "turi" (variant, 2026-09-09) — asosiy taom qatorida "Turlari (N)"
+   tugmasi, bosilganda o'sha turlar (o'z narxi/rasmi bilan, alohida savatga
+   qo'shiladigan to'liq taom sifatida) shu qator ostida ochiladi.
+   NEGA (L-24, 2026-09-10): tugma ilgari qalin chegarali 15px/700 "pill"
+   bo'lib, taom nomidan ham og'irroq ko'rinardi va qatordan ajralib turardi.
+   Endi qator ichida (narx ostida) yengil matn-havola ko'rinishida; bosish
+   maydoni baribir 44px (manfiy margin bilan vizual oraliq kichik qoladi). */
 .menu-variants-toggle {
-  display: block; margin: 4px 22px 14px; padding: 10px 20px;
-  border: 1.5px solid var(--terracotta); border-radius: 999px; background: #fff; cursor: pointer;
-  color: var(--terracotta); font-family: var(--sans); font-weight: 700; font-size: 15px;
-  transition: background .2s var(--ease), color .2s var(--ease);
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+  margin: -6px 0 -12px; padding: 0; border: none; background: transparent; cursor: pointer;
+  color: var(--terracotta-dark); font-family: var(--sans); font-weight: 600; font-size: 13px;
+  text-decoration: underline; text-decoration-color: rgba(143, 58, 31, 0.35); text-underline-offset: 3px;
 }
-.menu-variants-toggle:hover { background: var(--terracotta); color: #fff; }
+.menu-variants-toggle::after {
+  content: ''; width: 6px; height: 6px; margin-top: -3px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+.menu-variants-toggle[aria-expanded="true"]::after { transform: rotate(-135deg); margin-top: 3px; }
+@media (hover: hover) {
+  .menu-variants-toggle:hover { text-decoration-color: currentColor; }
+}
 .menu-row-variant { background: var(--cream); padding-left: 38px; }
 @media (max-width: 640px) {
-  .menu-variants-toggle { margin-left: 16px; margin-right: 16px; }
-  .menu-row-variant { padding-left: 16px; }
+  .menu-row-variant { padding-left: 24px; }
 }
 
 /* ---- Savat paneli (pastda suzuvchi) ---- */
 
+/* NEGA (D-H7, 2026-09-10): yopiq holatda faqat `transform`/`pointer-events`
+   bilan yashirilardi — ichidagi tugma Tab tartibida qolib, ko'rinmas joyga
+   fokus tushardi. `visibility: hidden` uni a11y daraxti va Tab'dan chiqaradi;
+   yopilishda visibility transform animatsiyasi tugagach (.35s) o'zgaradi. */
 .cart-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 150;
   display: flex; justify-content: center; padding: 0 20px calc(20px + env(safe-area-inset-bottom));
-  transform: translateY(140%); transition: transform .35s var(--ease);
+  transform: translateY(140%); visibility: hidden;
+  transition: transform .35s var(--ease), visibility 0s linear .35s;
   pointer-events: none;
 }
-.cart-bar.show { transform: translateY(0); pointer-events: auto; }
+.cart-bar.show {
+  transform: translateY(0); visibility: visible; pointer-events: auto;
+  transition: transform .35s var(--ease);
+}
 .cart-bar-inner {
   width: 100%; max-width: 480px;
   background: linear-gradient(155deg, var(--gold-light), var(--gold)); color: var(--black);
@@ -278,21 +407,101 @@ ul { list-style: none; margin: 0; padding: 0; }
 .cart-info .cart-total { font-size: 16px; font-weight: 700; }
 .cart-bar .btn-solid { background: var(--black); color: #fff; box-shadow: none; padding: 12px 22px; }
 
+/* NEGA (L-26, 2026-09-10): savatga qo'shilganda hech qanday tasdiq yo'q edi.
+   Panel qisqa "sakraydi"; prefers-reduced-motion'da harakat o'rniga
+   qisqa muddatli qora halqa (harakatsiz urg'u). */
+.cart-bar-inner.bump { animation: cartbump .45s var(--ease); }
+@keyframes cartbump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.045); }
+  100% { transform: scale(1); }
+}
+
+/* NEGA (L-09, 2026-09-10): panel (~88px) sahifa oxiridagi taomning "+"
+   tugmasi va footer matnini to'sardi. Panel ko'ringanda sahifa oxiriga
+   shuncha bo'shliq qo'shiladi — footer'ning o'z (qora) foni bilan, pastda
+   krem chiziq qolmasligi uchun padding footer'ga beriladi. */
+body.has-cart .site-footer { padding-bottom: calc(34px + 96px + env(safe-area-inset-bottom)); }
+
+/* ---- Qisqa xabar (toast) ---- */
+
+.site-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 260;
+  width: min(480px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 6px 10px 16px; border-radius: 14px;
+  background: var(--black); color: #fff;
+  box-shadow: 0 20px 44px -14px rgba(0, 0, 0, 0.6);
+  opacity: 0; visibility: hidden; transform: translate(-50%, 16px);
+  transition: opacity .25s var(--ease), transform .25s var(--ease), visibility 0s linear .25s;
+}
+body.has-cart .site-toast { bottom: calc(100px + env(safe-area-inset-bottom)); }
+.site-toast.show {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0);
+  transition: opacity .25s var(--ease), transform .25s var(--ease);
+}
+.site-toast p { margin: 0; flex: 1; font-size: 14px; line-height: 1.45; }
+.site-toast-close {
+  flex: 0 0 auto; width: 44px; height: 44px; border: none; border-radius: 50%;
+  background: transparent; color: #fff; font-size: 22px; line-height: 1; cursor: pointer;
+}
+
 /* ---- Buyurtma (checkout) oynasidagi savat xulosasi ---- */
 
+/* NEGA (L-10, 2026-09-10): `max-height: 160px; overflow-y: auto` olib
+   tashlandi — 5+ taomda modal ichida ikkinchi scroll maydoni paydo bo'lardi
+   (mobilda barmoq qaysi biri aylanishini bilmaydi). Endi faqat modalning
+   o'zi aylanadi. */
 .checkout-summary {
-  background: var(--cream); border-radius: 12px; padding: 14px 16px; margin-bottom: 18px;
-  max-height: 160px; overflow-y: auto;
+  background: var(--cream); border-radius: 12px; padding: 4px 16px 14px; margin-bottom: 18px;
 }
-.checkout-summary-row {
-  display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; color: var(--text-dim);
+/* NEGA (L-06, 2026-09-10): har qatorda − / + / × — ilgari "Osh ×3"ni ×2
+   qilish uchun oynani yopib, menyuda topib, qayta ochish kerak edi. */
+.co-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  padding: 10px 0; border-bottom: 1px solid rgba(34, 29, 23, 0.08);
 }
-.checkout-summary-row strong { color: var(--text-dark); font-weight: 600; }
+.co-row-info { flex: 1 1 120px; min-width: 0; }
+.co-row-name { display: block; font-size: 14px; font-weight: 600; color: var(--text-dark); overflow-wrap: anywhere; }
+.co-row-sum { display: block; font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+.co-row-ctrl { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.co-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--cream-2);
+  background: #fff; color: var(--text-dark); font-size: 20px; font-weight: 700; line-height: 1;
+  cursor: pointer; transition: border-color .15s var(--ease), color .15s var(--ease);
+}
+.co-btn:disabled { background: var(--cream-2); color: var(--text-dim); cursor: not-allowed; }
+.co-btn.co-remove { border-color: transparent; background: transparent; color: var(--text-dim); font-size: 24px; font-weight: 400; }
+@media (hover: hover) {
+  .co-btn:hover:not(:disabled) { border-color: var(--terracotta); color: var(--terracotta-dark); }
+  .co-btn.co-remove:hover { color: #b91c1c; border-color: transparent; }
+}
+.co-qty { min-width: 26px; text-align: center; font-weight: 700; font-size: 15px; }
+.co-empty { margin: 10px 0 0; color: var(--text-dim); font-size: 14px; }
 .checkout-summary-total {
   display: flex; justify-content: space-between; font-weight: 700; font-size: 15px;
-  border-top: 1px dashed rgba(0,0,0,0.15); margin-top: 8px; padding-top: 8px; color: var(--text-dark);
+  margin-top: 4px; padding-top: 10px; color: var(--text-dark);
 }
-.checkout-summary-total .amount { color: var(--terracotta); }
+.checkout-summary-total .amount { color: var(--accent-text); }
+.co-fee-note { margin: 4px 0 0; text-align: right; font-size: 13px; color: var(--text-dim); }
+
+/* ---- Yetkazib berish shartlari (L-29) ---- */
+
+.delivery-info {
+  border: 1px solid var(--cream-2); background: #fff; border-radius: 12px;
+  padding: 12px 14px; font-size: 13px;
+}
+.delivery-info-title { margin: 0 0 8px; font-weight: 600; font-size: 13px; color: var(--text-dark); }
+.delivery-info dl { margin: 0; display: grid; gap: 6px; }
+.delivery-info dl div { display: flex; justify-content: space-between; gap: 12px; }
+.delivery-info dt { color: var(--text-dim); }
+.delivery-info dd { margin: 0; font-weight: 600; color: var(--text-dark); text-align: right; }
+
+/* Live region — bo'sh bo'lsa ham DOM/a11y daraxtida qoladi (display:none
+   emas), aks holda ekran o'qiruvchi paydo bo'lgan matnni e'lon qilmaydi.
+   #7a4a00 / #fdf0d5 = 6.63:1 */
+.co-min-warning { font-size: 13px; line-height: 1.5; color: #7a4a00; border-radius: 10px; }
+.co-min-warning:not(:empty) { background: #fdf0d5; padding: 10px 12px; }
 
 /* ================= GALEREYA ================= */
 
@@ -303,11 +512,12 @@ ul { list-style: none; margin: 0; padding: 0; }
   display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 180px; gap: 10px;
   max-width: 1180px; margin: 0 auto; padding: 0 24px;
 }
+/* NEGA (L-05, 2026-09-10): `cursor: pointer` va hover'da kattalashish
+   olib tashlandi — rasmlarga hech qanday handler yo'q, bosiladigandek
+   ko'rinib aldardi. */
 .g-item {
   background-size: cover; background-position: center; border-radius: 8px;
-  transition: transform .4s var(--ease); cursor: pointer;
 }
-.g-item:hover { transform: scale(1.02); }
 .g-tall { grid-row: span 2; }
 
 @media (max-width: 860px) {
@@ -383,16 +593,28 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 /* ================= STOL BRON QILISH OYNASI (modal) ================= */
 
+/* NEGA (D-H7, 2026-09-10): yopiq modal ilgari faqat `opacity:0;
+   pointer-events:none` bilan yashirilardi — ~12 ta maydon Tab tartibida
+   qolib, klaviatura foydalanuvchisi ko'rinmas formaga tushib qolardi.
+   `visibility: hidden` ularni Tab va ekran o'qiruvchidan chiqaradi;
+   yopilishda fade (.3s) tugagach o'zgaradi. */
 .book-backdrop {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(18, 15, 12, 0.72); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center; padding: 20px;
-  opacity: 0; pointer-events: none; transition: opacity .3s var(--ease);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .3s var(--ease), visibility 0s linear .3s;
 }
-.book-backdrop.open { opacity: 1; pointer-events: auto; }
+.book-backdrop.open {
+  opacity: 1; visibility: visible; pointer-events: auto;
+  transition: opacity .3s var(--ease);
+}
 
+/* L-20: 90vh -> 90dvh (fallback bilan) — mobil brauzer paneli ko'ringanda
+   modalning pastki qismi (yuborish tugmasi) ekrandan chiqib ketmasin. */
 .book-modal {
-  position: relative; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto;
+  position: relative; width: 100%; max-width: 440px;
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain;
   background: linear-gradient(165deg, #ffffff 0%, var(--cream) 100%);
   border-radius: var(--radius-lg); padding: 38px 32px 32px;
   box-shadow: 0 50px 90px -24px rgba(0, 0, 0, 0.55);
@@ -400,9 +622,10 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 .book-backdrop.open .book-modal { transform: translateY(0) scale(1); }
 
+/* L-17: 34×34 -> 44×44 */
 .book-modal-close {
-  position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%;
-  border: none; background: var(--cream-2); color: var(--text-dim); font-size: 20px; line-height: 1;
+  position: absolute; top: 10px; right: 10px; width: 44px; height: 44px; border-radius: 50%;
+  border: none; background: var(--cream-2); color: var(--text-dim); font-size: 24px; line-height: 1;
   cursor: pointer; transition: background .2s var(--ease), color .2s var(--ease);
 }
 .book-modal-close:hover { background: var(--terracotta); color: #fff; }
@@ -414,9 +637,10 @@ ul { list-style: none; margin: 0; padding: 0; }
 .book-row { display: flex; gap: 12px; }
 .book-row .book-field { flex: 1; min-width: 0; }
 
-.book-field label {
+.book-field > label,
+.fulfillment-field legend {
   display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--text-dim); margin-bottom: 6px;
+  color: var(--text-dim); margin-bottom: 6px; padding: 0;
 }
 .book-field input, .book-field textarea {
   width: 100%; padding: 12px 14px; border: 1px solid var(--cream-2); border-radius: 10px;
@@ -428,22 +652,41 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 .book-field textarea { resize: vertical; font-family: var(--sans); }
 
+/* NEGA (L-14, 2026-09-10): xato ilgari faqat formaning pastida bitta matn
+   bo'lib chiqardi — aybdor maydon belgilanmas, fokus olmasdi. Endi maydon
+   qizil ramka + aria-invalid, xato matni o'sha maydon ostida
+   (aria-describedby orqali ekran o'qiruvchi ham o'qiydi).
+   #b91c1c: oq fonda 6.47:1, krem fonda 5.81:1. */
+.book-field input[aria-invalid="true"],
+.book-field textarea[aria-invalid="true"] {
+  border-color: #b91c1c; box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
+}
+.field-error { margin: 6px 0 0; font-size: 13px; line-height: 1.4; color: #b91c1c; }
+
 .book-error { color: #b91c1c; font-size: 13px; min-height: 16px; }
 
+/* L-36: haqiqiy radio guruh. Tanlangan variant faqat rang bilan emas —
+   radio nuqtasi ham ko'rinadi. L-17: min-height 44px. */
+.fulfillment-field { border: 0; margin: 0; padding: 0; min-width: 0; }
 .fulfillment-toggle { display: flex; gap: 10px; }
 .fulfillment-opt {
-  flex: 1; border: 1px solid var(--cream-2); background: #fff; color: var(--text-dim);
-  font-family: var(--sans); font-weight: 500; font-size: 13px;
-  padding: 10px 14px; border-radius: 10px; cursor: pointer;
-  transition: background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease);
+  flex: 1; display: flex; align-items: center; gap: 8px; min-height: 44px;
+  border: 1px solid var(--cream-2); background: #fff; color: var(--text-dark);
+  font-family: var(--sans); font-weight: 500; font-size: 14px;
+  padding: 8px 12px; border-radius: 10px; cursor: pointer;
+  transition: background .2s var(--ease), border-color .2s var(--ease);
 }
-.fulfillment-opt.active { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
+.fulfillment-opt input { margin: 0; width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--terracotta-dark); }
+.fulfillment-opt input:focus { outline: none; }
+.fulfillment-opt:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.fulfillment-opt.active { border-color: var(--terracotta); background: #f6e6e2; font-weight: 600; }
 
+/* L-17: ~35px -> 44px */
 .location-btn {
-  margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
   border: 1px dashed var(--terracotta); background: var(--terracotta-light); color: var(--terracotta-dark);
   font-family: var(--sans); font-weight: 600; font-size: 13px;
-  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  padding: 0 16px; border-radius: 999px; cursor: pointer;
   transition: background .2s var(--ease), border-color .2s var(--ease);
 }
 .location-btn:hover { background: var(--terracotta); border-color: var(--terracotta); color: #fff; }
@@ -467,37 +710,102 @@ ul { list-style: none; margin: 0; padding: 0; }
 .book-success p { color: var(--text-dim); font-size: 14px; line-height: 1.6; margin: 0 0 22px; }
 
 @media (max-width: 480px) {
-  .book-modal { padding: 32px 22px 26px; }
+  .book-backdrop { padding: 12px; }
+  .book-modal { padding: 32px 20px 24px; }
+  .checkout-summary { padding-left: 12px; padding-right: 12px; }
   .book-row { flex-direction: column; gap: 14px; }
 }
 
 /* ================= MOBILE NAV ================= */
 
 @media (max-width: 1040px) {
+  .header-inner { gap: 12px; }
+  /* NEGA (L-18, 2026-09-10): `backdrop-filter` fixed-pozitsiyali avlodlar
+     uchun "containing block" yaratadi — scroll qilingan header'da
+     `.nav-links { position: fixed; inset: 0 }` butun ekranni emas, faqat
+     header qutisini egallardi. Mobilda header fonini shunchaki to'q qilamiz. */
+  .site-header.scrolled { backdrop-filter: none; background: rgba(18, 18, 18, 0.97); }
+  /* Menyu ochiq: header savat paneli (150) ustiga chiqadi — overlay ustida
+     suzuvchi panel qolmasin. Modallar (200) baribir yuqorida. */
+  .site-header.nav-open { z-index: 160; }
+
   .nav-links {
-    position: fixed; inset: 0; top: 0; z-index: 99;
+    position: fixed; inset: 0; z-index: 2;
     background: rgba(18, 18, 18, 0.98); backdrop-filter: blur(10px);
-    flex-direction: column; align-items: center; justify-content: center; gap: 28px;
-    opacity: 0; pointer-events: none; transform: translateY(-12px);
+    flex-direction: column; align-items: center; gap: 22px;
+    padding: 80px 24px calc(32px + env(safe-area-inset-bottom));
+    overflow-y: auto; overscroll-behavior: contain;
+    opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(-12px);
+    transition: opacity .3s var(--ease), transform .3s var(--ease), visibility 0s linear .3s;
+  }
+  /* `transform: none` (translateY(0) emas) — aks holda .nav-links ichidagi
+     fixed .nav-close uchun yana containing block bo'lib qolardi. */
+  .nav-links.open {
+    opacity: 1; visibility: visible; pointer-events: auto; transform: none;
     transition: opacity .3s var(--ease), transform .3s var(--ease);
   }
-  .nav-links.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  /* Kontent sig'masa (yotiq telefon) yuqoridan kesilmasin: `justify-content:
+     center` o'rniga auto marginlar — joy bo'lsa markazda, bo'lmasa aylanadi. */
+  .nav-links > a:first-of-type { margin-top: auto; }
+  .nav-links > a:last-child { margin-bottom: auto; }
   .nav-links a {
-    font-size: 20px; padding: 10px 30px;
+    font-size: 20px; padding: 0 30px;
     border: 1px solid rgba(255,255,255,0.3); border-radius: 999px;
     transition: border-color .2s var(--ease), background .2s var(--ease);
   }
+  .nav-links a::after { content: none; }
   .nav-links a:hover { border-color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.06); }
-  .nav-links a.nav-login { border-color: rgba(255,255,255,0.3); font-size: 20px; padding: 10px 30px; }
+  /* NEGA (L-04, 2026-09-10): "Xodim kirishi" boshqa bandlar bilan teng
+     vaznda edi — tasodifan bosilsa sahifa almashib, mijoz savatini
+     yo'qotardi. Endi pastda, kichik, ramkasiz, xiraroq havola.
+     rgba(255,255,255,.72) ~ #bdbdbd / #121212 = 9.97:1 */
+  .nav-links a.nav-login {
+    border: none; border-radius: 0; background: none;
+    font-size: 14px; padding: 0 12px; margin-top: 18px;
+    color: rgba(255,255,255,0.72); text-decoration: underline; text-underline-offset: 4px;
+  }
+  .nav-links a.nav-login:hover { background: none; color: #fff; }
   .header-cta { display: none; }
+  .header-quick {
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; margin-left: auto;
+    border-radius: 999px; background: linear-gradient(155deg, var(--gold-light), var(--gold));
+    color: var(--black); font-weight: 600; font-size: 14px; white-space: nowrap;
+  }
   .nav-toggle { display: flex; }
   .nav-close {
     display: flex; align-items: center; justify-content: center;
-    position: fixed; top: 18px; right: 20px; z-index: 101;
+    position: fixed; top: 14px; right: 18px; z-index: 3;
     width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.06);
     color: #fff; font-size: 26px; line-height: 1; cursor: pointer;
-    transition: background .2s var(--ease), border-color .2s var(--ease), transform .2s var(--ease);
+    transition: background .2s var(--ease), border-color .2s var(--ease);
   }
   .nav-close:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.6); }
+}
+
+@media (max-width: 400px) {
+  .header-inner { padding: 0 16px; gap: 10px; }
+  .brand { font-size: 20px; }
+  .header-quick { padding: 0 14px; }
+}
+
+/* ================= KAMAYTIRILGAN HARAKAT ================= */
+
+/* NEGA (D-H15, 2026-09-10): vestibulyar buzilishi bor foydalanuvchilar
+   uchun OS sozlamasi hurmat qilinadi — cheksiz "scrollcue" animatsiyasi,
+   silliq scroll, sakrash va slide effektlari o'chadi. transition-delay ham
+   0 — yopiq holatdagi `visibility` darhol qo'llansin. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+  .scroll-cue span { animation: none; }
+  .cart-bar-inner.bump {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--black), 0 20px 44px -14px rgba(0, 0, 0, 0.55);
+  }
 }

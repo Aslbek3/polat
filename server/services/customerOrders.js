@@ -45,6 +45,71 @@ function getOrder(orderId) {
   return order;
 }
 
+// ---------------------------------------------------------------------------
+// Admin ro'yxati (2026-09-10, A-07).
+//
+// NEGA SERVISDA: ilgari bu SQL `routes/adminCustomerOrders.js` ichida edi —
+// loyiha qoidasi (route'da `db.prepare` yo'q) buzilgan edi. Filtr qo'shilishi
+// bilan mantiq kattalashdi, shuning uchun shu yerga ko'chirildi.
+//
+// Filtr: `new` — faqat yangi; `active` — hali bajarilmagan (new + confirmed),
+// ya'ni "hozir kimdir shug'ullanishi kerak"; `all` (standart) — hammasi.
+// Standart `all` ATAYLAB: mavjud frontend parametrsiz so'raydi va hamma
+// buyurtmani kutadi. Noma'lum qiymat ham `all` deb olinadi (reports.js
+// `status` filtri bilan bir xil yondashuv).
+// ---------------------------------------------------------------------------
+const LIST_FILTERS = {
+  new: ['new'],
+  active: ['new', 'confirmed'],
+  all: null,
+};
+
+// ⚠️ LIMIT + items uchun BITTA `IN (...)` so'rov — sahifa har 15 soniyada
+// poll qiladi; cheklovsiz ro'yxat va N+1 so'rov better-sqlite3 sinxron
+// bo'lgani uchun butun serverni bloklardi (2026-09-10, ilgari route'da edi).
+const LIST_LIMIT = 200;
+
+function attachItems(orders) {
+  if (orders.length === 0) return [];
+  const ids = orders.map((o) => o.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const allItems = db
+    .prepare(`SELECT * FROM customer_order_items WHERE customer_order_id IN (${placeholders}) ORDER BY id ASC`)
+    .all(...ids);
+  const itemsByOrder = new Map();
+  for (const it of allItems) {
+    if (!itemsByOrder.has(it.customer_order_id)) itemsByOrder.set(it.customer_order_id, []);
+    itemsByOrder.get(it.customer_order_id).push(it);
+  }
+  return orders.map((o) => ({ ...o, items: itemsByOrder.get(o.id) || [] }));
+}
+
+function listOrders({ status } = {}) {
+  const statuses = Object.prototype.hasOwnProperty.call(LIST_FILTERS, status) ? LIST_FILTERS[status] : null;
+  let sql = 'SELECT * FROM customer_orders';
+  const params = [];
+  if (statuses) {
+    sql += ` WHERE status IN (${statuses.map(() => '?').join(',')})`;
+    params.push(...statuses);
+  }
+  sql += ' ORDER BY id DESC LIMIT ?';
+  params.push(LIST_LIMIT);
+  return attachItems(db.prepare(sql).all(...params));
+}
+
+// Bitta buyurtma items bilan — hisobot ro'yxatidagi kind='online' qatorining
+// chekini ochish uchun (2026-09-10, A-02). Shakl ro'yxat elementi bilan
+// AYNAN bir xil, frontend `openCustomerReceiptModal(order)`ga to'g'ridan
+// to'g'ri uzatadi.
+function getOrderWithItems(orderId) {
+  return attachItems([getOrder(orderId)])[0];
+}
+
+// Holat bo'yicha son — admin bosh sahifasi (dashboard) uchun, A-03/A-07.
+function countByStatus(status) {
+  return db.prepare('SELECT COUNT(*) AS c FROM customer_orders WHERE status = ?').get(status).c;
+}
+
 // Buyurtmaning ombor bilan bog'langan qatorlari. `menu_item_id` NULL bo'lishi
 // mumkin (taom o'chirilgan bo'lsa) — JOIN uni tabiiy ravishda chiqarib
 // tashlaydi, ya'ni bog'lanmagan qatorlar ombor hisobiga ta'sir qilmaydi.
@@ -229,6 +294,40 @@ function getActiveMenuItem(menuItemId) {
     .get(menuItemId);
 }
 
+// ---------------------------------------------------------------------------
+// Mijozga ko'rinadigan ombor/mavjudlik xabarlari — 2026-09-10 (L-13).
+//
+// NEGA: mijoz landing savatida literal "Menyudagi bir band endi mavjud emas"
+// yoki "Yetarli qoldiq yo'q (hozir: 2 dona)" ko'rardi — QAYSI taom ekani
+// aytilmasdi, savatda 5 ta band bo'lsa mijoz qaysi birini olib tashlashni
+// bilmasdi va buyurtma tashlab ketilardi. Endi taom nomi va nima qilish
+// kerakligi aytiladi. Bu FAQAT mijoz yo'li: afitsiant/admin yo'lidagi
+// `inventory.consume()` xabari o'zgarmagan (u yerda xodim ichki tilni tushunadi).
+// ---------------------------------------------------------------------------
+function stockUnitLabel(unit) {
+  return !unit || unit === 'dona' ? 'ta' : unit;
+}
+
+function outOfStockMessage(name, available, unit) {
+  if (Number(available) > 0) {
+    return `«${name}» tugab qoldi (omborda ${available} ${stockUnitLabel(unit)}). ` +
+      "Miqdorini kamaytiring yoki savatdan olib tashlang.";
+  }
+  return `«${name}» tugab qoldi. Uni savatdan olib tashlang.`;
+}
+
+// Savatdagi band menyudan topilmasa — sababini taom nomi bilan aytamiz.
+// "mavjud emas" iborasi ATAYLAB saqlangan (mavjud testlar va frontend shu
+// ma'noga tayanadi).
+function unavailableItemMessage(menuItemId) {
+  const row = db.prepare('SELECT name, is_active FROM menu_items WHERE id = ?').get(menuItemId);
+  if (!row) return 'Menyudagi bir band endi mavjud emas, sahifani yangilang';
+  if (!row.is_active) {
+    return `«${row.name}» endi menyuda mavjud emas. Uni savatdan olib tashlang.`;
+  }
+  return `«${row.name}» hozir mavjud emas (tugab qoldi). Uni savatdan olib tashlang.`;
+}
+
 function createFromPublic(payload) {
   const { full_name, phone, fulfillment, address, note, items, location_lat, location_lng } = payload || {};
 
@@ -248,8 +347,9 @@ function createFromPublic(payload) {
 
   // 2026-09-10: `note`/`address`/`phone` uchun UZUNLIK CHEGARASI qo'shildi.
   // Ilgari faqat `full_name` (120) cheklangan edi. Bu ochiq (login shart
-  // emas) endpoint: bitta IP daqiqasiga 5 ta so'rov yubora oladi
-  // (publicWriteLimiter) va har birida ~1 MB `note` bo'lsa — kuniga ~7 GB
+  // emas) endpoint: bitta IP daqiqasiga 15 ta so'rov yubora oladi
+  // (publicOrderLimiter; 2026-09-10 L-16 gacha umumiy 5 ta edi) va har
+  // birida ~1 MB `note` bo'lsa — kuniga ~20 GB
   // SQLite o'sishi. Admin "Buyurtmalar" sahifasida pagination yo'q, ya'ni
   // u bu yozuvlarni butunlay yuklab brauzerni ham o'ldirardi.
   if (!name) throw new CustomerOrderError('Ismingizni kiriting');
@@ -278,7 +378,7 @@ function createFromPublic(payload) {
       throw new CustomerOrderError("Miqdorni to'g'ri kiriting");
     }
     const item = getActiveMenuItem(menuItemId);
-    if (!item) throw new CustomerOrderError('Menyudagi bir band endi mavjud emas, sahifani yangilang');
+    if (!item) throw new CustomerOrderError(unavailableItemMessage(menuItemId));
     resolved.push({ item, quantity });
   }
 
@@ -327,7 +427,17 @@ function createFromPublic(payload) {
     return info.lastInsertRowid;
   });
 
-  const id = run();
+  let id;
+  try {
+    id = run();
+  } catch (err) {
+    // Tranzaksiya allaqachon to'liq qaytarilgan — faqat xabarni mijoz
+    // tiliga o'giramiz (L-13, yuqoridagi izohga qarang).
+    if (err instanceof inventory.InventoryError && err.code === 'insufficient_stock') {
+      throw new CustomerOrderError(outOfStockMessage(err.productName, err.available, err.unit));
+    }
+    throw err;
+  }
   return { ok: true, id, total_amount: totalAmount };
 }
 
@@ -335,6 +445,9 @@ module.exports = {
   CustomerOrderError,
   STATUSES,
   getOrder,
+  listOrders,
+  getOrderWithItems,
+  countByStatus,
   transition,
   deleteOrder,
   createFromPublic,

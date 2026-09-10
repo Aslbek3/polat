@@ -26,9 +26,31 @@ function getItemRow(id) {
   return item;
 }
 
+// "Tugagan" va "kam qolgan" qoidasi — YAGONA manba (2026-09-10, A-09).
+// Ro'yxat tartibi (listItems) ham, bosh sahifadagi ogohlantirish
+// (listLowStock -> dashboard) ham shu ifodalardan foydalanadi — ikki ekran
+// "kam qoldi"ni ikki xil tushunmasligi uchun.
+//   tugagan    — quantity <= 0
+//   kam qolgan — chegara qo'yilgan (> 0) va quantity <= chegara
+//                (schema.sql: low_stock_threshold = 0 => ogohlantirish o'chiq)
+const STOCK_OUT_SQL = 'i.quantity <= 0';
+const STOCK_LOW_SQL = 'i.low_stock_threshold > 0 AND i.quantity <= i.low_stock_threshold';
+// 0 — tugagan, 1 — kam qolgan, 2 — yetarli, 3 — o'chirilgan (faqat ?all=1 da
+// ko'rinadi; o'chirilgan mahsulotning 0 qoldig'i ogohlantirish emas, shovqin).
+const STOCK_RANK_SQL = `CASE
+  WHEN i.is_active = 0 THEN 3
+  WHEN ${STOCK_OUT_SQL} THEN 0
+  WHEN ${STOCK_LOW_SQL} THEN 1
+  ELSE 2 END`;
+
 // Admin panelida ro'yxat — har bir mahsulotga bog'langan menyu taomlari nomini
 // ham (GROUP_CONCAT bilan) qo'shib qaytaradi, frontend alohida so'rov
 // yubormasin uchun.
+//
+// Tartib (2026-09-10, A-09): ilgari faqat alifbo bo'yicha edi — 50 ta
+// mahsulot orasida tugagani ko'milib ketardi, uni topish uchun butun
+// ro'yxatni ko'zdan kechirish kerak edi. Endi: avval tugaganlar, keyin kam
+// qolganlar, keyin qolganlari; har guruh ichida alifbo bo'yicha.
 function listItems({ includeInactive = false } = {}) {
   const where = includeInactive ? '' : 'WHERE i.is_active = 1';
   return db
@@ -38,7 +60,21 @@ function listItems({ includeInactive = false } = {}) {
               (SELECT COUNT(*) FROM menu_items m WHERE m.inventory_item_id = i.id AND m.is_active = 1) AS linked_menu_count
        FROM inventory_items i
        ${where}
-       ORDER BY i.name COLLATE NOCASE`
+       ORDER BY ${STOCK_RANK_SQL}, i.name COLLATE NOCASE, i.id`
+    )
+    .all();
+}
+
+// Bosh sahifa "ertalabki brifingi" uchun (2026-09-10, A-03/A-09): faqat faol,
+// tugagan yoki kam qolgan mahsulotlar, listItems() bilan bir xil tartibda.
+// Faqat ko'rsatish uchun kerakli maydonlar qaytadi.
+function listLowStock() {
+  return db
+    .prepare(
+      `SELECT i.id, i.name, i.quantity, i.unit, i.low_stock_threshold
+       FROM inventory_items i
+       WHERE i.is_active = 1 AND ((${STOCK_OUT_SQL}) OR (${STOCK_LOW_SQL}))
+       ORDER BY ${STOCK_RANK_SQL}, i.name COLLATE NOCASE, i.id`
     )
     .all();
 }
@@ -310,7 +346,16 @@ function consume(inventoryItemId, qty, { orderItemId, customerOrderItemId, userI
     const item = getItemRow(inventoryItemId);
     if (item.quantity < qtyNum) {
       const label = productName || item.name;
-      throw new InventoryError(`"${label}" omborda faqat ${item.quantity} ${item.unit} qoldi`);
+      // Xabar matni (xodim uchun) O'ZGARMAGAN. 2026-09-10 (L-13): xatoga
+      // tuzilgan maydonlar qo'shildi — landing (mijoz) yo'li
+      // (customerOrders.createFromPublic) shular asosida mijozga tushunarli
+      // xabar yasaydi. Matnni regex bilan "parse" qilish mo'rt bo'lardi.
+      const err = new InventoryError(`"${label}" omborda faqat ${item.quantity} ${item.unit} qoldi`);
+      err.code = 'insufficient_stock';
+      err.productName = label;
+      err.available = item.quantity;
+      err.unit = item.unit;
+      throw err;
     }
     const ts = nowIso();
     db.prepare('UPDATE inventory_items SET quantity = quantity - ?, updated_at = ? WHERE id = ?').run(qtyNum, ts, inventoryItemId);
@@ -371,6 +416,7 @@ module.exports = {
   MENU_PRICE_ERROR,
   hasMenuPrice,
   listItems,
+  listLowStock,
   getItemRow,
   createItem,
   updateItem,

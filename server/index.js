@@ -168,14 +168,34 @@ app.post('/api/logout', auth.logoutRoute);
 // /api/admin, /api/waiter kabi emas). Login shart emasligi sababli, spam/DoS
 // oldini olish uchun yozuvchi (POST) yo'llarga IP-asosli rate-limit qo'yiladi
 // (2026-09-04 tekshiruvda topilgan kamchilik — o'qish uchun /menu limitsiz).
-const publicWriteLimiter = createRateLimiter({
-  windowMs: 60_000,
-  max: 5,
-  message: "Juda ko'p so'rov yuborildi, birozdan so'ng qayta urinib ko'ring",
+//
+// ⚠️ 2026-09-10 (UI/UX tahlili L-16): ilgari bron VA buyurtma BITTA
+// chelakni (`publicWriteLimiter`, 5/daqiqa/IP) bo'lishardi. Restoran Wi-Fi'si
+// yoki mobil operator NAT'i ortidagi mijozlar bitta IP'dan chiqadi — bir
+// stol mehmonlari bir daqiqada 5 ta so'rov yuborsa, oltinchi mijoz
+// buyurtma bera olmasdi; bron qilgan kishi esa kimningdir buyurtmasini
+// "yeb" qo'yardi. Endi ikkalasi ALOHIDA, har biri 15/daqiqa/IP. Bu hamon
+// skript bilan bazani to'ldirishni to'sadi (validation.js dagi uzunlik
+// chegaralari bilan birga), lekin haqiqiy mijozlarga xalaqit bermaydi.
+const PUBLIC_WRITE_WINDOW_MS = 60_000;
+const PUBLIC_WRITE_MAX = 15;
+const PUBLIC_WRITE_MESSAGE = "Juda ko'p so'rov yuborildi, birozdan so'ng qayta urinib ko'ring";
+const publicReservationLimiter = createRateLimiter({
+  windowMs: PUBLIC_WRITE_WINDOW_MS,
+  max: PUBLIC_WRITE_MAX,
+  message: PUBLIC_WRITE_MESSAGE,
 });
-app.use('/api/public/reservations', publicWriteLimiter, require('./routes/publicReservations'));
+const publicOrderLimiter = createRateLimiter({
+  windowMs: PUBLIC_WRITE_WINDOW_MS,
+  max: PUBLIC_WRITE_MAX,
+  message: PUBLIC_WRITE_MESSAGE,
+});
+app.use('/api/public/reservations', publicReservationLimiter, require('./routes/publicReservations'));
 app.use('/api/public/menu', require('./routes/publicMenu'));
-app.use('/api/public/orders', publicWriteLimiter, require('./routes/publicCustomerOrders'));
+app.use('/api/public/orders', publicOrderLimiter, require('./routes/publicCustomerOrders'));
+// Restoran nomi/aloqa/yetkazib berish shartlari (2026-09-10, L-29) — faqat
+// o'qish, faqat mijozga xavfsiz maydonlar (services/settings.js oq ro'yxati).
+app.use('/api/public/settings', require('./routes/publicSettings'));
 
 app.use(auth.requireAuth);
 app.get('/api/me', auth.meRoute);
@@ -202,6 +222,10 @@ app.use('/api/admin/reports', need(cap.ADMIN_MANAGE), require('./routes/adminRep
 app.use('/api/admin/reservations', need(cap.ADMIN_MANAGE), require('./routes/adminReservations'));
 app.use('/api/admin/customer-orders', need(cap.ADMIN_MANAGE), require('./routes/adminCustomerOrders'));
 app.use('/api/admin/print-requests', need(cap.ADMIN_MANAGE), require('./routes/adminPrintRequests'));
+// 2026-09-10 (UI/UX tahlili L-29, A-03/A-04/A-05/A-09): restoran sozlamalari
+// va bosh sahifa "ertalabki brifingi".
+app.use('/api/admin/settings', need(cap.ADMIN_MANAGE), require('./routes/adminSettings'));
+app.use('/api/admin/dashboard', need(cap.ADMIN_MANAGE), require('./routes/adminDashboard'));
 // '/api/admin/qz' EMAS, '/api/qz' — 2026-09-09'da topilgan bug: kassir
 // sahifasi (public/kassir/*) chek chop etishda public/app.js'dagi UMUMIY
 // printReceiptView()/setupQzSecurity() orqali shu yerga murojaat qiladi, lekin

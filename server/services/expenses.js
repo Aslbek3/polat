@@ -37,16 +37,40 @@ function findExpense(id) {
   return row;
 }
 
+// Ro'yxatning yuqori chegarasi (2026-09-10, A-12). NEGA: ilgari LIMIT yo'q
+// edi — sahifa butun tarixni (yiliga ~1100 yozuv, bir necha yilda o'n
+// minglab) har ochilganda yuklardi; better-sqlite3 sinxron bo'lgani uchun
+// bu vaqtda butun server kutib turadi. 500 — bir oylik xarajatdan ancha
+// ko'p, ya'ni oylik davr bilan ishlaganda hech narsa kesilmaydi.
+const EXPENSES_LIMIT = 500;
+
 // Xarajatlar ro'yxati, ixtiyoriy sana oralig'i bilan. Kim kiritgani
 // (`created_by_name`) ham qo'shiladi — xodim o'chirilgan bo'lsa LEFT JOIN
-// tufayli qator baribir qaytadi.
+// tufayli qator baribir qaytadi. `from`/`to` berilmasa — hammasi (eng
+// yangi 500 tasi); standart davrni (joriy oy) frontend o'zi yuboradi.
+//
+// Qaytaradi: `{ expenses, total_count, total_amount }`. Oxirgi ikkitasi
+// CHEKLOVSIZ (oraliqdagi BARCHA xarajatlar bo'yicha) — route ularni
+// `X-Total-Count` / `X-Total-Amount` sarlavhalariga qo'yadi. NEGA jami
+// alohida: frontend "Jami"ni ro'yxatdan yig'sa, 500 dan ko'p yozuvda summa
+// JIMGINA kam chiqardi — kassir `/bills`da aynan shu xato bo'lgan edi
+// (routes/kassirBilling.js izohiga qarang).
 function listExpenses({ from, to } = {}) {
-  let sql = 'SELECT e.*, COALESCE(u.full_name, u.username) AS created_by_name FROM expenses e LEFT JOIN users u ON u.id = e.created_by WHERE 1=1';
+  let where = ' WHERE 1=1';
   const params = [];
-  if (from) { sql += ' AND e.expense_date >= ?'; params.push(from); }
-  if (to) { sql += ' AND e.expense_date <= ?'; params.push(to); }
-  sql += ' ORDER BY e.expense_date DESC, e.id DESC';
-  return db.prepare(sql).all(...params);
+  if (from) { where += ' AND e.expense_date >= ?'; params.push(from); }
+  if (to) { where += ' AND e.expense_date <= ?'; params.push(to); }
+  const expenses = db
+    .prepare(
+      `SELECT e.*, COALESCE(u.full_name, u.username) AS created_by_name
+       FROM expenses e LEFT JOIN users u ON u.id = e.created_by${where}
+       ORDER BY e.expense_date DESC, e.id DESC LIMIT ${EXPENSES_LIMIT}`
+    )
+    .all(...params);
+  const totals = db
+    .prepare(`SELECT COUNT(*) AS cnt, COALESCE(SUM(e.amount), 0) AS amount FROM expenses e${where}`)
+    .get(...params);
+  return { expenses, total_count: totals.cnt, total_amount: totals.amount };
 }
 
 // Yangi xarajat. Sana berilmasa — bugungi kun.
@@ -91,6 +115,7 @@ function deleteExpense(id) {
 
 module.exports = {
   ExpenseError,
+  EXPENSES_LIMIT,
   listExpenses,
   createExpense,
   updateExpense,
