@@ -334,29 +334,90 @@ function migrateAddMenuItemParent() {
 //
 // Har doim serverni ko'tarishda sxema mavjudligini tekshiramiz (CREATE TABLE IF NOT EXISTS
 // bo'lgani uchun xavfsiz, ma'lumotni o'chirmaydi) — alohida `npm run migrate` ham mavjud.
+// ─────────────────────────────────────────────────────────────────────────
+// MIGRATSIYA RO'YXATI VA UNI QO'LLASH (2026-09-10, 3-bosqich)
+//
+// NEGA O'ZGARTIRILDI: ilgari bu yerda 18 ta funksiya shunchaki ketma-ket
+// chaqirilardi. Ular idempotent edi, ya'ni ishlardi — LEKIN:
+//   - server har ko'tarilganda 18 marta PRAGMA/SELECT tekshiruvi bajarilardi;
+//   - production bazasi QAYSI holatda ekanini bilishning YO'LI YO'Q edi
+//     (`schema.sql` esa allaqachon haqiqatdan ajrab ketgan — masalan
+//     `users.role` CHECK'ida `kassir` yo'q, uni migratsiya qo'shadi);
+//   - "bu migratsiya qo'llanganmi?" degan savolga faqat ustunlarni qo'lda
+//     tekshirib javob berish mumkin edi.
+//
+// Endi `schema_migrations` jadvali har bir migratsiyaning qo'llangan
+// vaqtini yozib boradi. Qo'llanganlari QAYTA ISHLAMAYDI.
+//
+// MUHIM: mavjud migratsiyalarning HAMMASI idempotent bo'lib qoladi — bu
+// ataylab. Shu sabab yangi tizimga o'tish XAVFSIZ: eski bazada ular bir
+// marta ishlaydi (ko'pchiligi hech narsa qilmaydi, chunki ustun allaqachon
+// bor) va ro'yxatga yoziladi; keyingi ko'tarilishlarda umuman tegilmaydi.
+//
+// YANGI MIGRATSIYA QO'SHISH: pastdagi massiv OXIRIGA `{ id, up }` qo'shing.
+// `id` — o'zgarmas (uni keyin O'ZGARTIRMANG, aks holda migratsiya qayta
+// ishlaydi). Tartib muhim — massiv tartibida bajariladi.
+const MIGRATIONS = [
+  // ⚠️ TARTIB MUHIM: session_version migrateSyncUserRoles()dan OLDIN
+  // qo'shilishi shart — u jadvalni qayta qurayotganda ustunlarni NOM
+  // bo'yicha ko'chiradi, ya'ni ustun hali mavjud bo'lmasa INSERT...SELECT
+  // "no such column" bilan yiqilardi.
+  { id: '001_user_session_version', up: migrateAddUserSessionVersion },
+  { id: '002_sync_user_roles', up: migrateSyncUserRoles },
+  { id: '003_sync_order_status', up: migrateSyncOrderStatus },
+  { id: '004_order_item_ready_at', up: migrateAddOrderItemReadyAt },
+  { id: '005_order_item_sent_at', up: migrateAddOrderItemSentAt },
+  { id: '006_notification_ack', up: migrateAddNotificationAck },
+  { id: '007_order_item_picked_up_at', up: migrateAddOrderItemPickedUpAt },
+  { id: '008_notification_order_item_id', up: migrateAddNotificationOrderItemId },
+  { id: '009_menu_item_description', up: migrateAddMenuItemDescription },
+  { id: '010_menu_item_image', up: migrateAddMenuItemImage },
+  { id: '011_menu_item_volume', up: migrateAddMenuItemVolume },
+  { id: '012_menu_item_inventory_link', up: migrateAddMenuItemInventoryLink },
+  { id: '013_menu_item_parent', up: migrateAddMenuItemParent },
+  { id: '014_customer_order_location', up: migrateAddCustomerOrderLocation },
+  { id: '015_customer_order_delivered_at', up: migrateAddCustomerOrderDeliveredAt },
+  { id: '016_notification_customer_order_id', up: migrateAddNotificationCustomerOrderId },
+  { id: '017_customer_order_stock_state', up: migrateAddCustomerOrderStockState },
+  { id: '018_order_item_cost_snapshot', up: migrateAddOrderItemCostSnapshot },
+];
+
+function runMigrations() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    );
+  `);
+
+  const applied = new Set(
+    db.prepare('SELECT id FROM schema_migrations').all().map((r) => r.id)
+  );
+  const record = db.prepare('INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)');
+
+  let ranCount = 0;
+  for (const migration of MIGRATIONS) {
+    if (applied.has(migration.id)) continue;
+    try {
+      migration.up();
+      record.run(migration.id, new Date().toISOString());
+      ranCount += 1;
+    } catch (err) {
+      // Migratsiya yiqilsa serverni JIMGINA ko'tarmaymiz — yarim
+      // qo'llangan sxema bilan ishlash ma'lumotni buzishi mumkin.
+      console.error(`[polat] Migratsiya '${migration.id}' muvaffaqiyatsiz:`, err.message);
+      throw err;
+    }
+  }
+  if (ranCount > 0) {
+    console.log(`Migratsiya: ${ranCount} ta yangi migratsiya qo'llandi.`);
+  }
+}
+
+// Sxema har doim tekshiriladi (CREATE TABLE IF NOT EXISTS — xavfsiz,
+// ma'lumotni o'chirmaydi), keyin qo'llanmagan migratsiyalar bajariladi.
 ensureSchema();
-// MUHIM TARTIB: session_version migrateSyncUserRoles()dan OLDIN qo'shilishi
-// shart — u jadvalni qayta qurayotganda ustunlarni nom bo'yicha ko'chiradi,
-// ya'ni ustun hali mavjud bo'lmasa INSERT...SELECT "no such column" bilan
-// yiqilardi (2026-09-10).
-migrateAddUserSessionVersion();
-migrateSyncUserRoles();
-migrateSyncOrderStatus();
-migrateAddOrderItemReadyAt();
-migrateAddOrderItemSentAt();
-migrateAddNotificationAck();
-migrateAddOrderItemPickedUpAt();
-migrateAddNotificationOrderItemId();
-migrateAddMenuItemDescription();
-migrateAddMenuItemImage();
-migrateAddMenuItemVolume();
-migrateAddMenuItemInventoryLink();
-migrateAddMenuItemParent();
-migrateAddCustomerOrderLocation();
-migrateAddCustomerOrderDeliveredAt();
-migrateAddNotificationCustomerOrderId();
-migrateAddCustomerOrderStockState();
-migrateAddOrderItemCostSnapshot();
+runMigrations();
 
 function nowIso() {
   return new Date().toISOString();

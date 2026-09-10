@@ -173,15 +173,28 @@ app.use('/api/public/orders', publicWriteLimiter, require('./routes/publicCustom
 app.use(auth.requireAuth);
 app.get('/api/me', auth.meRoute);
 
-app.use('/api/admin/menu', auth.requireRole('admin'), require('./routes/adminMenu'));
-app.use('/api/admin/inventory', auth.requireRole('admin'), require('./routes/adminInventory'));
-app.use('/api/admin/users', auth.requireRole('admin'), require('./routes/adminUsers'));
-app.use('/api/admin/tables', auth.requireRole('admin'), require('./routes/adminTables'));
-app.use('/api/admin/expenses', auth.requireRole('admin'), require('./routes/adminExpenses'));
-app.use('/api/admin/reports', auth.requireRole('admin'), require('./routes/adminReports'));
-app.use('/api/admin/reservations', auth.requireRole('admin'), require('./routes/adminReservations'));
-app.use('/api/admin/customer-orders', auth.requireRole('admin'), require('./routes/adminCustomerOrders'));
-app.use('/api/admin/print-requests', auth.requireRole('admin'), require('./routes/adminPrintRequests'));
+// ─────────────────────────────────────────────────────────────────────────
+// RUXSATLAR (2026-09-10, 3-bosqich)
+//
+// Endi har bir mount ROL NOMINI emas, IMKONIYATNI (capability) talab qiladi.
+// "Kim nima qila oladi" degan savolga javob YAGONA joyda —
+// `server/permissions.js` dagi jadvalda. Yangi rol qo'shilganda yoki mavjud
+// rolga bitta huquq berilganda bu fayl O'ZGARMAYDI.
+//
+// `requireCapability` bir nechta imkoniyat qabul qiladi — ulardan BIRI
+// yetarli.
+const cap = require('./permissions').CAPABILITIES;
+const need = require('./permissions').requireCapability;
+
+app.use('/api/admin/menu', need(cap.MENU_MANAGE), require('./routes/adminMenu'));
+app.use('/api/admin/inventory', need(cap.MENU_MANAGE), require('./routes/adminInventory'));
+app.use('/api/admin/users', need(cap.ADMIN_MANAGE), require('./routes/adminUsers'));
+app.use('/api/admin/tables', need(cap.ADMIN_MANAGE), require('./routes/adminTables'));
+app.use('/api/admin/expenses', need(cap.ADMIN_MANAGE), require('./routes/adminExpenses'));
+app.use('/api/admin/reports', need(cap.ADMIN_MANAGE), require('./routes/adminReports'));
+app.use('/api/admin/reservations', need(cap.ADMIN_MANAGE), require('./routes/adminReservations'));
+app.use('/api/admin/customer-orders', need(cap.ADMIN_MANAGE), require('./routes/adminCustomerOrders'));
+app.use('/api/admin/print-requests', need(cap.ADMIN_MANAGE), require('./routes/adminPrintRequests'));
 // '/api/admin/qz' EMAS, '/api/qz' — 2026-09-09'da topilgan bug: kassir
 // sahifasi (public/kassir/*) chek chop etishda public/app.js'dagi UMUMIY
 // printReceiptView()/setupQzSecurity() orqali shu yerga murojaat qiladi, lekin
@@ -193,7 +206,9 @@ app.use('/api/admin/print-requests', auth.requireRole('admin'), require('./route
 // requireRole(['admin','kassir']) ishlaydi. Bu endpointlar faqat ochiq
 // sertifikat + imzolash (yozish/o'qish huquqi bermaydi, faqat printer
 // ulanishini tasdiqlaydi) — kassirga ham ochish xavfsiz.
-app.use('/api/qz', auth.requireRole(['admin', 'kassir']), require('./routes/adminQz'));
+// 2026-09-10: endi bu "kim chek chop eta oladi" degan IMKONIYAT bilan
+// boshqariladi (hozircha admin + kassir — permissions.js dagi izohga qarang).
+app.use('/api/qz', need(cap.RECEIPT_PRINT), require('./routes/adminQz'));
 
 // 2026-09-10: bu 4 ta mount ILGARI YAGONA edi — requireRole()siz, faqat
 // requireAuth()dagi URL-prefiks tekshiruviga tayanardi (qolgan hamma
@@ -201,21 +216,20 @@ app.use('/api/qz', auth.requireRole(['admin', 'kassir']), require('./routes/admi
 // izohiga qarang: aynan shu yagona bo'shliq har qanday xodimga afitsiant
 // endpointlarini (stol yopish, chek, taom qo'shish) ochib qo'yardi.
 // Endi himoya ikki qatlamli va prefiks harfiga bog'liq emas.
-const waiterOnly = auth.requireRole(['admin', 'waiter']);
-app.use('/api/waiter', waiterOnly, require('./routes/waiterTables'));
-app.use('/api/waiter', waiterOnly, require('./routes/waiterMenu'));
-app.use('/api/waiter', waiterOnly, require('./routes/waiterOrders'));
-app.use('/api/waiter/notifications', waiterOnly, require('./routes/waiterNotifications'));
+app.use('/api/waiter', need(cap.TABLES_VIEW), require('./routes/waiterTables'));
+app.use('/api/waiter', need(cap.MENU_VIEW), require('./routes/waiterMenu'));
+app.use('/api/waiter', need(cap.ORDERS_WRITE), require('./routes/waiterOrders'));
+app.use('/api/waiter/notifications', need(cap.WAITER_ALERTS), require('./routes/waiterNotifications'));
 
-app.use('/api/chef', auth.requireRole(['admin', 'chef']), require('./routes/chefKitchen'));
+app.use('/api/chef', need(cap.KITCHEN_VIEW), require('./routes/chefKitchen'));
 
-app.use('/api/courier', auth.requireRole(['admin', 'courier']), require('./routes/courierOrders'));
+app.use('/api/courier', need(cap.DELIVERY_VIEW), require('./routes/courierOrders'));
 
-app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirTables'));
-app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirBilling'));
-app.use('/api/kassir', auth.requireRole(['admin', 'kassir']), require('./routes/kassirMenu'));
+app.use('/api/kassir', need(cap.TABLES_VIEW, cap.ORDERS_CLOSE), require('./routes/kassirTables'));
+app.use('/api/kassir', need(cap.BILLING_WRITE, cap.BILLING_VIEW), require('./routes/kassirBilling'));
+app.use('/api/kassir', need(cap.MENU_VIEW), require('./routes/kassirMenu'));
 
-app.use('/api/delivery-alerts', auth.requireRole(['admin', 'chef', 'courier']), require('./routes/deliveryAlerts'));
+app.use('/api/delivery-alerts', need(cap.DELIVERY_ALERTS), require('./routes/deliveryAlerts'));
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
