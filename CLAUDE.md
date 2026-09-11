@@ -941,3 +941,17 @@ Yangi **Sozlamalar** sahifasi (`admin/settings.html`). Menyu ikki guruhga: "Kunl
 Admin → **Sozlamalar**'da yetkazib berish narxi, minimal summa, vaqt va to'lov usullarini to'ldirish — bo'sh bo'lsa landing bu qatorlarni ko'rsatmaydi (L-29).
 
 **Tekshiruv:** 206/206 test; Playwright 171/171 (21 sahifa × 5 rol × 320/390/1280px — JS xatosi, CSP, gorizontal scroll yo'q).
+
+## Holat — 2026-09-11: chuqur tahlil — 5 ta mantiqiy xato tuzatildi
+
+UI/UX to'lqinlaridan keyingi qatorma-qator tahlil. Har bir topilma avval alohida skript bilan **tasdiqlangan**, keyin tuzatilgan; hammasi `test/audit-2026-09-11.test.js`da (15 test).
+
+1. **Oshxonaga yuborilgan qatorga miqdor qo'shish** (`services/orders.js` `updateOrderItemQuantity`). Ilgari qatorning o'zi oshirilardi: taom olib ketilgan (picked_up) bo'lsa qo'shilgan porsiyalar oshxona ekranida UMUMAN ko'rinmas, lekin hisobga kirardi; faqat "tayyor" bo'lsa oshpaz "5 × Osh ✅ Tayyor"ni ko'rib qolganini bilmasdi. Endi qo'shimcha — alohida **yuborilmagan** qator (`addPendingQuantity()`, X-06 birlashtirish qoidasi bilan umumiy), yuborilgan qator o'zgarmaydi; ombor harakati yangi qatorga bog'lanadi. Kamaytirish avvalgidek joyida. Afitsiant ekrani buni toast bilan tushuntiradi.
+2. **Oshxona FIFO tartibi** (`services/kitchen.js`). `oldest_sent_at` endi faqat hali TAYYOR BO'LMAGAN taomlar bo'yicha — hammasi tayyor (afitsiant olishini kutayotgan) stol endi haqiqatan kutayotgan stoldan keyin turadi. `public/chef/kitchen.js` o'z hisobini tashlab, shu server qiymatini ishlatadi (ilgari rang to'g'ri, tartib noto'g'ri edi).
+3. **Yuborilmagan taomli stolni yopish** (`closeTable`). X-14 qoidasi faqat afitsiant ekranida edi — kassir va API oshxonaga bormagan taom bilan yopa olardi. Endi server **409** qaytaradi (taom nomlari bilan). Kassir ekrani bunday qatorlarni "Oshxonaga yuborilmagan" deb belgilaydi va maxsus tasdiqlash so'raydi; tasdiqlasa kassir KO'RGAN qatorlar id'si (`allow_unsent_ids`) yuboriladi — tasdiqlash paytida qo'shilgan yangi taom baribir rad etiladi. Afitsiant route'i bu parametrni qabul qilmaydi.
+4. **Yetkazib berish sozlamalari serverda** (`customerOrders.createFromPublic`). `delivery_enabled=false` va `delivery_min_order` endi serverda ham tekshiriladi (ilgari faqat landing brauzerida). Yangi ustun `customer_orders.delivery_fee` (migratsiya `019`) — buyurtma PAYTIDAGI yetkazish narxi; `total_amount`ga (tushumga) **kirmaydi**. Admin kartasi, kuryer ekrani va chekda "Yetkazish · Mijozdan olinadi / To'lov jami" (`app.js` `deliveryCharge()`). ⚠️ Qaror: yetkazish narxi hisobot tushumiga qo'shilmagan — kerak bo'lsa alohida qo'shiladi.
+5. **"Tasdiqlanmagan bronlar"** (`reservations.countNew`) — faqat bugundan boshlab; o'tgan kungi bron bosh sahifada abadiy "muammo" bo'lib turmaydi. `dashboard.getDashboard(now)` o'z `today`ini uzatadi. Bronlar sahifasi `?status=new` bilan ham "Kelgusi"da ochiladi (son va ro'yxat bir xil).
+
+Kichik: `admin/menu.js` — rasm yuklanayotganda modal yopilib boshqa taom ochilsa, kechikkan javob o'sha taomga rasm qo'ymaydi (`itemModalSession`).
+
+**Tekshiruv:** 221/221 test; jonli Playwright 19/19 (afitsiant/kassir/oshpaz/admin/kuryer oqimlari, sinov ma'lumotlari tozalangan) + 171/171 sahifa regressiyasi.

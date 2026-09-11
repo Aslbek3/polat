@@ -116,6 +116,13 @@ function migrateAddOrderItemCostSnapshot() {
   }
 }
 
+// 'customer_orders.delivery_fee' (2026-09-11) — buyurtma paytidagi yetkazish
+// narxi nusxasi (schema.sql izohiga qarang). Eski yozuvlar NULL qoladi —
+// o'sha paytdagi narx ma'lum emas, taxmin qilib yozilmaydi.
+function migrateAddCustomerOrderDeliveryFee() {
+  addColumnIfMissing('customer_orders', 'delivery_fee', 'delivery_fee INTEGER');
+}
+
 // 'customer_orders.stock_state' (2026-09-10) — buyurtmaning ombor qoldig'iga
 // nisbatan holati ('held'/'released'/'spent'). Batafsil izoh schema.sql'da,
 // mantiq server/services/customerOrders.js'da.
@@ -380,6 +387,7 @@ const MIGRATIONS = [
   { id: '016_notification_customer_order_id', up: migrateAddNotificationCustomerOrderId },
   { id: '017_customer_order_stock_state', up: migrateAddCustomerOrderStockState },
   { id: '018_order_item_cost_snapshot', up: migrateAddOrderItemCostSnapshot },
+  { id: '019_customer_order_delivery_fee', up: migrateAddCustomerOrderDeliveryFee },
 ];
 
 function runMigrations() {

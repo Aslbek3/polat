@@ -28,8 +28,16 @@ router.get('/tables/:id/order', asyncRoute((req, res) => {
   res.json(view); // null bo'lishi mumkin — frontend "ochiq buyurtma yo'q" holatini shunday biladi
 }));
 
+// `allow_unsent_ids` (2026-09-11) — kassir oshxonaga yuborilmagan taomlar
+// ro'yxatini ko'rib ANIQ tasdiqlagan qatorlar (public/kassir/order.js).
+// Faqat shu qatorlarga ruxsat — ro'yxatda yo'q yuborilmagan taom (masalan
+// tasdiqlash paytida afitsiant qo'shgan) bo'lsa server baribir rad etadi.
+// Afitsiant route'ida bu parametr ATAYLAB yo'q — uning ekrani yuborilmagan
+// taom bor paytda yopish tugmasini ko'rsatmaydi (X-14), u avval yuboradi.
 router.post('/tables/:id/close', asyncRoute((req, res) => {
-  const receipt = closeTable(req.params.id, req.user.id);
+  const raw = req.body && req.body.allow_unsent_ids;
+  const allowUnsentIds = Array.isArray(raw) ? raw.map(Number).filter(Number.isSafeInteger) : [];
+  const receipt = closeTable(req.params.id, req.user.id, { allowUnsentIds });
   res.json(receipt);
 }));
 

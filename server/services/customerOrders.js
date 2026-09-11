@@ -20,6 +20,7 @@
 
 const { db, nowIso } = require('../db');
 const inventory = require('./inventory');
+const settings = require('./settings');
 
 class CustomerOrderError extends Error {
   constructor(message, status = 400) {
@@ -360,6 +361,16 @@ function createFromPublic(payload) {
   if (phoneNum.length > 30) throw new CustomerOrderError('Telefon raqami juda uzun');
   if (addressText.length > 500) throw new CustomerOrderError('Manzil juda uzun');
   if (noteText.length > 1000) throw new CustomerOrderError('Izoh juda uzun');
+
+  // Yetkazib berish shartlari (2026-09-11) — admin "Sozlamalar"dagi qiymatlar
+  // endi SERVERDA ham kuchga ega. NEGA: ilgari ular faqat landing
+  // brauzerida tekshirilardi — admin yetkazib berishni o'chirsa ham, sahifani
+  // oldinroq ochib qo'ygan mijoz (yoki to'g'ridan-to'g'ri API) yetkazib
+  // berish buyurtmasini yuborib qo'ya olardi; minimal summa ham shunday.
+  const deliverySettings = settings.getPublicSettings();
+  if (fulfillmentType === 'delivery' && !deliverySettings.delivery_enabled) {
+    throw new CustomerOrderError("Hozir yetkazib berish xizmati ishlamayapti. «Olib ketish»ni tanlang.");
+  }
   if (fulfillmentType === 'delivery' && !addressText) {
     throw new CustomerOrderError('Yetkazish manzilini kiriting');
   }
@@ -383,15 +394,27 @@ function createFromPublic(payload) {
   }
 
   const totalAmount = resolved.reduce((sum, r) => sum + r.item.price * r.quantity, 0);
+  const minOrder = deliverySettings.delivery_min_order;
+  if (fulfillmentType === 'delivery' && minOrder > 0 && totalAmount < minOrder) {
+    throw new CustomerOrderError(
+      `Yetkazib berish uchun minimal buyurtma — ${fmtSomPlain(minOrder)}. ` +
+      `Yana ${fmtSomPlain(minOrder - totalAmount)}lik taom qo'shing yoki «Olib ketish»ni tanlang.`
+    );
+  }
+  // Yetkazish narxi buyurtma PAYTIDAGI qiymat bilan saqlanadi (schema.sql
+  // izohi): admin keyin narxni o'zgartirsa ham, mijozga aytilgan summa
+  // kuryer va chekda o'zgarmaydi. `total_amount`ga qo'shilmaydi — tushum
+  // hisobotida faqat taomlar.
+  const deliveryFee = fulfillmentType === 'delivery' ? deliverySettings.delivery_fee : 0;
   const ts = nowIso();
 
   const run = db.transaction(() => {
     const info = db
       .prepare(
-        `INSERT INTO customer_orders (full_name, phone, fulfillment, address, location_lat, location_lng, note, total_amount, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`
+        `INSERT INTO customer_orders (full_name, phone, fulfillment, address, location_lat, location_lng, note, total_amount, delivery_fee, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)`
       )
-      .run(name, phoneNum, fulfillmentType, addressText || null, hasLocation ? lat : null, hasLocation ? lng : null, noteText || null, totalAmount, ts);
+      .run(name, phoneNum, fulfillmentType, addressText || null, hasLocation ? lat : null, hasLocation ? lng : null, noteText || null, totalAmount, deliveryFee, ts);
 
     // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10, sabab
     // server/schema.sql'dagi izohda: hisobot o'tmishga qarab o'zgarmasligi uchun).
@@ -438,7 +461,7 @@ function createFromPublic(payload) {
     }
     throw err;
   }
-  return { ok: true, id, total_amount: totalAmount };
+  return { ok: true, id, total_amount: totalAmount, delivery_fee: deliveryFee };
 }
 
 module.exports = {

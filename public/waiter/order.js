@@ -268,6 +268,14 @@ async function applyItemQty(itemId, nextQty, btn) {
           view = await api(`/waiter/items/${itemId}`, { method: 'PATCH', body: { quantity: nextQty } });
         }
         renderOrder(view);
+        // 2026-09-11: oshxonaga YUBORILGAN qatorga miqdor qo'shilsa, server
+        // qo'shimchani alohida "Yuborilmagan" qator qiladi (services/orders.js
+        // updateOrderItemQuantity izohi) — bu qatorning raqami o'zgarmaydi.
+        // Afitsiant "+" ishlamadi deb qayta bosmasin: nima bo'lganini aytamiz.
+        const row = nextQty > 0 && view && view.items.find((x) => x.id === itemId);
+        if (row && row.quantity !== nextQty) {
+          toast(`Qo'shimcha ${nextQty - row.quantity} ta alohida qator bo'ldi — uni oshxonaga yuboring.`);
+        }
       } catch (err) {
         toast(err.message, 'error');
       }
@@ -538,6 +546,9 @@ document.getElementById('closeBtn').addEventListener('click', async (e) => {
       setTimeout(() => { window.location.href = 'tables.html'; }, 900);
     } catch (err) {
       toast(err.message, 'error');
+      // Masalan 409: boshqa afitsiant hozirgina yuborilmagan taom qo'shgan —
+      // ekran darhol yangilanib "Oshxonaga yuborish" tugmasi chiqsin.
+      loadOrder();
     }
   });
   // Muvaffaqiyatli yopilgandan keyin stollarga qaytishgacha ~0.9s bor —

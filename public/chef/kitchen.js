@@ -15,17 +15,12 @@
 // o'zgarmagan bo'lsa DOM'ga tegilmaydi — ya'ni poll aynan "🏁 Tayyor"
 // bosilayotgan payt tugmani DOM'dan olib tashlab, bosishni yutib qo'ymaydi.
 // X-01 (2026-09-10): kartadagi kutish vaqti — faqat HALI TAYYOR BO'LMAGAN
-// taomlar bo'yicha. NEGA server'ning `oldest_sent_at`i emas: u tayyor, lekin
-// afitsiant hali olib ketmagan taomni ham hisoblaydi — oshpaz hammasini
-// tayyorlab bo'lgan stol ham 25 daqiqadan keyin qizarib turardi va haqiqatan
-// kechikayotgan stol shu "soxta signal" ichida ko'milib ketardi. Tartib esa
-// serverniki (FIFO) — bu yerda QAYTA TARTIBLANMAYDI.
-function pendingOldestSentAt(items) {
-  return (items || []).reduce(
-    (min, it) => (it.ready_at || !it.sent_at || (min !== null && it.sent_at >= min) ? min : it.sent_at),
-    null
-  );
-}
+// taomlar bo'yicha (oshpaz hammasini tayyorlab bo'lgan stol qizarib
+// turmasin). 2026-09-11: bu qiymat endi serverdan — `t.oldest_sent_at`
+// (services/kitchen.js) aynan shu qoida bilan hisoblanadi va TARTIB ham
+// shunga ko'ra. Ilgari bu yerda alohida hisoblanardi, server esa tayyor
+// taomni ham qo'shib tartiblardi: rang to'g'ri, tartib noto'g'ri edi.
+// Tartib serverniki (FIFO) — bu yerda QAYTA TARTIBLANMAYDI.
 
 async function loadTables(isPoll) {
   await renderList({
@@ -40,7 +35,7 @@ async function loadTables(isPoll) {
     // X-30 (2026-09-10): narx olib tashlandi — oshpazga kerak emas, tor
     // planshet ekranida taom nomini siqib qo'yardi.
     render: (occupied) => occupied.map((t) => {
-      const pendingSince = pendingOldestSentAt(t.items);
+      const pendingSince = t.oldest_sent_at;
       return `
       <div class="card"${pendingSince ? ' data-wait-card' : ''}>
         <div class="card-row">

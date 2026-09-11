@@ -52,7 +52,9 @@ function getDashboard(now = new Date()) {
     low_stock: inventory.listLowStock(),
     new_customer_orders: customerOrders.countByStatus('new'),
     today_reservations: reservations.countForDate(today),
-    new_reservations: reservations.countNew(),
+    // Faqat bugundan boshlab (2026-09-11, countNew izohi) — "bugun" shu
+    // funksiyaning o'z `today`i, ya'ni plitkalar bilan bir xil kun.
+    new_reservations: reservations.countNew(today),
   };
 }
 

@@ -314,7 +314,12 @@ async function delCategory(id) {
 // (kategoriya avtomatik ota taomnikidan olinadi, foydalanuvchi tanlamaydi).
 // Mavjud taom tahrirlanayotganda (itemId berilgan) uning parent_item_id'si
 // o'zgarishsiz saqlanadi — bu modal orqali variant boshqa taomga "ko'chirilmaydi".
+let itemModalSession = 0; // rasm yuklash javobini to'g'ri modalga bog'lash uchun
+
 function openItemModal(categoryId, itemId, parentId) {
+  itemModalSession += 1;
+  // Oldingi ochilishdagi yuklash tugamay qolgan bo'lsa ham tugma ochiq tursin.
+  document.getElementById('itemSaveBtn').disabled = false;
   editingItemId = itemId;
   const item = itemId ? items.find((it) => it.id === itemId) : null;
   const parentItem = (!item && parentId) ? items.find((it) => it.id === parentId) : null;
@@ -449,9 +454,15 @@ document.getElementById('itemCancelBtn').addEventListener('click', () => request
 // tugashini KUTMAYDI. Rasmni tanlab darhol "Saqlash" bosilsa taom rasmsiz
 // saqlanardi, modal yopilardi, ekranda esa "Yuklanmoqda..." osilib qolardi —
 // admin rasm qo'ygan deb o'ylab qolardi.
+//
+// 2026-09-11: `itemModalSession` — yuklash tugaguncha modal yopilib, BOSHQA
+// taom uchun qayta ochilgan bo'lsa (sekin tarmoq), kechikkan javob o'sha
+// ikkinchi taomga rasm qo'yib yubormasin va uning "Saqlash" tugmasini
+// vaqtidan oldin yoqmasin. Har ochilishda raqam oshadi (openItemModal).
 document.getElementById('itemImageFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  const session = itemModalSession;
   const statusEl = document.getElementById('itemImageStatus');
   const saveBtn = document.getElementById('itemSaveBtn');
   statusEl.textContent = 'Yuklanmoqda...';
@@ -462,15 +473,17 @@ document.getElementById('itemImageFile').addEventListener('change', async (e) =>
     const res = await fetch(`${API_BASE}api/admin/menu/upload-image`, { method: 'POST', body: form, credentials: 'same-origin' });
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error((data && data.error) || 'Rasm yuklashda xatolik');
+    if (session !== itemModalSession) return;
     currentImageUrl = data.url;
     updateImagePreview();
     statusEl.textContent = 'Rasm yuklandi.';
   } catch (err) {
+    if (session !== itemModalSession) return;
     statusEl.textContent = '';
     e.target.value = '';
     setFieldError(e.target, err.message, { focus: false }); // A-18
   } finally {
-    saveBtn.disabled = false;
+    if (session === itemModalSession) saveBtn.disabled = false;
   }
 });
 

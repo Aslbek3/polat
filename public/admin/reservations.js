@@ -6,9 +6,10 @@ const RES_POLL_MS = 30000;
 
 // A-06: ilgari filtr yo'q edi va o'tgan bronlar ro'yxatda abadiy qolardi.
 // Standart — "Kelgusi" (admin ro'yxatni "kim keladi?" savoli bilan ochadi).
-// ?status=new (bosh sahifadagi "Tasdiqlanmagan bronlar" havolasi) — sana
-// bo'yicha cheklamaymiz, aks holda o'tgan kungi tasdiqlanmagan bron
-// bosh sahifadagi son bilan mos kelmay qolardi.
+// ?status=new (bosh sahifadagi "Tasdiqlanmagan bronlar" havolasi) ham
+// "Kelgusi" bilan ochiladi: 2026-09-11 dan bosh sahifa faqat kelgusi
+// tasdiqlanmagan bronlarni sanaydi (services/reservations.js countNew) —
+// ro'yxat va son bir xil to'plamni ko'rsatsin.
 const initialStatus = ['new', 'confirmed', 'cancelled'].includes(pageParam('status')) ? pageParam('status') : 'all';
 let scopeChips = null;
 let statusChips = null;
@@ -87,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
   scopeChips = chipGroup('scopeChips', {
     label: 'Sana bo\'yicha',
     options: [['upcoming', 'Kelgusi'], ['past', "O'tgan"], ['all', 'Hammasi']],
-    initial: initialStatus === 'new' ? 'all' : 'upcoming',
+    initial: 'upcoming',
     onChange: () => loadReservations(),
   });
   statusChips = chipGroup('statusChips', {

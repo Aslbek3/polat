@@ -37,10 +37,12 @@ function orderLinesHtml(view) {
     // "Bo'shatish" (cancel-order).
     return '<p class="dim">Buyurtmada taom yo\'q (hammasi bekor qilingan). Stolni bo\'shatish uchun pastdagi tugmani bosing.</p>';
   }
+  // 2026-09-11: oshxonaga yuborilmagan taom belgilanadi — kassir hisobni
+  // yopishdan oldin mijoz uni hali olmaganini ko'rsin (closeBtn izohiga qarang).
   return view.items.map((it) => `
     <div class="order-line">
       <div>
-        <div class="ol-name">${escapeHtml(it.name_snapshot)}</div>
+        <div class="ol-name">${escapeHtml(it.name_snapshot)}${it.sent_at ? '' : ' <span class="badge debt">Oshxonaga yuborilmagan</span>'}</div>
         <div class="ol-meta">${it.quantity} × ${fmtMoney(it.unit_price)}</div>
       </div>
       <div class="ol-subtotal">${fmtMoney(it.subtotal)}</div>
@@ -48,7 +50,12 @@ function orderLinesHtml(view) {
   `).join('');
 }
 
+// Oxirgi chizilgan buyurtma — yopishdan oldin yuborilmagan taomlarni
+// tekshirish uchun (closeBtn).
+let currentView = null;
+
 function applyOrderControls(view) {
+  currentView = view;
   const totalEl = document.getElementById('totalAmount');
   const closeBtn = document.getElementById('closeBtn');
   const cancelOrderBtn = document.getElementById('cancelOrderBtn');
@@ -103,13 +110,34 @@ async function loadOrder() {
   }));
 }
 
+// 2026-09-11: oshxonaga YUBORILMAGAN taom bo'lsa server stolni odatda
+// yopmaydi (services/orders.js closeTable() izohiga qarang) — mijoz
+// berilmagan ovqat uchun to'lab ketmasin. Kassir esa ro'yxatni ko'rib aniq
+// tasdiqlashi mumkin (masalan suvni afitsiant oshxonasiz o'zi bergan);
+// shunda kassir KO'RGAN qatorlar id'si (`allow_unsent_ids`) yuboriladi —
+// umumiy "ruxsat" emas: tasdiqlash oynasi ochiq turganda afitsiant yana taom
+// qo'shsa, u yangi taom tasdiqsiz hisobga tushib ketmasin. Bunday holatda
+// server 409 qaytaradi va xabar taom nomlari bilan toast bo'lib chiqadi.
 document.getElementById('closeBtn').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
-  const ok = await customConfirm("Stolni yopib, hisob-kitob qilasizmi? Bu amalni ortga qaytarib bo'lmaydi.");
+  const unsent = currentView ? currentView.items.filter((it) => !it.sent_at) : [];
+  let ok;
+  if (unsent.length > 0) {
+    const list = unsent.map((it) => `${it.name_snapshot} ×${it.quantity}`).join(', ');
+    ok = await customConfirm(
+      `Bu taomlar oshxonaga YUBORILMAGAN: ${list}. Mijoz ularni olganmi? Olmagan bo'lsa — "Bekor" bosing va afitsiantdan ularni bekor qilishini so'rang (aks holda mijoz berilmagan taom uchun to'laydi).`,
+      { title: 'Yuborilmagan taom bor', okText: 'Olgan — hisobni yopish', cancelText: 'Bekor', danger: true }
+    );
+  } else {
+    ok = await customConfirm("Stolni yopib, hisob-kitob qilasizmi? Bu amalni ortga qaytarib bo'lmaydi.");
+  }
   if (!ok) return;
   await withBusy(btn, async () => {
     try {
-      const receipt = await api(`/kassir/tables/${TABLE_ID}/close`, { method: 'POST' });
+      const receipt = await api(`/kassir/tables/${TABLE_ID}/close`, {
+        method: 'POST',
+        body: { allow_unsent_ids: unsent.map((it) => it.id) },
+      });
       // NEGA darhol renderOrder(null) (2026-09-10): ilgari yopilgandan keyin
       // ekranda allaqachon yopilgan buyurtmaning qatorlari, jami summasi va
       // FAOL "💳 Hisob-kitob qilish" tugmasi keyingi poll'gacha (8 soniyagacha)
@@ -125,6 +153,9 @@ document.getElementById('closeBtn').addEventListener('click', async (e) => {
       openReceiptByOrderId(receipt.order.id, 'kassir');
     } catch (err) {
       toast(err.message, 'error');
+      // Masalan 409 (yangi yuborilmagan taom qo'shilgan) — ekran darhol
+      // haqiqiy holatga yangilansin, 8 soniyalik poll kutilmasin.
+      loadOrder();
     }
   });
 });

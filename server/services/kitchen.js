@@ -37,11 +37,12 @@ const CHEF_ORDER_FIELDS = 'id, full_name, fulfillment, status, note, total_amoun
 // (listTablesOverview) qaytardi — "Stol 4" 25 daqiqa kutayotgan bo'lsa ham
 // raqami katta bo'lgani uchun ro'yxat pastida qolardi va oshpaz buni
 // bilmasdi. Endi tartib:
-//   1) band + oshpazga ko'rinadigan taomi bor stollar — eng eski ko'rinadigan
+//   1) band + oshpaz hali TAYYORLAMAGAN taomi bor stollar — eng eski shunday
 //      taomining `sent_at` qiymati bo'yicha O'SIB boruvchi (eng uzoq
 //      kutayotgani birinchi);
-//   2) band, lekin hali hech narsa yuborilmagan (yoki hammasi olib ketilgan)
-//      stollar;
+//   2) band, lekin oshpazdan hech narsa kutilmayotgan stollar: hali hech narsa
+//      yuborilmagan, hammasi tayyor (afitsiant olib ketishini kutmoqda) yoki
+//      hammasi olib ketilgan;
 //   3) bo'sh stollar — eng oxirida. Ular ATAYLAB chiqarib tashlanmadi:
 //      public/chef/kitchen.js o'zi `.filter((t) => t.occupied)` qiladi,
 //      javob shaklini torroq qilish boshqa iste'molchini buzishi mumkin edi.
@@ -51,13 +52,19 @@ const CHEF_ORDER_FIELDS = 'id, full_name, fulfillment, status, note, total_amoun
 // Har bir stolga `oldest_sent_at` (ISO satr yoki null) qo'shildi — frontend
 // undan kutish vaqtini ("⏱ 12 daq") hisoblaydi. `sent_at` ISO-8601 (nowIso)
 // bo'lgani uchun satr sifatida solishtirish xronologik tartibga teng.
+//
+// ⚠️ 2026-09-11 tuzatish: `oldest_sent_at` endi faqat HALI TAYYOR BO'LMAGAN
+// (`ready_at` bo'sh) taomlar bo'yicha. Ilgari tayyor, lekin afitsiant hali
+// olib ketmagan taom ham hisoblanardi — oshpaz hammasini tayyorlab bo'lgan
+// stol ro'yxat TEPASIDA qolib, haqiqatan kutayotgan stolni pastga surardi
+// (public/chef/kitchen.js faqat rangni to'g'rilagan edi, tartib esa shu yerda).
 function listKitchenTables() {
   const rows = listTablesOverview().map((t) => {
     if (!t.occupied) return { ...t, oldest_sent_at: null };
     const view = buildOrderView(t.order_id);
     const items = view.items.filter((it) => it.sent_at && !it.picked_up_at);
     const oldestSentAt = items.reduce(
-      (min, it) => (min === null || it.sent_at < min ? it.sent_at : min),
+      (min, it) => (!it.ready_at && (min === null || it.sent_at < min) ? it.sent_at : min),
       null
     );
     return { ...t, items, oldest_sent_at: oldestSentAt };

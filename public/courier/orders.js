@@ -64,6 +64,7 @@ async function loadOrders(isPoll) {
           <div class="card-sub"><a href="tel:${escapeHtml(o.phone)}">${escapeHtml(o.phone)}</a></div>
           ${o.address ? `<div class="card-sub">${escapeHtml(o.address)}</div>` : ''}
           ${o.note ? `<div class="card-sub">📝 ${escapeHtml(o.note)}</div>` : ''}
+          ${deliveryChargeHtml(o)}
         </div>
         <div class="mt-8" style="border-top:1px dashed var(--border); padding-top:8px;">
           ${o.items.map((it) => `<div class="card-sub">${it.quantity} × ${escapeHtml(it.name_snapshot)}</div>`).join('')}

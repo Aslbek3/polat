@@ -43,6 +43,7 @@ function renderOrderCard(o) {
           <div class="card-sub">№${Number(o.id)} · ${escapeHtml(FULFILLMENT_LABEL[o.fulfillment] || o.fulfillment || '')} · ${fmtDateTime(o.created_at)}</div>
           <div class="card-sub"><a href="tel:${escapeHtml(o.phone)}">${escapeHtml(o.phone)}</a>${o.address ? ' · ' + escapeHtml(o.address) : ''}${hasLoc ? ` · <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener">🗺 Xaritada ko'rish</a>` : ''}</div>
           ${o.note ? `<div class="card-sub">${escapeHtml(o.note)}</div>` : ''}
+          ${deliveryChargeHtml(o)}
         </div>
         <div class="card-title text-right">${fmtMoney(o.total_amount)}</div>
       </div>

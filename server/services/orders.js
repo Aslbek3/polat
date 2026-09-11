@@ -72,6 +72,44 @@ function getOpenOrderForTable(tableId) {
   return buildOrderView(row.id);
 }
 
+// Buyurtmaga HALI YUBORILMAGAN miqdor qo'shadi: shu taomning (bir xil narx
+// nusxalari bilan) yuborilmagan faol qatori bo'lsa — uning miqdori oshadi,
+// bo'lmasa yangi qator ochiladi (X-06, addItemToTable() izohiga qarang).
+// Qaytaradi: miqdor tushgan qatorning id'si (ombor harakati shunga bog'lanadi).
+// Tranzaksiya ICHIDA chaqiriladi; ombor sarfini chaqiruvchi o'zi qiladi.
+//
+// `snap` — { menuItemId, name, unitPrice, costPrice }: yangi taom uchun
+// menyudan, yuborilgan qatorga qo'shimcha uchun esa O'SHA qatorning
+// nusxalaridan (updateOrderItemQuantity) — "yana 3 ta xuddi shu" ma'nosida.
+function addPendingQuantity(orderId, snap, qty, waiterId, ts) {
+  const mergeTarget = db
+    .prepare(
+      `SELECT * FROM order_items
+       WHERE order_id = ? AND menu_item_id = ? AND status = 'active' AND sent_at IS NULL
+         AND unit_price = ? AND cost_price_snapshot IS ?
+       ORDER BY id ASC LIMIT 1`
+    )
+    .get(orderId, snap.menuItemId, snap.unitPrice, snap.costPrice);
+
+  if (mergeTarget) {
+    // Birlashgan miqdor ham yuqori chegaradan oshmasligi kerak (aks holda
+    // 1000 tadan bosib-bosib chegarani aylanib o'tish mumkin bo'lardi).
+    const newQty = parseQuantity(mergeTarget.quantity + qty);
+    db.prepare('UPDATE order_items SET quantity = ?, subtotal = ? WHERE id = ?')
+      .run(newQty, mergeTarget.unit_price * newQty, mergeTarget.id);
+    return mergeTarget.id;
+  }
+  // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10). Sotuv
+  // narxi (unit_price) allaqachon shu yerda "muzlatilar" edi, tan narx esa
+  // hisobotda menu_items'dan JONLI o'qilardi — natijada narx keyin
+  // o'zgartirilsa o'tgan oylarning foydasi ham o'zgarib ketardi.
+  const info = db.prepare(
+    `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+  ).run(orderId, snap.menuItemId, snap.name, snap.unitPrice, snap.costPrice, qty, snap.unitPrice * qty, waiterId, ts);
+  return info.lastInsertRowid;
+}
+
 function addItemToTable(tableId, menuItemId, quantity, waiterId) {
   // 2026-09-10: YUQORI CHEGARA qo'shildi. Ilgari faqat "butun va musbat"
   // tekshirilardi — ya'ni {"quantity": 9007199254740991} yuborish
@@ -116,35 +154,12 @@ function addItemToTable(tableId, menuItemId, quantity, waiterId) {
     // holatda yangi qator ochiladi. `added_by` solishtirilmaydi (ikki
     // afitsiant bitta stolga bir xil taom qo'shsa ham bitta qator bo'ladi;
     // qator birinchi qo'shgan afitsiant nomida qoladi).
-    const mergeTarget = db
-      .prepare(
-        `SELECT * FROM order_items
-         WHERE order_id = ? AND menu_item_id = ? AND status = 'active' AND sent_at IS NULL
-           AND unit_price = ? AND cost_price_snapshot IS ?
-         ORDER BY id ASC LIMIT 1`
-      )
-      .get(order.id, item.id, item.price, item.cost_price);
-
-    let orderItemId;
-    if (mergeTarget) {
-      // Birlashgan miqdor ham yuqori chegaradan oshmasligi kerak (aks holda
-      // 1000 tadan bosib-bosib chegarani aylanib o'tish mumkin bo'lardi).
-      const newQty = parseQuantity(mergeTarget.quantity + qty);
-      db.prepare('UPDATE order_items SET quantity = ?, subtotal = ? WHERE id = ?')
-        .run(newQty, mergeTarget.unit_price * newQty, mergeTarget.id);
-      orderItemId = mergeTarget.id;
-    } else {
-      const subtotal = item.price * qty;
-      // cost_price_snapshot — sotilgan paytdagi tan narx (2026-09-10). Sotuv
-      // narxi (unit_price) allaqachon shu yerda "muzlatilar" edi, tan narx esa
-      // hisobotda menu_items'dan JONLI o'qilardi — natijada narx keyin
-      // o'zgartirilsa o'tgan oylarning foydasi ham o'zgarib ketardi.
-      const info = db.prepare(
-        `INSERT INTO order_items (order_id, menu_item_id, name_snapshot, unit_price, cost_price_snapshot, quantity, subtotal, added_by, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
-      ).run(order.id, item.id, item.name, item.price, item.cost_price, qty, subtotal, waiterId, ts);
-      orderItemId = info.lastInsertRowid;
-    }
+    const orderItemId = addPendingQuantity(order.id, {
+      menuItemId: item.id,
+      name: item.name,
+      unitPrice: item.price,
+      costPrice: item.cost_price,
+    }, qty, waiterId, ts);
 
     // Taom omborga (masalan suv/salfetka) bog'langan bo'lsa — shu miqdorni
     // ombordan ayiramiz. Yetarli qoldiq bo'lmasa inventory.consume() xato otadi,
@@ -191,6 +206,33 @@ function updateOrderItemQuantity(orderItemId, quantity, userId) {
     // bog'langan bo'lsa — faqat FARQNI (delta) ombordan ayiramiz/qaytaramiz,
     // butun miqdorni emas (aks holda qoldiq noto'g'ri hisoblanardi).
     const delta = qty - orderItem.quantity;
+
+    // 2026-09-11: OSHXONAGA YUBORILGAN qatorga miqdor QO'SHILSA — qo'shimcha
+    // qism alohida, HALI YUBORILMAGAN qator bo'lib tushadi (yoki shu taomning
+    // mavjud yuborilmagan qatoriga qo'shiladi), yuborilgan qator o'zgarmaydi.
+    // NEGA: ilgari yuborilgan qatorning miqdori shunchaki oshirilardi. Oshpaz
+    // "Osh ×2"ni tayyorlab bo'lgan va afitsiant olib ketgan (picked_up) bo'lsa,
+    // "×5" ga oshirilgan qator oshxona ekranida UMUMAN ko'rinmasdi — qo'shilgan
+    // 3 ta osh pishirilmas, lekin hisobga kirardi. Faqat "tayyor" bo'lsa esa
+    // oshpaz "5 × Osh ✅ Tayyor"ni ko'rib, qolgan 3 tasini tayyorlashni
+    // bilmasdi. (addItemToTable() dagi X-06 izohi aynan shu sababli yuborilgan
+    // qatorga birlashtirmaydi — miqdor tugmasi esa bu qoidani aylanib o'tardi.)
+    // Kamaytirish esa avvalgidek shu qatorning o'zida: taom bekor qilinmoqda,
+    // oshpaz kamroq miqdorni ko'radi.
+    if (delta > 0 && orderItem.sent_at) {
+      const menuItem = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(orderItem.menu_item_id);
+      const newRowId = addPendingQuantity(order.id, {
+        menuItemId: orderItem.menu_item_id,
+        name: orderItem.name_snapshot,
+        unitPrice: orderItem.unit_price,
+        costPrice: orderItem.cost_price_snapshot,
+      }, delta, userId, nowIso());
+      if (menuItem && menuItem.inventory_item_id) {
+        inventory.consume(menuItem.inventory_item_id, delta, { orderItemId: newRowId, userId, productName: menuItem.name });
+      }
+      return order.id;
+    }
+
     if (delta !== 0) {
       const menuItem = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(orderItem.menu_item_id);
       if (menuItem && menuItem.inventory_item_id) {
@@ -278,17 +320,37 @@ function cancelOrderItem(orderItemId, userId) {
   return buildOrderView(orderId);
 }
 
-function closeTable(tableId, waiterId) {
+// `allowUnsentIds` (2026-09-11) — oshxonaga YUBORILMAGAN bo'lsa ham hisobga
+// kiritishga ruxsat berilgan qatorlar id'si (kassir ularni ko'rib tasdiqlagan).
+// NEGA standart holatda rad etiladi: X-14 qoidasi ("yuborilmagan taom bor
+// paytda stol yopilmaydi") ilgari faqat afitsiant EKRANIDA edi — kassir (va
+// to'g'ridan-to'g'ri API) stolni oshxonaga hech qachon bormagan taom bilan
+// yopa olardi: mijoz berilmagan ovqat uchun pul to'lardi. Endi server rad
+// etadi va QAYSI taomlar ekanini aytadi. Kassir esa ro'yxatni ko'rib, ANIQ
+// tasdiqlab yopa oladi (masalan suvni afitsiant oshxonasiz o'zi bergan) —
+// qat'iy bloklash afitsiant band paytda mijozni to'lovsiz ushlab qolardi.
+// Umumiy "ruxsat" bayrog'i emas, aynan qator id'lari: tasdiqlash oynasi
+// ochiq turganda qo'shilgan yangi taom tasdiqsiz hisobga tushmasin.
+function closeTable(tableId, waiterId, { allowUnsentIds = [] } = {}) {
   const run = db.transaction(() => {
     const table = getTable(tableId);
     const orderRow = findOpenOrderRow(table.id);
     if (!orderRow) throw new OrderError('Bu stolda ochiq buyurtma yo\'q', 404);
 
     const activeItems = db
-      .prepare("SELECT subtotal FROM order_items WHERE order_id = ? AND status = 'active'")
+      .prepare("SELECT id, subtotal, name_snapshot, quantity, sent_at FROM order_items WHERE order_id = ? AND status = 'active'")
       .all(orderRow.id);
     if (activeItems.length === 0) {
       throw new OrderError("Buyurtmada hech qanday taom yo'q, hisob-kitob qilib bo'lmaydi");
+    }
+    const allowed = new Set(allowUnsentIds.map(Number));
+    const unsent = activeItems.filter((it) => !it.sent_at && !allowed.has(it.id));
+    if (unsent.length > 0) {
+      const list = unsent.map((it) => `${it.name_snapshot} ×${it.quantity}`).join(', ');
+      throw new OrderError(
+        `Oshxonaga yuborilmagan taom bor: ${list}. Avval oshxonaga yuboring yoki bekor qiling.`,
+        409
+      );
     }
     const total = activeItems.reduce((sum, it) => sum + it.subtotal, 0);
     const ts = nowIso();

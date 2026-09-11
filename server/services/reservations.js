@@ -67,8 +67,16 @@ function list({ status, scope, today = localDateStr() } = {}) {
 // A-05 (yangi bron kelganda hech kim bilmasdi) uchun bildirishnoma jadvali
 // ATAYLAB ishlatilmadi: bosh sahifa `new_reservations`ni poll qiladi — bu
 // yetarli va boshqa modulga (notifications) bog'liqlik qo'shmaydi.
-function countNew() {
-  return db.prepare("SELECT COUNT(*) AS c FROM reservations WHERE status = 'new'").get().c;
+//
+// 2026-09-11: faqat BUGUNDAN boshlab (kelgusi) tasdiqlanmagan bronlar
+// sanaladi. Ilgari o'tgan kungi, hech kim tasdiqlamagan bron ham "E'tibor
+// talab qiladi"da ABADIY qolardi — endi hech narsa qilib bo'lmaydigan
+// yozuv bosh sahifani doim "muammo bor" holatida ushlab turardi va
+// "✅ Hammasi joyida" hech qachon chiqmasdi. `today` — faqat testlar uchun.
+function countNew(today = localDateStr()) {
+  return db
+    .prepare("SELECT COUNT(*) AS c FROM reservations WHERE status = 'new' AND res_date >= ?")
+    .get(today).c;
 }
 
 function countForDate(date) {

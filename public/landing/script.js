@@ -1050,6 +1050,11 @@ document.addEventListener('DOMContentLoaded', () => {
           await loadMenu();
           throw new Error("Savatingizdagi bir taom endi mavjud emas — savat yangilandi. Tekshirib, qayta yuboring.");
         }
+        // 2026-09-11: yetkazib berish shartlari endi serverda ham tekshiriladi
+        // (o'chirilgan / minimal summa). Sahifa oldinroq ochilgan bo'lsa
+        // brauzerdagi sozlama eskirgan — yangisini olamiz, shunda oyna
+        // (yetkazish tugmasi, narx, minimal summa) serverga moslashadi.
+        if (fulfillment === 'delivery') loadSettings();
         throw new Error(msg);
       }
 
@@ -1060,7 +1065,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const serverTotal = Number(data && data.total_amount);
       let text = orderNo ? `Buyurtma №${orderNo} qabul qilindi.` : 'Buyurtmangiz qabul qilindi.';
       if (Number.isFinite(serverTotal) && serverTotal > 0) text += ` Jami: ${fmtSom(serverTotal)}.`;
-      if (fulfillment === 'delivery' && feeAtSubmit > 0) text += ` Yetkazish narxi alohida: ${fmtSom(feeAtSubmit)}.`;
+      // 2026-09-11: server buyurtmaga yozgan yetkazish narxi ustun (u admin
+      // va kuryer ko'radigan summa); eski server javobida bo'lmasa — ekrandagi.
+      const serverFee = Number(data && data.delivery_fee);
+      const fee = Number.isFinite(serverFee) ? serverFee : feeAtSubmit;
+      if (fulfillment === 'delivery' && fee > 0) text += ` Yetkazish narxi alohida: ${fmtSom(fee)}.`;
       text += " Tez orada siz bilan bog'lanamiz.";
       checkoutSuccessText.textContent = text;
 

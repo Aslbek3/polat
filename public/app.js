@@ -1245,10 +1245,10 @@ function buildEscPosReceipt(view, settings) {
       dateIso: view.order.created_at,
       items: view.items,
       total: view.total,
-      footerLines: [
+      footerLines: customerChargeLines(view).concat([
         view.order.phone ? `Mijoz tel: ${view.order.phone}` : '',
         view.order.address ? `Manzil: ${view.order.address}` : '',
-      ],
+      ]),
     }));
   }
   if (view.kind === 'manual') {
@@ -1407,6 +1407,7 @@ function renderCustomerReceiptBox(view) {
     items: view.items,
     total: view.total,
     footerHtml: `
+      ${customerChargeLines(view).map((line) => `${escapeHtml(line)}<br>`).join('')}
       ${view.order.phone ? `Mijoz tel: ${escapeHtml(view.order.phone)}<br>` : ''}
       ${view.order.address ? `Manzil: ${escapeHtml(view.order.address)}<br>` : ''}
       ${view.order.note ? `Izoh: ${escapeHtml(view.order.note)}<br>` : ''}
@@ -1499,11 +1500,37 @@ function openCustomerReceiptModal(order) {
       phone: order.phone,
       address: order.address,
       note: order.note,
+      delivery_fee: order.delivery_fee,
     },
     items: order.items,
     total: order.total_amount,
   };
   showReceiptModal(view);
+}
+
+// Yetkazish narxi (2026-09-11). Buyurtma paytidagi narx `customer_orders.
+// delivery_fee`da saqlanadi va `total_amount`ga (taomlar) KIRMAYDI — shu
+// sabab kuryer "mijozdan qancha olish kerak"ni alohida ko'rishi shart
+// (ilgari mijozga "yetkazish alohida 10 000" deyilardi, kuryer ekranida
+// esa bu summa umuman yo'q edi). 0/NULL (olib ketish, bepul yoki eski
+// yozuv) — hech narsa chiqmaydi. Qaytaradi: { fee, payable } yoki null.
+function deliveryCharge(order) {
+  const fee = Number(order && order.delivery_fee);
+  if (!Number.isFinite(fee) || fee <= 0) return null;
+  return { fee, payable: (Number(order.total_amount) || 0) + fee };
+}
+
+// Mijoz buyurtmasi cheki uchun (JAMI — taomlar — dan keyingi qatorlar).
+function customerChargeLines(view) {
+  const c = deliveryCharge({ delivery_fee: view.order.delivery_fee, total_amount: view.total });
+  return c ? [`Yetkazish: ${fmtMoney(c.fee)}`, `To'lov jami: ${fmtMoney(c.payable)}`] : [];
+}
+
+// Kuryer va admin kartalari uchun bitta qator HTML (bo'sh bo'lsa '').
+function deliveryChargeHtml(order) {
+  const c = deliveryCharge(order);
+  if (!c) return '';
+  return `<div class="card-sub">🚚 Yetkazish: ${fmtMoney(c.fee)} · Mijozdan olinadi: <strong>${fmtMoney(c.payable)}</strong></div>`;
 }
 
 function initNav(activePage) {

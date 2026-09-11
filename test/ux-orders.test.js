@@ -430,6 +430,7 @@ test("getLatestReceiptForTable: buyurtma yo'q bo'lsa 404, bekor qilingan chiqari
   );
 
   orders.addItemToTable(table.id, item.id, 2, waiter.id);
+  orders.sendPendingItems(table.id); // yuborilmagan taom bilan stol yopilmaydi (2026-09-11)
   const closed = orders.closeTable(table.id, waiter.id);
 
   // Keyingi buyurtma bekor qilindi — "oxirgi chek" hamon yopilgani.

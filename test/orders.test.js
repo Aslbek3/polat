@@ -89,6 +89,9 @@ test("hisob-kitob qilingan stol yopiladi va chek so'rovi yaratiladi", () => {
   const item = h.createMenuItem({ price: 7000 });
 
   orders.addItemToTable(table.id, item.id, 2, waiter.id);
+  // 2026-09-11: yuborilmagan taom bor stol yopilmaydi (closeTable izohi) —
+  // haqiqiy oqimdagidek avval oshxonaga yuboriladi.
+  orders.sendPendingItems(table.id);
   const receipt = orders.closeTable(table.id, waiter.id);
 
   assert.strictEqual(receipt.order.status, 'closed');
@@ -103,6 +106,7 @@ test("yopilgan buyurtmani o'zgartirib bo'lmaydi", () => {
   const item = h.createMenuItem({ price: 7000 });
 
   const view = orders.addItemToTable(table.id, item.id, 1, waiter.id);
+  orders.sendPendingItems(table.id);
   orders.closeTable(table.id, waiter.id);
 
   assert.throws(() => orders.updateOrderItemQuantity(view.items[0].id, 3, waiter.id), /yopilgan/i);

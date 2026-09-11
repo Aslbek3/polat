@@ -208,6 +208,12 @@ CREATE TABLE IF NOT EXISTS customer_orders (
   -- shu sabab yetkazib berish faktini alohida nullable ustunda kuzatamiz.
   -- NULL = hali yetkazilmagan.
   delivered_at TEXT,
+  -- delivery_fee (2026-09-11) — buyurtma berilgan PAYTDAGI yetkazish narxi
+  -- (settings.delivery_fee nusxasi), taomlar summasi (`total_amount`)dan
+  -- ATAYLAB alohida: hisobotdagi tushum faqat taomlar (sotuv). Chek va kuryer
+  -- ekranida "yetkazish" va "mijozdan olinadi" sifatida ko'rsatiladi.
+  -- 0 — olib ketish yoki bepul yetkazish; NULL — bu ustundan oldingi yozuv.
+  delivery_fee INTEGER,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_customer_orders_status ON customer_orders(status);
