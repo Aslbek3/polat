@@ -15,7 +15,10 @@ avtomatik ishga tushirish, nosozliklarni topish, sozlamalar, texnik ma'lumot.
 ## Tez boshlash (5 qadam)
 
 1. **Admin panelda hisob:** Xodimlar → yangi xodim, login `printer`, rol **Oshpaz**.
-2. **Node.js 18+** o'rnating ([nodejs.org](https://nodejs.org), LTS).
+2. **Node.js 18+** o'rnating ([nodejs.org](https://nodejs.org), LTS) va faqat agent
+   fayllarini yuklab oling:
+   [agent-only.zip](https://github.com/Aslbek3/polat/archive/refs/heads/agent-only.zip)
+   — bu arxivda server kodi yo'q, u **VPS'ga yuklanmaydi**.
 3. **Sozlang:** `config.example.json` dan nusxa olib `config.json` deb nomlang,
    server manzili, login/parol va printer IP'sini yozing.
 4. **Printerni sinang:**

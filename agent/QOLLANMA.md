@@ -128,15 +128,35 @@ Tekshirish: `Win+R` → `cmd` → `node -v` → `v20.x.x` (yoki undan yuqori) ch
 
 ### 4.3. Agentni yuklab oling
 
-Brauzerda oching:
+Brauzerda oching — bu arxivda **faqat agent fayllari** bor:
 
 ```
-https://github.com/Aslbek3/polat/archive/refs/heads/printer-agent.zip
+https://github.com/Aslbek3/polat/archive/refs/heads/agent-only.zip
 ```
 
-Arxivni oching va ichidagi **`agent`** papkasini `C:\polat-agent` ga ko'chiring.
+Arxivni oching va ichidagi fayllarni `C:\polat-agent` ga ko'chiring. Papkada
+shular bo'lishi kerak:
 
-> Internetsiz variant: `agent` papkasini USB bilan ko'chiring.
+```
+C:\polat-agent\
+  print-agent.js
+  config.example.json
+  start.bat
+  README.md
+  QOLLANMA.md
+  test\
+```
+
+> ⚠️ **Diqqat — nima QILINMAYDI:**
+> - Bu fayllar **serverga (VPS'ga) yuklanmaydi.** Server kodi umuman
+>   o'zgarmagan, u yerda hech narsa yangilanmaydi.
+> - Loyihaning **butun repozitoriyasi ko'chirilmaydi** — printer ulangan
+>   kompyuterga faqat shu 5-6 ta fayl kerak. Shuning uchun yuqoridagi havola
+>   `agent-only` branchiga ishora qiladi: uning ichida `server/`, `public/`
+>   yoki `joriy_holat/` papkalari yo'q.
+> - Bu kompyuterda `npm install` qilish, baza yaratish shart emas.
+>
+> Internetsiz variant: `agent` papkasini USB bilan ko'chiring — mazmuni bir xil.
 
 ### 4.4. Sozlamani yozing
 
