@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Stollar — Kassa — Ziyo Famliy</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="app-shell">
+    <nav class="bottom-nav" id="bottomNav">
+      <a href="tables.html" data-page="tables"><span class="ic">🪑</span>Stollar</a>
+      <a href="stats.html" data-page="stats"><span class="ic">📈</span>Statistika</a>
+      <a href="manual.html" data-page="manual"><span class="ic">🧮</span>Hisoblash</a>
+    </nav>
+    <div style="flex:1;">
+      <div class="topbar">
+        <h1>Stollar (kassa)</h1>
+        <button class="logout-btn" id="logoutBtn">Chiqish</button>
+      </div>
+      <main>
+        <div id="tableGrid" class="table-grid"><p class="dim">Yuklanmoqda...</p></div>
+      </main>
+    </div>
+  </div>
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="tables.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Hisob-kitob — Ziyo Famliy</title>
+<link rel="stylesheet" href="../style.css">
+<link rel="manifest" href="../manifest.json">
+<link rel="icon" href="../icon.svg">
+</head>
+<body class="app-body">
+  <div class="topbar">
+    <h1><a href="tables.html" style="text-decoration:none;">←</a> <span id="tableTitle">Stol</span></h1>
+    <button class="logout-btn" id="logoutBtn">Chiqish</button>
+  </div>
+  <main>
+    <div class="card">
+      <div class="card-title mt-8">Joriy buyurtma</div>
+      <div id="orderLines"><p class="dim">Yuklanmoqda...</p></div>
+    </div>
+  </main>
+
+  <div class="order-total-bar">
+    <span>Jami: <span class="amount" id="totalAmount">0 so'm</span></span>
+    <button class="btn" id="cancelOrderBtn" style="display:none;background:#fff;color:#c0392b;">Bo'shatish</button>
+    <button class="btn" id="closeBtn" style="background:#fff;color:var(--primary);">💳 Hisob-kitob qilish</button>
+  </div>
+
+  <script src="../app.js" data-api-base="../"></script>
+  <script src="order.js"></script>
+</body>
+</html>

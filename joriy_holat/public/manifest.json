@@ -1,0 +1,11 @@
+{
+  "name": "Ziyo Famliy restorani",
+  "short_name": "Ziyo Famliy",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#14120e",
+  "theme_color": "#c9a227",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
