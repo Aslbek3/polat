@@ -1,0 +1,21 @@
+{
+  "_izoh": "Bu namuna. Nusxa olib 'config.json' deb nomlang va o'zingiznikiga moslang.",
+
+  "server": "https://polatuz.duckdns.org",
+
+  "_izoh_hisob": "Admin panel > Xodimlar da yaratilgan hisob. Roli: Oshpaz. Faqat shu agent uchun, boshqa hech kim ishlatmasin.",
+  "username": "printer",
+  "password": "BU-YERGA-PAROL",
+
+  "_izoh_printer": "Printerning selftest qog'ozidagi IP manzili (Net DHCP: Disabled bo'lsa o'zgarmaydi).",
+  "printer": { "host": "192.168.1.230", "port": 9100 },
+
+  "_izoh_qolganlari": "Quyidagilarni odatda o'zgartirish shart emas.",
+  "pollMs": 2000,
+  "retryMs": 15000,
+  "width": 42,
+  "beep": true,
+  "cut": true,
+  "copies": 1,
+  "tzOffsetMinutes": 300
+}

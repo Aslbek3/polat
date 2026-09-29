@@ -4,3 +4,9 @@ node_modules/
 data/
 server/qz-keys/private-key.pem
 public/uploads/
+
+# Agent (oshxona printeri) — parol va loglar repoga tushmasin
+agent/config.json
+agent/*.log
+agent/*.log.old
+agent/test/*.log
