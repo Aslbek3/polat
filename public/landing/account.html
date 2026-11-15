@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Hisobim — Ziyo Famliy</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Poppins:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css?v=202611012325">
+<link rel="stylesheet" href="account.css?v=202611012325">
+</head>
+<body class="account-page">
+
+  <!-- ============ HEADER (index.html bilan bir xil) ============ -->
+  <header class="site-header scrolled" id="siteHeader">
+    <div class="header-inner">
+      <a href="index.html" class="brand">Ziyo Famliy</a>
+      <nav class="nav-links" id="navLinks">
+        <button class="nav-close" id="navClose" type="button" aria-label="Yopish">&times;</button>
+        <a href="index.html#hero">Bosh sahifa</a>
+        <a href="menu.html">Menyu</a>
+        <a href="index.html#biz-haqimizda">Biz haqimizda</a>
+        <a href="index.html#aloqa">Aloqa</a>
+        <a href="account.html" class="nav-account" data-account-link aria-current="page"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span data-account-label>Kirish</span></a>
+      </nav>
+      <a href="index.html?bron=1" class="btn-pill header-cta">Stol bron qilish</a>
+      <a href="account.html" class="header-account" data-account-link aria-label="Hisobim"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span data-account-label>Kirish</span></a>
+      <button class="nav-toggle" id="navToggle" aria-label="Menyu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main class="acc-main">
+
+    <!-- Yuklanmoqda -->
+    <div class="acc-loading" id="accLoading"><span class="acc-spinner"></span></div>
+
+    <!-- ============ KIRISH ============ -->
+    <section class="acc-auth hidden" id="accAuth">
+      <div class="acc-auth-card">
+
+        <!-- 1-qadam: telefon -->
+        <form id="stepPhone" class="acc-step" novalidate>
+          <p class="kicker">Ziyo Famliy</p>
+          <h1 class="acc-title">Hisobingizga kiring</h1>
+          <p class="acc-lead">Buyurtmalaringiz tarixi, saqlangan manzillar va bronlaringiz bir joyda. Parol shart emas — kodni Telegram orqali olasiz.</p>
+          <label class="acc-label" for="phoneInput">Telefon raqam</label>
+          <div class="acc-phone">
+            <span>+998</span>
+            <input id="phoneInput" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="90 123 45 67" maxlength="12">
+          </div>
+          <div class="acc-error" id="phoneError" role="alert"></div>
+          <button type="submit" class="btn-solid block" id="phoneSubmit">Davom etish</button>
+          <p class="acc-fine">Davom etish orqali raqamingiz faqat buyurtma va bron uchun ishlatilishiga rozilik bildirasiz.</p>
+        </form>
+
+        <!-- 2a-qadam: Telegram bilan bog'lash (birinchi marta) -->
+        <div id="stepLink" class="acc-step hidden">
+          <button type="button" class="acc-back" data-back>&larr; Raqamni o&rsquo;zgartirish</button>
+          <h2 class="acc-title sm">Telegram orqali tasdiqlang</h2>
+          <ol class="acc-steps-list">
+            <li>Pastdagi tugma orqali <b id="linkBotName">botimizni</b> oching va <b>Start</b>&nbsp;bosing.</li>
+            <li>Botda <b>&laquo;📱 Raqamni ulashish&raquo;</b> tugmasini bosing.</li>
+            <li>Bot sizga 6 xonali kod yuboradi — bu sahifa o&rsquo;zi keyingi qadamga o&rsquo;tadi.</li>
+          </ol>
+          <a class="acc-tg-btn" id="linkBotBtn" href="#" target="_blank" rel="noopener">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.3-5 9.2-8.3c.4-.4-.1-.6-.6-.2L6.1 13 1.2 11.5c-1.1-.3-1.1-1.1.2-1.6L20.5 2.6c.9-.3 1.7.2 1.4 1.7z"/></svg>
+            Telegram&rsquo;ni ochish
+          </a>
+          <div class="acc-wait" id="linkStatus"><span class="acc-dot"></span><span>Telegram&rsquo;dan tasdiq kutilmoqda…</span></div>
+          <div class="acc-error" id="linkError" role="alert"></div>
+          <button type="button" class="acc-link-btn" id="linkHaveCode">Kod allaqachon keldimi? Kiritish</button>
+          <div class="acc-or hidden" id="linkSmsWrap">
+            <span>yoki</span>
+            <button type="button" class="acc-sms-btn" id="linkSmsBtn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Telegram&rsquo;im yo&rsquo;q — kodni SMS orqali olish
+            </button>
+          </div>
+        </div>
+
+        <!-- 2b-qadam: kod -->
+        <form id="stepCode" class="acc-step hidden" novalidate>
+          <button type="button" class="acc-back" data-back>&larr; Raqamni o&rsquo;zgartirish</button>
+          <h2 class="acc-title sm">Kodni kiriting</h2>
+          <p class="acc-lead" id="codeLead"><span id="codeVia">Telegram botimiz</span> <b id="codePhone"></b> raqamiga 6 xonali kod yubordi.</p>
+          <input id="codeInput" class="acc-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="6 xonali kod">
+          <div class="acc-error" id="codeError" role="alert"></div>
+          <button type="submit" class="btn-solid block" id="codeSubmit">Kirish</button>
+          <button type="button" class="acc-link-btn" id="codeResend" disabled>Kodni qayta yuborish</button>
+        </form>
+
+        <!-- 3-qadam: ism (yangi mijoz) -->
+        <form id="stepName" class="acc-step hidden" novalidate>
+          <div class="acc-success-ic">&#10003;</div>
+          <h2 class="acc-title sm">Xush kelibsiz!</h2>
+          <p class="acc-lead">Sizga qanday murojaat qilaylik? Ism buyurtma va bronlarda avtomatik to&rsquo;ldiriladi.</p>
+          <label class="acc-label" for="nameInput">Ism familiya</label>
+          <input id="nameInput" class="acc-input" type="text" autocomplete="name" maxlength="60" placeholder="Masalan: Abdulloh Karimov">
+          <div class="acc-error" id="nameError" role="alert"></div>
+          <button type="submit" class="btn-solid block" id="nameSubmit">Saqlash</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ HISOB (login qilingan) ============ -->
+    <section class="acc-dash hidden" id="accDash">
+      <div class="acc-hero">
+        <div class="acc-wrap acc-hero-inner">
+          <div class="acc-avatar" id="dashAvatar" aria-hidden="true"></div>
+          <div class="acc-hero-text">
+            <p class="kicker light">Shaxsiy hisob</p>
+            <h1 id="dashName">Hisobim</h1>
+            <p id="dashPhone"></p>
+          </div>
+          <a href="menu.html" class="btn-solid acc-hero-cta">Buyurtma berish</a>
+        </div>
+        <div class="acc-wrap">
+          <nav class="acc-tabs" role="tablist" id="accTabs">
+            <button type="button" role="tab" data-tab="orders">Buyurtmalar</button>
+            <button type="button" role="tab" data-tab="reservations">Bronlar</button>
+            <button type="button" role="tab" data-tab="addresses">Manzillar</button>
+            <button type="button" role="tab" data-tab="profile">Profil</button>
+          </nav>
+        </div>
+      </div>
+
+      <div class="acc-wrap acc-body">
+
+        <!-- Buyurtmalar -->
+        <div class="acc-panel" data-panel="orders">
+          <div class="acc-panel-head">
+            <h2>Buyurtmalar tarixi</h2>
+            <button type="button" class="acc-link-btn" id="ordersRefresh">Yangilash</button>
+          </div>
+          <div id="ordersList" class="acc-list"></div>
+        </div>
+
+        <!-- Bronlar -->
+        <div class="acc-panel hidden" data-panel="reservations">
+          <div class="acc-panel-head">
+            <h2>Stol bronlari</h2>
+            <a href="index.html?bron=1" class="acc-link-btn">+ Yangi bron</a>
+          </div>
+          <div id="resList" class="acc-list"></div>
+        </div>
+
+        <!-- Manzillar -->
+        <div class="acc-panel hidden" data-panel="addresses">
+          <div class="acc-panel-head">
+            <h2>Saqlangan manzillar</h2>
+            <button type="button" class="acc-link-btn" id="addrAddBtn">+ Manzil qo&rsquo;shish</button>
+          </div>
+
+          <form class="acc-card acc-addr-form hidden" id="addrForm" novalidate>
+            <h3 id="addrFormTitle">Yangi manzil</h3>
+            <div class="acc-chips" id="addrLabelChips">
+              <button type="button" data-label="Uy">🏠 Uy</button>
+              <button type="button" data-label="Ish">💼 Ish</button>
+              <button type="button" data-label="">Boshqa</button>
+            </div>
+            <label class="acc-label" for="addrText">Manzil</label>
+            <textarea id="addrText" class="acc-input" rows="2" maxlength="200" placeholder="Mahalla, ko&rsquo;cha, uy raqami, mo&rsquo;ljal"></textarea>
+            <div class="acc-row">
+              <button type="button" class="acc-loc-btn" id="addrLocBtn">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+                <span>Joriy joylashuvni qo&rsquo;shish</span>
+              </button>
+              <label class="acc-check"><input type="checkbox" id="addrDefault"> Asosiy manzil</label>
+            </div>
+            <div class="acc-error" id="addrError" role="alert"></div>
+            <div class="acc-form-actions">
+              <button type="button" class="btn-ghost dark" id="addrCancel">Bekor qilish</button>
+              <button type="submit" class="btn-solid" id="addrSave">Saqlash</button>
+            </div>
+          </form>
+
+          <div id="addrList" class="acc-list"></div>
+        </div>
+
+        <!-- Profil -->
+        <div class="acc-panel hidden" data-panel="profile">
+          <div class="acc-panel-head"><h2>Profil</h2></div>
+          <form class="acc-card" id="profileForm" novalidate>
+            <label class="acc-label" for="profName">Ism familiya</label>
+            <input id="profName" class="acc-input" type="text" maxlength="60" autocomplete="name">
+            <label class="acc-label" for="profPhone">Telefon raqam</label>
+            <input id="profPhone" class="acc-input" type="text" disabled>
+            <p class="acc-fine">Raqam Telegram orqali tasdiqlangan. Boshqa raqam bilan kirish uchun hisobdan chiqib, yangi raqamni kiriting.</p>
+            <div class="acc-error" id="profError" role="alert"></div>
+            <button type="submit" class="btn-solid" id="profSave">Saqlash</button>
+          </form>
+
+          <div class="acc-card acc-danger">
+            <h3>Xavfsizlik</h3>
+            <p class="acc-fine">Telefoningizni yo&rsquo;qotdingizmi yoki begona qurilmada kirgan edingizmi? Barcha qurilmalardagi sessiyalarni bir bosishda yopishingiz mumkin.</p>
+            <div class="acc-form-actions start">
+              <button type="button" class="btn-ghost dark" id="logoutBtn">Chiqish</button>
+              <button type="button" class="acc-danger-btn" id="logoutAllBtn">Barcha qurilmalardan chiqish</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="acc-toast" id="accToast" role="status" aria-live="polite"></div>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <span class="brand small">Ziyo Famliy</span>
+      <p>&copy; 2026 Ziyo Famliy restorani. Barcha huquqlar himoyalangan.</p>
+    </div>
+  </footer>
+
+  <script src="account.js?v=202611012325"></script>
+</body>
+</html>
