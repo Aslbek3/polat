@@ -4,6 +4,10 @@ Mustaqil Node.js (Express 5) + better-sqlite3 veb-ilova: o'z `package.json`, o'z
 
 > **To'liq ishlar tarixi** (2026-08-25 … 2026-10-24, har bir o'zgarish sababi va tekshiruvi bilan) — `TARIX.md`. Bu fayl faqat **hozirgi** holat va ishlashdan oldin bilish SHART bo'lgan qoidalar. Biror qismni o'zgartirishdan oldin shu mavzu bo'yicha `TARIX.md`dan qidiring (`grep -n "<kalit so'z>" TARIX.md`).
 
+## v2 — yangi arxitektura (qurilmoqda, 2026-11-17'dan)
+
+`v2/` papkasida TypeScript + PostgreSQL backend bosqichma-bosqich quriladi (`v2/ARXITEKTURA.md`). Eski `server/` production'da ishlashda davom etadi — v2 tayyor bo'lguncha unga tegmang. Zaxira: `zaxira/2026-11-17-sqlite` tegi (`c4579c3`).
+
 ## Ishga tushirilgan holat
 
 - PM2'da **`polat`** nomi bilan, `.env`: `PORT=3213`, `HOST=127.0.0.1`, `TRUST_PROXY=1`.
