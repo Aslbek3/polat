@@ -20,7 +20,10 @@ pg.types.setTypeParser(pg.types.builtins.NUMERIC, (value) => Number(value));
 // DATE — vaqt mintaqasi siljishi bo'lmasligi uchun "YYYY-MM-DD" string qoladi.
 pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
 
-export type Queryable = Pick<pg.Pool, 'query'> | pg.PoolClient;
+/** So'rov bajara oladigan har qanday narsa: Database, Pool yoki tranzaksiya klienti. */
+export interface Queryable {
+  query<R extends pg.QueryResultRow = pg.QueryResultRow>(text: string, params?: unknown[]): Promise<pg.QueryResult<R>>;
+}
 
 export interface Database {
   pool: pg.Pool;

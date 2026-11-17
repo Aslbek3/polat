@@ -20,7 +20,13 @@ v2/
     http/errors.ts          — AppError oilasi (400/401/403/404/409/410/429)
     http/validate.ts        — zod bilan kirishni tekshirish
     lib/logger.ts           — pino (cookie/parol/token/kod yashiriladi)
-    modules/<mavzu>/        — (keyingi bosqichlar) routes.ts -> service.ts -> repository.ts
+    modules/auth/           — xodim sessiyasi (s.<id>.<versiya>.<hmac>), requireAuth (rol hududlari), login
+    modules/users/          — xodimlarni boshqarish (admin)
+    modules/audit/          — audit_log yozish va xulosa
+    modules/customers/      — mijoz sessiyasi (eski cookie bilan mos), profil, manzillar
+    modules/<mavzu>/        — (keyingi bosqichlar) routes.ts -> service.ts
+    cli/create-admin.ts     — boshlang'ich admin + standart sozlamalar
+    lib/                    — passwords (eski xeshlar bilan mos), cookies, phone, rateLimit (bazada)
   test/                     — haqiqiy PostgreSQL bilan (vitest)
 ```
 
@@ -41,12 +47,22 @@ bitta kassirda bitta ochiq smena, to'lov turi faqat cash/card/mixed,
 oshxona cheki yo stolga yo onlayn buyurtmaga tegishli, mijoz telefoni `+998XXXXXXXXX`,
 SQLite'da yo'q bo'lgan barcha FOREIGN KEY'lar.
 
+## Sessiyalar
+
+- **Xodim** (`polat_session`): versiyali cookie. Parol almashsa, rol o'zgarsa, xodim
+  o'chirilsa yoki `POST /api/me/logout-all` — barcha qurilmalardagi sessiya darhol bekor.
+  Eski formatdagi cookie (v1) qabul qilinadi va avtomatik yangilanadi — o'tishda hech kim chiqib ketmaydi.
+- **Mijoz** (`polat_customer`): format va kalit eski tizim bilan bir xil.
+- Login cheklovi: IP bo'yicha 1 daqiqada 5 ta, login nomi bo'yicha 15 daqiqada 10 ta — bazada, restartda yo'qolmaydi.
+- Oxirgi faol adminni o'chirib bo'lmaydi; admin o'zini o'chira/rolini o'zgartira olmaydi.
+
 ## Buyruqlar
 
 ```bash
 cp .env.example .env          # DATABASE_URL, SESSION_SECRET ...
 npm ci
 npm run migrate               # sxemani qo'llash (idempotent)
+npm run create-admin -- boss 'parol'   # boshlang'ich admin
 npm run dev                   # ishlab chiqish
 npm test                      # TEST_DATABASE_URL (nomida "test" bo'lishi SHART — har safar tozalanadi)
 npm run build && npm start    # production
@@ -57,7 +73,7 @@ npm run build && npm start    # production
 | # | Bosqich | Holat |
 |---|---|---|
 | 1 | Asos: config, log, pool, migratsiyalar, to'liq sxema, xato ishlovchisi, testlar | ✅ |
-| 2 | Kirish va rollar: xodim/mijoz sessiyalari (session_version bilan bekor qilish), rate-limit bazada | ⏳ |
+| 2 | Kirish va rollar: xodim/mijoz sessiyalari (session_version bilan bekor qilish), rate-limit bazada, xodimlar, audit, mijoz profili/manzillari | ✅ |
 | 3 | Menyu va ombor | ⏳ |
 | 4 | Stol buyurtmalari va kassa (smena, to'lov, qo'lda chek) | ⏳ |
 | 5 | Onlayn buyurtma, yetkazish hududi, printer navbati (WS), Telegram/SMS | ⏳ |

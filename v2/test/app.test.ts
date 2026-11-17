@@ -2,10 +2,10 @@ import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createApp } from '../src/http/app.js';
 import { createDatabase } from '../src/db/pool.js';
-import { silentLogger, testDb, testEnv } from './helpers.js';
+import { createStaff, loginAs, silentLogger, testDb, testEnv } from './helpers.js';
 
 const db = testDb();
-const app = createApp({ env: testEnv(), db, logger: silentLogger });
+const app = createApp({ env: testEnv({ SESSION_SECRET: 'x'.repeat(40) }), db, logger: silentLogger });
 afterAll(() => db.close());
 
 describe('HTTP asos', () => {
@@ -32,10 +32,14 @@ describe('HTTP asos', () => {
     await deadDb.close();
   });
 
-  it("noma'lum API yo'li 404 JSON", async () => {
-    const res = await request(app).get('/api/yoq-narsa');
+  it("noma'lum API yo'li: login qilmagan 401, admin hududida 404", async () => {
+    expect((await request(app).get('/api/yoq-narsa')).status).toBe(401);
+    await createStaff(db, 'boss404', 'admin');
+    const agent = await loginAs(app, 'boss404');
+    const res = await agent.get('/api/admin/yoq-narsa');
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('not_found');
+    await db.query("DELETE FROM users WHERE username = 'boss404'");
   });
 
   it('buzilgan JSON 400', async () => {

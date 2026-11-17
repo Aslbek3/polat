@@ -6,6 +6,7 @@ import { createLogger } from './lib/logger.js';
 import { createDatabase } from './db/pool.js';
 import { migrate } from './db/migrator.js';
 import { createApp } from './http/app.js';
+import { purgeExpired } from './lib/rateLimit.js';
 
 async function main() {
   let env;
@@ -27,6 +28,12 @@ async function main() {
   const server = app.listen(env.PORT, env.HOST, () => {
     logger.info({ host: env.HOST, port: env.PORT, env: env.NODE_ENV }, 'polat v2 ishga tushdi');
   });
+
+  // Fon vazifasi: muddati o'tgan rate-limit yozuvlarini tozalash.
+  const purgeTimer = setInterval(() => {
+    purgeExpired(db).catch((err) => logger.warn({ err }, "rate_limit_hits tozalanmadi"));
+  }, 10 * 60_000);
+  purgeTimer.unref();
 
   let stopping = false;
   const shutdown = (signal: string) => {

@@ -23,3 +23,30 @@ export async function truncateAll(db: Database): Promise<void> {
   if (rows.length === 0) return;
   await db.query(`TRUNCATE ${rows.map((r) => `"${r.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`);
 }
+
+import request from 'supertest';
+import { createApp } from '../src/http/app.js';
+import { hashPassword } from '../src/lib/passwords.js';
+
+export const TEST_SECRET = 'test-secret-'.padEnd(40, 'x');
+
+export function testApp(db: Database) {
+  return createApp({ env: testEnv({ SESSION_SECRET: TEST_SECRET }), db, logger: silentLogger });
+}
+
+export async function createStaff(db: Database, username: string, role: string, password = 'parol123') {
+  const { salt, hash } = await hashPassword(password);
+  const { rows } = await db.query<{ id: number }>(
+    'INSERT INTO users (username, password_hash, password_salt, role, full_name) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [username, hash, salt, role, username.toUpperCase()],
+  );
+  return rows[0]!.id;
+}
+
+/** Login qiladi va cookie'ni saqlovchi supertest agentini qaytaradi. */
+export async function loginAs(app: ReturnType<typeof testApp>, username: string, password = 'parol123') {
+  const agent = request.agent(app);
+  const res = await agent.post('/api/login').send({ username, password });
+  if (res.status !== 200) throw new Error(`login ${username}: ${res.status} ${JSON.stringify(res.body)}`);
+  return agent;
+}

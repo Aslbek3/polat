@@ -15,7 +15,9 @@
     "migrate:prod": "node dist/db/migrate-cli.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "create-admin": "tsx src/cli/create-admin.ts",
+    "create-admin:prod": "node dist/cli/create-admin.js"
   },
   "dependencies": {
     "dotenv": "^18.0.10",
