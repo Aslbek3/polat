@@ -82,7 +82,7 @@ function renderReceipt(view) {
     <table>
       ${activeItems.map((it) => `
         <tr>
-          <td>${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
+          <td class="r-item-name">${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
           <td class="text-right">${fmtMoney(it.subtotal)}</td>
         </tr>
       `).join('')}
@@ -92,7 +92,7 @@ function renderReceipt(view) {
       </tr>
     </table>
     <hr>
-    <div class="dim" style="font-size:12px;">
+    <div class="dim" style="font-size:36px;">
       ${view.order.opened_by_name ? `Ochdi: ${escapeHtml(view.order.opened_by_name)}<br>` : ''}
       ${view.order.closed_by_name ? `Yopdi: ${escapeHtml(view.order.closed_by_name)}<br>` : ''}
       Holat: ${view.order.status === 'closed' ? 'Yopilgan' : 'Ochiq'}

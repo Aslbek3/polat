@@ -652,18 +652,38 @@ th { color: var(--text-faint); font-weight: 600; font-size: 11px; text-transform
 
 .receipt {
   background: var(--paper); color: var(--paper-text); border: 1px solid rgba(0,0,0,0.08); border-radius: var(--radius);
-  padding: 24px; max-width: 380px; margin: 0 auto; font-size: 14px;
+  padding: 24px; max-width: 620px; margin: 0 auto; font-size: 42px;
   box-shadow: var(--shadow-lg);
 }
-.receipt h2 { text-align: center; margin: 0 0 4px; font-family: var(--serif); font-weight: 700; letter-spacing: 0.02em; }
-.receipt .r-sub { text-align: center; color: #6b6152; font-size: 12px; margin-bottom: 12px; font-family: var(--script); font-style: italic; font-size: 15px; }
-.receipt table td { padding: 4px 2px; font-size: 13px; border-color: rgba(0,0,0,0.1); }
-.receipt .r-total-row td { border-top: 2px solid var(--paper-text); font-weight: 700; font-size: 16px; }
+.receipt h2 { text-align: center; margin: 0 0 4px; font-family: var(--serif); font-weight: 700; letter-spacing: 0.02em; font-size: 64px; }
+.receipt .r-sub { text-align: center; color: #6b6152; margin-bottom: 12px; font-family: var(--script); font-style: italic; font-size: 42px; }
+.receipt table td { padding: 7px 2px; font-size: 40px; border-color: rgba(0,0,0,0.1); }
+/* Taom NOMI (narx emas) — foydalanuvchi so'rovi (2026-11-09): "taomlar
+   nomlaridan tashqari qolgan barchasi 2 baravar" — shu sabab bu yagona
+   joy avvalgi (kattalashtirilmagan) 20px o'lchamida ataylab qoldirilgan,
+   `.receipt table td` dan KEYIN kelib ustunroq specifiklik bilan ustidan
+   yozadi. Narx ustuni (`.text-right`) umumiy 40px'da qoladi. */
+.receipt table td.r-item-name { font-size: 20px; }
+.receipt .r-total-row td { border-top: 2px solid var(--paper-text); font-weight: 700; font-size: 48px; }
 .receipt hr { border: none; border-top: 1px dashed rgba(0,0,0,0.2); margin: 10px 0; }
 /* Kassir "Hisoblash" chekidagi mijoz raqami — ajratib ko'rinsin deb katta/qalin/
    qora (2026-09-26, foydalanuvchi so'rovi; `--paper-text` qoramtir jigarrang
    bo'lgani uchun ataylab #000 to'g'ridan-to'g'ri qo'yildi). */
-.receipt .r-customer-phone { font-size: 22px; font-weight: 700; color: #000; text-align: center; margin: 10px 0; }
+.receipt .r-customer-phone { font-size: 60px; font-weight: 700; color: #000; text-align: center; margin: 10px 0; }
+
+/* Kassir "Qo'lda hisoblash" cheki — 2026-11-15, foydalanuvchi bergan aniq
+   maket (restoran nomi/JAMI/Mijoz/Manzil 2x-qalin, qolgan hammasi oddiy —
+   2026-11-09'dagi "hammasi 2x" qoidasidan FARQLI, shu maket ustun turadi). */
+.receipt .r-shop-info { text-align: center; font-size: 32px; color: #6b6152; margin: 0 0 4px; }
+.receipt .r-meta-row { display: flex; justify-content: space-between; font-size: 32px; gap: 8px; }
+.receipt .r-head-row td { font-weight: 700; font-size: 32px; border-bottom: 1px solid rgba(0,0,0,0.15); }
+/* 2026-11-15 (3): taom qatori (Nomi/Soni/Narxi/Summa) butunlay 2x+qalin —
+   sarlavha qatori (yuqorida) esa shunchaki qalin, kattalashtirilmagan. */
+.receipt .r-manual-item-row td { font-size: 44px; font-weight: 700; }
+.receipt table td.r-qty { text-align: center; }
+.receipt .r-subtotal-row td { font-size: 36px; }
+.receipt .r-delivery-heading { text-align: center; font-weight: 700; margin: 10px 0 4px; }
+.receipt .r-footer-note { text-align: center; color: #6b6152; margin-top: 10px; }
 
 @media print {
   @page { size: 80mm auto; margin: 0; }

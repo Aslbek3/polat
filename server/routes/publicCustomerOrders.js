@@ -284,6 +284,7 @@ router.post('/', asyncRoute((req, res) => {
           createdAt: Date.now(),
           deliveryDistanceKm: deliveryDistanceKm === null ? undefined : deliveryDistanceKm,
           deliveryFee: deliveryFee === null ? undefined : deliveryFee,
+          totalAmount, // mijoz chekida "JAMI" (to'lov summasi) ko'rsatish uchun (2026-11-15)
         });
       }
     } catch (err) {

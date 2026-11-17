@@ -149,6 +149,7 @@ function getManualBillReceipt(billId) {
   return {
     kind: 'manual',
     order: {
+      id: bill.id,
       heading: "Qo'lda hisoblash",
       created_at: bill.created_at,
       created_by_name: bill.created_by_name,

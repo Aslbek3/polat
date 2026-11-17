@@ -46,17 +46,89 @@ const RECEIPT_PRINTER_NAME = 'Kassa-Printer';
 // cheki endi xuddi shu RECEIPT_PRINTER_NAME'ga chop etiladi.
 const KITCHEN_PRINTER_NAME = RECEIPT_PRINTER_NAME;
 
-// Chap va o'ng matnni bitta qatorga (belgilangan kenglikda) tekislaydi —
-// termal printerda ustunlar (nom ... narx) to'g'ri qatorga tushishi uchun.
-function padReceiptLine(left, right, width = 42) {
-  left = String(left);
-  right = String(right);
-  const space = width - left.length - right.length;
-  if (space < 1) {
-    left = left.slice(0, Math.max(0, width - right.length - 1));
-    return `${left} ${right}`;
-  }
-  return left + ' '.repeat(space) + right;
+// Kassir "Qo'lda hisoblash" chekining yuqorisidagi telefon qatori —
+// `public/landing/index.html`dagi "Aloqa" bo'limida mijozlarga ko'rsatilgan
+// raqamlar bilan AYNAN bir xil (2026-11-15, foydalanuvchi so'rovi). Restoran
+// manzili boshida ham bor edi, lekin 2026-11-15'da foydalanuvchi so'rovi
+// bilan olib tashlandi (kerak emas deb topildi).
+const RESTAURANT_HEADER_NAME = 'ZIYO FAMILY';
+const RESTAURANT_PHONES = ['+998 91 652 77 71', '+998 98 575 75 74'];
+
+// fmtMoney() "so'm" qo'shib qaytaradi — qo'lda hisoblash chekidagi taom
+// qatorlari/оraliq summalarda (Taomlar/Yetkazib berish) foydalanuvchi bergan
+// maketda "so'm" yozilmagan, faqat YAKUNIY JAMI'da bor — shu sabab shu yerga
+// xos oddiy (so'mSIZ) raqam formatlagich.
+function fmtMoneyPlain(n) {
+  return Math.round(Number(n) || 0).toLocaleString('uz-UZ');
+}
+
+// Bir qatorda chapga va o'ngga tekislangan ikki matn (ESC/POS, oddiy
+// o'lcham) — Chek/Kassir meta qatorlari va Taomlar/Yetkazib berish oraliq
+// summalari uchun.
+function twoColLine(left, right, width = 42) {
+  const gap = Math.max(1, width - left.length - right.length);
+  return left + ' '.repeat(gap) + right;
+}
+
+// Bitta qatorni ESC/POS "double size" (balandligi+kengligi 2x) rejimida,
+// berilgan tekislash bilan chop etadi, so'ng oddiy holatga qaytaradi.
+// Taom NOMIDAN tashqari qolgan barcha qatorlar (sarlavha osti, narxlar,
+// "Jami", "Yetkazib berish", pastki izoh) shu orqali katta chiqadi —
+// 2026-11-09, foydalanuvchi so'rovi ([[feedback-receipt-font-hierarchy]]
+// xotira yozuvi: ekrandagi katta/kichik qoidasi printerda ham amal qilsin).
+function pushDoubleLine(data, text, align = 'left') {
+  const alignCode = { left: '\x00', center: '\x01', right: '\x02' }[align] || '\x00';
+  data.push(`\x1B\x61${alignCode}`);
+  data.push('\x1B\x21\x30');
+  data.push(`${text}\n`);
+  data.push('\x1B\x21\x00');
+  data.push('\x1B\x61\x00');
+}
+
+// Taom qatori: nomi ODDIY o'lchamda, o'z qatorida (chapga tekislangan,
+// ekrandagi `.r-item-name` bilan bir xil — o'zgarmaydi), narxi esa ALOHIDA
+// qatorda, katta va o'ngga tekislangan holda. ESC/POS'da bitta qatorda ikki
+// xil shrift o'lchamini ustun sifatida to'g'ri tekislab bo'lmaydi (katta
+// belgilar 2x kenglik egallaydi, oldingi qattiq-kenglikdagi ustun hisobini
+// buzadi) — shu sabab narx nomdan alohida qatorga ko'chirilgan.
+function pushItemLines(data, name, price) {
+  data.push('\x1B\x61\x00');
+  data.push(`${name}\n`);
+  pushDoubleLine(data, price, 'right');
+}
+
+// Qalin + 2x balandlik (Mijoz/Manzil qatorlari, "qo'lda hisoblash" cheki,
+// 2026-11-15) — pushDoubleLine'ga qalin (\x1B\x45\x01) qo'shilgan versiyasi.
+function pushBoldDoubleLine(data, text, align = 'left') {
+  const alignCode = { left: '\x00', center: '\x01', right: '\x02' }[align] || '\x00';
+  data.push(`\x1B\x61${alignCode}`);
+  data.push('\x1B\x45\x01');
+  data.push('\x1B\x21\x30');
+  data.push(`${text}\n`);
+  data.push('\x1B\x21\x00');
+  data.push('\x1B\x45\x00');
+  data.push('\x1B\x61\x00');
+}
+
+// Qalin, ODDIY o'lcham, markazda ("YETKAZIB BERISH" sarlavhasi).
+function pushBoldLine(data, text) {
+  data.push('\x1B\x61\x01');
+  data.push('\x1B\x45\x01');
+  data.push(`${text}\n`);
+  data.push('\x1B\x45\x00');
+  data.push('\x1B\x61\x00');
+}
+
+// Qalin + FAQAT balandligi 2x (kengligi O'ZGARMAYDI) — qattiq-kenglikdagi
+// ustunli qator (Nomi/Soni/Narxi/Summa) buzilmasin deb, `pushDoubleLine`dan
+// farqli `GS ! n` (kenglik×1, balandlik×2) ishlatiladi, `ESC !` emas (u
+// kenglikni ham 2x qilib ustun hisobini buzardi). 2026-11-15 (3).
+function pushBoldTallLine(data, text) {
+  data.push('\x1B\x45\x01');
+  data.push('\x1D\x21\x01');
+  data.push(`${text}\n`);
+  data.push('\x1D\x21\x00');
+  data.push('\x1B\x45\x00');
 }
 
 // Chekni ESC/POS xom (raw) buyruqlar ketma-ketligiga aylantiradi.
@@ -69,20 +141,16 @@ function buildEscPosReceipt(view) {
   data.push('\x1B\x21\x30');
   data.push("Ziyo Famliy restorani\n");
   data.push('\x1B\x21\x00');
-  data.push(`${view.order.table_name}\n`);
-  data.push(`${fmtDateTime(view.order.closed_at || view.order.opened_at)}\n`);
+  pushDoubleLine(data, view.order.table_name, 'center');
+  pushDoubleLine(data, fmtDateTime(view.order.closed_at || view.order.opened_at), 'center');
   data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x61\x00');
   activeItems.forEach((it) => {
-    const name = `${it.name_snapshot} x${it.quantity}`;
-    data.push(padReceiptLine(name, fmtMoney(it.subtotal), WIDTH) + '\n');
+    pushItemLines(data, `${it.name_snapshot} x${it.quantity}`, fmtMoney(it.subtotal));
   });
   data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x21\x30');
-  data.push(padReceiptLine('JAMI', fmtMoney(view.total), WIDTH) + '\n');
-  data.push('\x1B\x21\x00');
-  data.push('\x1B\x61\x01');
-  data.push('Xaridingiz uchun rahmat!\n');
+  pushDoubleLine(data, 'JAMI', 'left');
+  pushDoubleLine(data, fmtMoney(view.total), 'right');
+  pushDoubleLine(data, 'Xaridingiz uchun rahmat!', 'center');
   data.push('\n\n\n');
   data.push('\x1D\x56\x41\x00');
   return data;
@@ -120,7 +188,7 @@ function renderReceiptBox(view) {
     <table>
       ${activeItems.map((it) => `
         <tr>
-          <td>${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
+          <td class="r-item-name">${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
           <td class="text-right">${fmtMoney(it.subtotal)}</td>
         </tr>
       `).join('')}
@@ -130,7 +198,7 @@ function renderReceiptBox(view) {
       </tr>
     </table>
     <hr>
-    <div class="dim" style="font-size:12px;">
+    <div class="dim" style="font-size:36px;">
       ${view.order.opened_by_name ? `Ochdi: ${escapeHtml(view.order.opened_by_name)}<br>` : ''}
       ${view.order.closed_by_name ? `Yopdi: ${escapeHtml(view.order.closed_by_name)}<br>` : ''}
       Holat: ${view.order.status === 'closed' ? 'Yopilgan' : 'Ochiq'}
@@ -154,7 +222,7 @@ function renderCustomerReceiptBox(view) {
     <table>
       ${view.items.map((it) => `
         <tr>
-          <td>${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
+          <td class="r-item-name">${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
           <td class="text-right">${fmtMoney(it.subtotal)}</td>
         </tr>
       `).join('')}
@@ -164,7 +232,7 @@ function renderCustomerReceiptBox(view) {
       </tr>
     </table>
     <hr>
-    <div class="dim" style="font-size:12px;">
+    <div class="dim" style="font-size:36px;">
       ${view.order.phone ? `Tel: ${escapeHtml(view.order.phone)}<br>` : ''}
       ${view.order.address ? `Manzil: ${escapeHtml(view.order.address)}<br>` : ''}
       ${view.order.note ? `Izoh: ${escapeHtml(view.order.note)}<br>` : ''}
@@ -178,75 +246,124 @@ function renderCustomerReceiptBox(view) {
 // xil naqsh, faqat telefon/manzil o'rniga "Hisobladi: <kassir>" ko'rsatiladi.
 function renderManualReceiptBox(view) {
   const box = document.getElementById('receiptModalBox');
+  const billNo = '#' + String(view.order.id || 0).padStart(4, '0');
+  const itemsTotal = view.items.reduce((s, it) => s + it.subtotal, 0);
+  const showMijoz = Boolean(view.order.customer_phone);
+  const showManzil = Boolean(view.order.note && view.order.delivery_price);
+  const hasDeliveryInfo = showMijoz || showManzil;
   box.innerHTML = `
-    <h2>Ziyo Famliy restorani</h2>
-    <div class="r-sub">${escapeHtml(view.order.heading)} · ${fmtDateTime(view.order.created_at)}</div>
+    <h2>${RESTAURANT_HEADER_NAME}</h2>
+    ${RESTAURANT_PHONES.map((p) => `<div class="r-shop-info">Tel: ${escapeHtml(p)}</div>`).join('')}
+    <hr>
+    <div class="r-meta-row"><span>Chek: ${billNo}</span><span>${fmtDateTime(view.order.created_at)}</span></div>
+    <div class="r-meta-row"><span>Kassir: ${escapeHtml(view.order.created_by_name || '')}</span><span>${escapeHtml(view.order.heading)}</span></div>
     <hr>
     <table>
+      <tr class="r-head-row">
+        <td>Nomi</td>
+        <td class="r-qty">Soni</td>
+        <td class="text-right">Narxi</td>
+        <td class="text-right">Summa</td>
+      </tr>
       ${view.items.map((it) => `
-        <tr>
-          <td>${escapeHtml(it.name_snapshot)} × ${it.quantity}</td>
-          <td class="text-right">${fmtMoney(it.subtotal)}</td>
+        <tr class="r-manual-item-row">
+          <td>${escapeHtml(it.name_snapshot)}</td>
+          <td class="r-qty">${it.quantity}</td>
+          <td class="text-right">${fmtMoneyPlain(it.unit_price)}</td>
+          <td class="text-right">${fmtMoneyPlain(it.subtotal)}</td>
         </tr>
       `).join('')}
+    </table>
+    <hr>
+    <table>
+      <tr class="r-subtotal-row">
+        <td>Taomlar:</td>
+        <td colspan="3" class="text-right">${fmtMoneyPlain(itemsTotal)}</td>
+      </tr>
       ${view.order.delivery_price ? `
-        <tr>
-          <td>Yetkazib berish</td>
-          <td class="text-right">${fmtMoney(view.order.delivery_price)}</td>
+        <tr class="r-subtotal-row">
+          <td>Yetkazib berish:</td>
+          <td colspan="3" class="text-right">${fmtMoneyPlain(view.order.delivery_price)}</td>
         </tr>
       ` : ''}
       <tr class="r-total-row">
-        <td>Jami</td>
-        <td class="text-right">${fmtMoney(view.total)}</td>
+        <td>JAMI:</td>
+        <td colspan="3" class="text-right">${fmtMoney(view.total)}</td>
       </tr>
     </table>
-    ${view.order.customer_phone ? `<div class="r-customer-phone">${escapeHtml(view.order.customer_phone)}</div>` : ''}
+    ${hasDeliveryInfo ? `
+      <div class="r-delivery-heading">YETKAZIB BERISH</div>
+      ${showMijoz ? `<div class="r-customer-phone">Mijoz: ${escapeHtml(view.order.customer_phone)}</div>` : ''}
+      ${showManzil ? `<div class="r-customer-phone">Manzil: ${escapeHtml(view.order.note)}</div>` : ''}
+    ` : ''}
     <hr>
-    <div class="dim" style="font-size:12px;">
-      ${view.order.note ? `Manzil: ${escapeHtml(view.order.note)}<br>` : ''}
-      ${view.order.created_by_name ? `Hisobladi: ${escapeHtml(view.order.created_by_name)}<br>` : ''}
-    </div>
+    <div class="r-footer-note">Xaridingiz uchun rahmat!</div>
   `;
 }
+
+// Kassir "Qo'lda hisoblash" cheki — 2026-11-15, foydalanuvchi bergan aniq
+// maket bo'yicha to'liq qayta qurildi: restoran nomi/JAMI/Mijoz/Manzil
+// 2x-qalin, qolgan HAMMASI (manzil/tel, chek/kassir, taom jadvali,
+// Taomlar/Yetkazib berish oraliq summalari, pastki izoh) oddiy o'lcham —
+// bu 2026-11-09'dagi umumiy "hammasi 2x" qoidasidan ATAYLAB farq qiladi,
+// chunki bu safargi maketda aniq qaysi qatorlar kattalashtirilishi
+// ko'rsatilgan edi ([[feedback-receipt-font-hierarchy]]ga qarang).
+const MANUAL_COL_NAME_W = 18;
+const MANUAL_COL_QTY_W = 5;
+const MANUAL_COL_PRICE_W = 9;
+const MANUAL_COL_SUM_W = 10;
 
 function buildEscPosReceiptManual(view) {
   const WIDTH = 42;
   const data = [];
   data.push('\x1B\x40');
+  pushBoldDoubleLine(data, RESTAURANT_HEADER_NAME, 'center');
   data.push('\x1B\x61\x01');
-  data.push('\x1B\x21\x30');
-  data.push("Ziyo Famliy restorani\n");
-  data.push('\x1B\x21\x00');
-  data.push(`${view.order.heading}\n`);
-  data.push(`${fmtDateTime(view.order.created_at)}\n`);
-  data.push('-'.repeat(WIDTH) + '\n');
+  RESTAURANT_PHONES.forEach((p) => data.push(`Tel: ${p}\n`));
   data.push('\x1B\x61\x00');
+  data.push('-'.repeat(WIDTH) + '\n');
+  const billNo = '#' + String(view.order.id || 0).padStart(4, '0');
+  data.push(twoColLine(`Chek: ${billNo}`, fmtDateTime(view.order.created_at)) + '\n');
+  data.push(twoColLine(`Kassir: ${view.order.created_by_name || ''}`, view.order.heading) + '\n');
+  data.push('-'.repeat(WIDTH) + '\n');
+  data.push('\x1B\x45\x01');
+  data.push(
+    'Nomi'.padEnd(MANUAL_COL_NAME_W) +
+    'Soni'.padStart(MANUAL_COL_QTY_W) +
+    'Narxi'.padStart(MANUAL_COL_PRICE_W) +
+    'Summa'.padStart(MANUAL_COL_SUM_W) + '\n'
+  );
+  data.push('\x1B\x45\x00');
+  let itemsTotal = 0;
   view.items.forEach((it) => {
-    const name = `${it.name_snapshot} x${it.quantity}`;
-    data.push(padReceiptLine(name, fmtMoney(it.subtotal), WIDTH) + '\n');
+    itemsTotal += it.subtotal;
+    pushBoldTallLine(
+      data,
+      String(it.name_snapshot).slice(0, MANUAL_COL_NAME_W).padEnd(MANUAL_COL_NAME_W) +
+      String(it.quantity).padStart(MANUAL_COL_QTY_W) +
+      fmtMoneyPlain(it.unit_price).padStart(MANUAL_COL_PRICE_W) +
+      fmtMoneyPlain(it.subtotal).padStart(MANUAL_COL_SUM_W)
+    );
   });
+  data.push('-'.repeat(WIDTH) + '\n');
+  data.push(twoColLine('Taomlar:', fmtMoneyPlain(itemsTotal)) + '\n');
   if (view.order.delivery_price) {
-    data.push(padReceiptLine('Yetkazib berish', fmtMoney(view.order.delivery_price), WIDTH) + '\n');
+    data.push(twoColLine('Yetkazib berish:', fmtMoneyPlain(view.order.delivery_price)) + '\n');
+  }
+  data.push('='.repeat(WIDTH) + '\n');
+  pushBoldDoubleLine(data, `JAMI: ${fmtMoney(view.total)}`, 'center');
+  data.push('='.repeat(WIDTH) + '\n');
+  const showMijoz = Boolean(view.order.customer_phone);
+  const showManzil = Boolean(view.order.note && view.order.delivery_price);
+  if (showMijoz || showManzil) {
+    pushBoldLine(data, 'YETKAZIB BERISH');
+    if (showMijoz) pushBoldDoubleLine(data, `Mijoz: ${view.order.customer_phone}`, 'center');
+    if (showManzil) pushBoldDoubleLine(data, `Manzil: ${view.order.note}`, 'center');
   }
   data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x21\x30');
-  data.push(padReceiptLine('JAMI', fmtMoney(view.total), WIDTH) + '\n');
-  data.push('\x1B\x21\x00');
-  if (view.order.customer_phone) {
-    // Mijoz raqami katta+qalin+markazda chiqadi (2026-09-26, foydalanuvchi
-    // so'rovi) — keyingi qatorlar uchun shrift/tekislash oddiy holatga qaytariladi.
-    data.push('\x1B\x61\x01');
-    data.push('\x1B\x45\x01');
-    data.push('\x1B\x21\x30');
-    data.push(`Mijoz: ${view.order.customer_phone}\n`);
-    data.push('\x1B\x21\x00');
-    data.push('\x1B\x45\x00');
-    data.push('\x1B\x61\x00');
-  }
-  if (view.order.note) data.push(`Manzil: ${view.order.note}\n`);
-  if (view.order.created_by_name) data.push(`Hisobladi: ${view.order.created_by_name}\n`);
   data.push('\x1B\x61\x01');
   data.push('Xaridingiz uchun rahmat!\n');
+  data.push('\x1B\x61\x00');
   data.push('\n\n\n');
   data.push('\x1D\x56\x41\x00');
   return data;
@@ -260,22 +377,18 @@ function buildEscPosReceiptCustomer(view) {
   data.push('\x1B\x21\x30');
   data.push("Ziyo Famliy restorani\n");
   data.push('\x1B\x21\x00');
-  data.push(`${view.order.heading}\n`);
-  data.push(`${fmtDateTime(view.order.created_at)}\n`);
+  pushDoubleLine(data, view.order.heading, 'center');
+  pushDoubleLine(data, fmtDateTime(view.order.created_at), 'center');
   data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x61\x00');
   view.items.forEach((it) => {
-    const name = `${it.name_snapshot} x${it.quantity}`;
-    data.push(padReceiptLine(name, fmtMoney(it.subtotal), WIDTH) + '\n');
+    pushItemLines(data, `${it.name_snapshot} x${it.quantity}`, fmtMoney(it.subtotal));
   });
   data.push('-'.repeat(WIDTH) + '\n');
-  data.push('\x1B\x21\x30');
-  data.push(padReceiptLine('JAMI', fmtMoney(view.total), WIDTH) + '\n');
-  data.push('\x1B\x21\x00');
-  if (view.order.phone) data.push(`Tel: ${view.order.phone}\n`);
-  if (view.order.address) data.push(`Manzil: ${view.order.address}\n`);
-  data.push('\x1B\x61\x01');
-  data.push('Xaridingiz uchun rahmat!\n');
+  pushDoubleLine(data, 'JAMI', 'left');
+  pushDoubleLine(data, fmtMoney(view.total), 'right');
+  if (view.order.phone) pushDoubleLine(data, `Tel: ${view.order.phone}`, 'left');
+  if (view.order.address) pushDoubleLine(data, `Manzil: ${view.order.address}`, 'left');
+  pushDoubleLine(data, 'Xaridingiz uchun rahmat!', 'center');
   data.push('\n\n\n');
   data.push('\x1D\x56\x41\x00');
   return data;

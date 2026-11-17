@@ -132,6 +132,8 @@ Narx HAR DOIM serverda `menu_items`dan qayta hisoblanadi — mijoz/klient yuborg
 
 ## Oxirgi o'zgarishlar
 
+- **2026-11-15** — Kassir "Qo'lda hisoblash" cheki (ekran + QZ Tray/ESC-POS printer) foydalanuvchi bergan aniq maket bo'yicha to'liq qayta qurildi: qisqa "ZIYO FAMILY" sarlavha + 2 alohida Tel qatori (restoran manzili olib tashlandi), Chek#/Kassir meta qatorlari, Nomi/Soni/Narxi/Summa jadvali (taom qatori 2x balandlik+qalin, sarlavha qatori faqat qalin), Taomlar/Yetkazib berish oraliq summalari, "JAMI" 2x+qalin, "Manzil" FAQAT yetkazib berish yoniq bo'lsa (Mijoz — doim) "YETKAZIB BERISH" bo'limida 2x+qalin. Tafsilot: `OXIRGI-ISH.md`dagi 2026-11-15 (1)–(6) yozuvlari.
+
 - **2026-11-01 (2)** — Header'da telefon/planshetda ☰ yonida "Kirish" tugmasi (ilgari faqat ☰ ichida edi). SMS orqali kod (Eskiz.uz) — Telegram havolasi bosqichida "Telegram'im yo'q — SMS orqali" tugmasi, `POST /api/customer/auth/start-sms`, limitlar (IP 3/10 daq, raqam 5/sutka, sayt 300/sutka). Haqiqiy Eskiz bilan sinalmagan (soxta Eskiz serveri bilan).
 
 - **2026-11-01** — Mijoz hisobi: Telegram bot orqali kod bilan kirish, `landing/account.html` (buyurtmalar/bronlar tarixi, manzillar, profil, "barcha qurilmalardan chiqish"), header'da "Kirish"/ism, checkout'da avto-to'ldirish + saqlangan manzil tanlash + "manzilni saqlash", bron oynasida avto-to'ldirish (`index.html?bron=1` ham ochadi). `menu.html`dagi `#zfdRecap`ga yetishmagan `zfd-recap` klassi qo'shildi (Hisob qatorlari stilsiz edi). Telegram haqiqiy bot bilan sinalmagan (sinov mock API bilan), o'rnatish: `O'RNATISH-MIJOZ-HISOBI.md`.
@@ -139,3 +141,6 @@ Narx HAR DOIM serverda `menu_items`dan qayta hisoblanadi — mijoz/klient yuborg
 - **2026-10-24** — printer navbati (muddat, retry, PRINT_TOKEN ixtiyoriy), to'lanmagan hisoblar (admin bosh sahifa/hisobot/kassir smena yopish ogohlantirishi, eski `/close` → 410), kesh siyosati + `?v=` versiyalash, `app.js` 3 faylga, `menu-v2-utils.js` ajratildi, `.bak` fayllar `_arxiv/`ga, `landing/menu.js` (ishlatilmagan) arxivga, ushbu `CLAUDE.md` qisqartirildi. Tafsilot: `TARIX.md` oxirida.
 - 2026-10-23 — landing menyuda to'liq ekranli checkout, yetkazish hududi xaritasi (Leaflet).
 - 2026-10-18 — landing buyurtmasi oshxona printeriga WS push orqali; kassirga "Buyurtmalar" bo'limi.
+
+## Oxirgi ishlar
+@OXIRGI-ISH.md
